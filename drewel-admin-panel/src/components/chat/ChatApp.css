@@ -1,0 +1,117 @@
+/* ChatApp.css - overall layout */
+.chat-app {
+  height: 100vh;
+  display: flex;
+  width: 100%;
+  align-items: stretch;
+  justify-content: center;
+  background: #f6f7fb;
+  font-family: Inter, Roboto, Helvetica, Arial, sans-serif;
+}
+
+.chat-container {
+  width: 100%;
+  /* max-width: 1200px; */
+  height: calc(100vh - 32px);
+  margin: 16px;
+  display: flex;
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 6px 20px rgba(22, 27, 44, 0.08);
+  background: #ffffff;
+}
+
+/* Sidebar and main column sizing */
+.chat-sidebar {
+  width: 320px;
+  min-width: 260px;
+  border-right: 1px solid #eef0f4;
+  background: #ffffff;
+  display: flex;
+  flex-direction: column;
+  transition: transform 200ms ease;
+}
+
+.chat-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Mobile header (back + title) */
+.mobile-header {
+  display: flex;
+  align-items: center;
+  padding: 10px 12px;
+  border-bottom: 1px solid #eef0f4;
+  gap: 12px;
+  background: #fff;
+}
+
+.back-btn {
+  background: none;
+  border: none;
+  font-size: 18px;
+  cursor: pointer;
+}
+
+.mobile-title {
+  font-weight: 600;
+}
+
+/* Tabs */
+.chat-tabs {
+  display: flex;
+  padding: 10px;
+  gap: 6px;
+  border-bottom: 1px solid #eef0f4;
+}
+.tab-button {
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  font-weight: 600;
+  color: #333;
+}
+.tab-button.active {
+  background: #f0f4ff;
+  color: #0b57d0;
+}
+
+/* Placeholder screens */
+.chat-placeholder {
+  padding: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  color: #666;
+}
+.chat-error {
+  padding: 24px;
+  color: #b00020;
+}
+
+/* Responsive */
+@media screen and (max-width: 768px) {
+  .chat-container {
+    margin: 0;
+    height: 100vh;
+    border-radius: 0;
+  }
+
+  .chat-sidebar {
+    width: 100%;
+    max-width: 100%;
+    position: absolute;
+    z-index: 15;
+    height: 100%;
+    box-shadow: 0 14px 40px rgba(22,27,44,0.15);
+  }
+
+  .chat-main {
+    width: 100%;
+  }
+}

@@ -1,0 +1,21 @@
+[Unit]
+Description=Drewel backend API
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=drewel
+Group=drewel
+WorkingDirectory=/var/www/drewel-v3/drewel-backend
+Environment=NODE_ENV=production
+EnvironmentFile=/var/www/drewel-v3/drewel-backend/.env
+ExecStart=/usr/bin/node index.js
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
+

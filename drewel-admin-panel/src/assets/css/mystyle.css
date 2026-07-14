@@ -1,0 +1,337 @@
+@import url('https://fonts.googleapis.com/css2?family=Lato:ital,wght@0,100;0,300;0,400;0,700;0,900;1,100;1,300;1,400;1,700;1,900&display=swap');
+
+
+.bg-img {
+     height: 100vh;
+     background-image: linear-gradient(90deg, rgb(141 73 85 / 39%) 0%, rgb(106 29 73 / 86%) 35%), url(../images/bg1.webp);
+     background-size: cover;
+     background-position: left center;
+ }
+
+ .login-content .login-box {
+     position: relative;
+     min-width: 450px;
+     min-height: 430px;
+     border-radius: 7px;
+}
+
+.custom-btn{
+     background: #00489d !important;
+     color: #fff;
+     border-color:rgba(9, 120, 211, 0.568) !important;;
+}
+
+.custom-color-1{
+     color: #35383F;
+}
+
+.custom-bg-1{
+     color: #ff93a6;
+}
+
+
+
+.custom-color-2{
+     color: #ff93a6;
+}
+
+.form-control:focus {
+    
+     border-color: #FF4081 !important;
+     outline: 0;
+     box-shadow: 0 0 0 .25rem rgba(255, 95, 156, 0.568) !important;
+ }
+
+.custom-link{
+     color: #35383F;
+     text-decoration: none;
+     font-weight: 700;
+     font-size:16px;
+}
+
+.custom-active{
+    color: #ff93a6;
+    text-decoration: none;
+}
+
+.custom-active:hover{
+    color: #35383F;
+    text-decoration: none;
+}
+
+
+
+.form-check-input:checked {
+     background-color: #00489d !important;
+     border-color: #00489d !important;
+ }
+
+ .form-check-input:focus {
+     border-color:#00489d !important;
+     outline: 0;
+     box-shadow: 0 0 0 .25rem #00489d69 !important;
+ }
+
+
+
+
+ .ctm-bg-1{
+     background-color: #00489d;
+     background-image: url(../images/gig.png);
+ }
+
+ .ctm-bg-2{
+     background-color: #609092;
+     background-image: url(../images/gig.png);
+ }
+
+ 
+ .ctm-bg-3{
+     background-color: #609092;
+     background-image: url(../images/gig.png);
+ }
+
+ .ctm-bg-4{
+     background-color: #609092;
+     background-image: url(../images/gig.png);
+ }
+
+
+ .active>.page-link, .page-link.active {
+    
+     background-color: #ff69b4 !important;
+     border-color: #ff69b4 !important;
+ }
+ 
+ .form-select:focus {
+     border-color: #ff69b4 !important;
+     box-shadow: 0 0 0 .25rem rgb(255 105 180 / 22%) !important;
+ }
+ .dt-length {
+     margin-left: 5px;
+ }
+ .dt-search {
+     margin-right: 5px;
+ }
+
+ .border-infos {
+     border: 1px solid #ff69b4;
+     float: left;
+     padding: 3px 5px;
+     border-radius: 5px;
+     cursor: pointer;
+ }
+
+ .border-infos a{
+     text-decoration: none;
+ }
+
+
+ table.dataTable th.dt-type-numeric, table.dataTable td.dt-type-numeric{
+     text-align: left !important;
+ }
+
+ .dropify-wrapper .dropify-message p{
+     font-size: 16px !important;
+ }
+
+ .page-link{
+     color: #E91E63 !important;
+ }
+
+ .text-cl{
+
+    color: #362154 !important;
+    font-weight: 700;
+
+ }
+
+ .page-link:focus{
+     box-shadow:0 0 0 0.25rem rgba(235, 46, 252, 0.25) !important;
+ }
+
+
+
+
+
+   /* Shattered Glass Button */
+.glass-button {
+     background: linear-gradient(45deg, #ff69b4 50%, #f5f5f5 50%);
+     background-size: 200% 100%;
+     color: #fff;
+     border: none;
+     padding: 7px 20px;
+     border-radius: 6px;
+     transition: background-position 0.5s ease;
+     text-decoration: none;
+   }
+   
+   .glass-button:hover {
+     background-position: -100% 0;
+     color: #000;
+   }
+
+   .glass-button2 {
+     background: linear-gradient(45deg, #362154 50%, #f5f5f5 50%);
+     background-size: 200% 100%;
+     color: #fff;
+     border: none;
+     padding: 7px 20px;
+     border-radius: 6px;
+     transition: background-position 0.5s ease;
+     text-decoration: none;
+   }
+   
+   .glass-button2:hover {
+     background-position: -100% 0;
+     color: #000;
+   }
+
+
+   .set-pos {
+     margin-top: -50px !important;
+     padding: 15px;
+     border-radius: 5px;
+     background: #fff !important;
+     box-shadow: inset 0 0 1px 1px hsla(0, 0%, 100%, 0.9), 0 20px 27px 0 rgba(0, 0, 0, 0.05) !important;
+ }
+
+ .img-small {
+     width: 90px;
+     border-radius: 5px;
+ }
+
+ .tag {
+     display: flex;
+     gap: 10px;
+     align-items: center;
+     cursor: pointer;
+ }
+
+ .tag img{
+     width: 25px;
+ }
+ 
+ .tag {
+     border-radius: 40px;
+     display: flex;
+     gap: 10px;
+     width: auto;
+     padding: 5px 25px;
+     border: 2px solid #ff69b4;
+     float: left;
+     align-items: flex-start;
+     margin:0px 10px 10px 0px;
+ }
+
+ .tag:hover{
+     background: #fff;
+      box-shadow: 0 2px 5px 0.25rem rgba(255, 105, 180, 0.25);
+      transition:all ease-in-out 0.3s;
+ }
+
+ td.dt-type-date {
+    text-align: left !important;
+}
+
+.font-3{
+    font-size:16px;
+    font-weight: 600;
+}
+
+
+.gallery-item {
+    width: 100px;
+    height:130px;
+    padding: 0;
+    cursor: pointer;
+    border: 2px solid #282030;
+    margin: 5px;
+    border-radius: 5px;
+
+    
+  }
+  .shine {
+   position: relative;
+   overflow: hidden;
+  }
+  .shine::before {
+   background: linear-gradient(to right, rgba(255, 255, 255, 0) 0%, rgba(255, 255, 255, 0.3) 100%);
+   content: "";
+   display: block;
+   height: 100%;
+   left: -75%;
+   position: absolute;
+   top: 0;
+   transform: skewX(-25deg);
+   width: 50%;
+   z-index: 2;
+  }
+  .shine:hover::before, .shine:focus::before {
+   animation: shine 0.85s;
+  }
+  @keyframes shine {
+   100% {
+     left: 125%;
+  }
+  }
+
+
+
+ /*====== Media ======*/
+
+
+ @media (min-width: 1200px) {
+ .login-content {
+     margin-left: 350px !important;
+ }
+}
+
+
+
+@media (max-width: 500px){
+
+    .col-md-12.px-5 {
+       padding-right: 5px !important;
+       padding-left: 5px !important;
+   }
+
+   .col-md-7.px-5{
+    padding-right: 5px !important;
+    padding-left: 5px !important;
+}
+
+.col-md-6.px-5{
+    padding-right: 5px !important;
+    padding-left: 5px !important;
+}
+
+
+   .dt-length {
+    float: left !important;
+}
+.dt-search {
+    float: left !important;
+    flex-flow: row-reverse;
+    display: flex;
+    padding-left: 10px !important;
+    gap: 15px !important;
+}
+
+  
+
+.table-responsive .dt-search {
+    padding: 0 !important;
+}
+
+.login-content .login-box {
+   min-width: 340px;
+   
+}
+.login-content .login-box .login-form{
+    padding:15px;
+}
+
+
+
+}

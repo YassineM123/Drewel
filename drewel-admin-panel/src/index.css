@@ -1,0 +1,5 @@
+@import "tailwindcss";
+
+.row-bg {
+  background-color: #FFF2C6 !important;
+}

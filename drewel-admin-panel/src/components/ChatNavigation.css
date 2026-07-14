@@ -1,0 +1,75 @@
+/* Chat Navigation Styles */
+.chat-navigation {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  z-index: 1000;
+}
+
+.chat-nav-link {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: #007bff;
+  color: white;
+  padding: 12px 20px;
+  border-radius: 25px;
+  text-decoration: none;
+  box-shadow: 0 4px 12px rgba(0, 123, 255, 0.3);
+  transition: all 0.3s ease;
+  font-weight: 500;
+}
+
+.chat-nav-link:hover {
+  background: #0056b3;
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(0, 123, 255, 0.4);
+  color: white;
+  text-decoration: none;
+}
+
+.chat-icon {
+  font-size: 18px;
+}
+
+.chat-text {
+  font-size: 14px;
+}
+
+.chat-badge {
+  background: #dc3545;
+  color: white;
+  padding: 2px 6px;
+  border-radius: 10px;
+  font-size: 10px;
+  font-weight: 600;
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.1);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .chat-navigation {
+    bottom: 15px;
+    right: 15px;
+  }
+  
+  .chat-nav-link {
+    padding: 10px 16px;
+  }
+  
+  .chat-text {
+    font-size: 13px;
+  }
+} 

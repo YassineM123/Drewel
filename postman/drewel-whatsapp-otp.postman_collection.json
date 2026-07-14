@@ -1,0 +1,100 @@
+{
+  "info": {
+    "_postman_id": "8e17d90a-4f34-4af5-9d0d-a4fce5682fd5",
+    "name": "Drewel WhatsApp OTP APIs",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "description": "Collection to test WhatsApp OTP login flow for Drewel."
+  },
+  "item": [
+    {
+      "name": "Send OTP WhatsApp",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"phone\": \"{{phone}}\",\n  \"countryCode\": \"{{countryCode}}\",\n  \"type\": \"{{type}}\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/users/send-otp-whatsapp",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "users",
+            "send-otp-whatsapp"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Verify OTP WhatsApp",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"phone\": \"{{phone}}\",\n  \"countryCode\": \"{{countryCode}}\",\n  \"otp\": \"{{otp}}\",\n  \"type\": \"{{type}}\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/users/verify-otp-whatsapp",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "users",
+            "verify-otp-whatsapp"
+          ]
+        }
+      },
+      "response": []
+    }
+  ],
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "https://admin-dreewel.com"
+    },
+    {
+      "key": "phone",
+      "value": "8340541318"
+    },
+    {
+      "key": "countryCode",
+      "value": "+91"
+    },
+    {
+      "key": "otp",
+      "value": "123456"
+    },
+    {
+      "key": "type",
+      "value": "user"
+    }
+  ]
+}
