@@ -30,7 +30,7 @@ const router = express.Router();
 router.post("/register", registerUser);
 router.post("/login", loginUser);
 router.post("/reset-password", isVerified, resetPassword);
-router.get("/get-all", getAllUsers);
+router.get("/get-all", requireSignIn, isAdmin, getAllUsers);
 router.post("/update-profile", requireSignIn, updateUser);
 router.post("/forgot-password", forgotPassword);
 router.post("/verify-otp", verifyOtp);
@@ -65,7 +65,7 @@ router.post(
 
 
 router.get('/get-user', requireSignIn, getUser); // Get current user details
-router.get("/get-user-details/:id", getUserDetails);
+router.get("/get-user-details/:id", requireSignIn, getUserDetails);
 router.post('/toggle-restriction',requireSignIn,isAdmin,toggleRestrictionOnUser);
 router.get('/restricted',requireSignIn,getRestrictedUsers)
 export default router;

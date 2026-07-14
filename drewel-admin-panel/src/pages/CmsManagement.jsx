@@ -1,7 +1,8 @@
-import React, { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Editor } from "@tinymce/tinymce-react";
 import Swal from "sweetalert2";
 import axios from "axios";
+import { LEGACY_API_URL } from "../utils/api";
 
 const CmsManagement = () => {
   const editorRef = useRef(null);
@@ -26,7 +27,7 @@ const CmsManagement = () => {
   const dropdownRef = useRef(null);
   const modalRef = useRef(null);
 
-  const fetchData = () => {
+  const fetchData = useCallback(() => {
     setTimeout(() => {
       const users = [
         {
@@ -39,7 +40,7 @@ const CmsManagement = () => {
       setTableData(users);
       setLoading(false);
     }, 1000);
-  };
+  }, [privacyData.description]);
 
   useEffect(() => {
     fetchData();
@@ -54,7 +55,7 @@ const CmsManagement = () => {
     return () => {
       document.removeEventListener("mousedown", handleClickOutside);
     };
-  }, []);
+  }, [fetchData]);
 
   const visiblePages = 4;
 
@@ -180,14 +181,14 @@ const CmsManagement = () => {
 
   const fetchPrivacy = async () => {
     try {
-      const res = await axios.get("http://157.173.222.27:3008/api/v1/privacy/get/67c4a3fc79e4c95fba108799")
+      const res = await axios.get(`${LEGACY_API_URL}/privacy/get/67c4a3fc79e4c95fba108799`)
       console.log("res", res);
       setPrivacyData({
         title: "Privacy Policy",
         description: res.data.privacy.description
       })
-    } catch (error) {
-
+    } catch {
+      Swal.fire("Error", "Failed to load the privacy policy.", "error");
     }
   }
   console.log("privacy", privacyData);

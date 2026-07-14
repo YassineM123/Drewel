@@ -12,6 +12,7 @@ const adminSchema = new mongoose.Schema(
     otpCode: {
       type: String,
       default: null,
+      select: false,
     },
     role: {
       type: String,

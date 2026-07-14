@@ -174,11 +174,6 @@ const AddFood = () => {
     window.history.back();
   };
 
-  const handleCross = () => {
-    resetForm();
-    onClose();
-  };
-
   return (
     <main className="app-content">
       <div className="app-title tile p-3">

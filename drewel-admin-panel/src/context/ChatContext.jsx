@@ -1,4 +1,5 @@
-import React, { createContext, useContext, useReducer, useEffect } from 'react';
+import { createContext, useCallback, useContext, useReducer, useEffect } from 'react';
+import PropTypes from 'prop-types';
 import { useSocket } from './SocketContext';
 
 const ChatContext = createContext();
@@ -37,11 +38,12 @@ const chatReducer = (state, action) => {
       return { ...state, loading: action.payload };
     case 'SET_ERROR':
       return { ...state, error: action.payload };
-    case 'UPDATE_CONVERSATION':
+    case 'UPDATE_CONVERSATION': {
       const updatedConversations = state.conversations.map(conv =>
         conv._id === action.payload._id ? action.payload : conv
       );
       return { ...state, conversations: updatedConversations };
+    }
     default:
       return state;
   }
@@ -121,53 +123,53 @@ export const ChatProvider = ({ children }) => {
     };
   }, [socket, isConnected]);
 
-  const loadConversations = (currentUserId, page = 1, limit = 50) => {
+  const loadConversations = useCallback((currentUserId, page = 1, limit = 50) => {
     if (socket && isConnected) {
       console.log('[Socket] Emitting sidebar:', currentUserId, page, limit);
       dispatch({ type: 'SET_LOADING', payload: true });
       socket.emit('sidebar', currentUserId, page, limit);
     }
-  };
+  }, [socket, isConnected]);
 
-  const loadMessages = (userId) => {
+  const loadMessages = useCallback((userId) => {
     if (socket && isConnected) {
       console.log('[Socket] Emitting message-page:', userId);
       dispatch({ type: 'SET_LOADING', payload: true });
       socket.emit('message-page', userId);
     }
-  };
+  }, [socket, isConnected]);
 
-  const sendMessage = (messageData) => {
+  const sendMessage = useCallback((messageData) => {
     if (socket && isConnected) {
       console.log('[Socket] Emitting new message:', messageData);
       socket.emit('new message', messageData);
     }
-  };
+  }, [socket, isConnected]);
 
-  const markAsSeen = (msgByUserId) => {
+  const markAsSeen = useCallback((msgByUserId) => {
     if (socket && isConnected) {
       console.log('[Socket] Emitting seen:', msgByUserId);
       socket.emit('seen', msgByUserId);
     }
-  };
+  }, [socket, isConnected]);
 
-  const loadGlobalMessages = () => {
+  const loadGlobalMessages = useCallback(() => {
     if (socket && isConnected) {
       console.log('[Socket] Emitting global-message-page');
       socket.emit('global-message-page');
     }
-  };
+  }, [socket, isConnected]);
 
-  const sendGlobalMessage = (messageData) => {
+  const sendGlobalMessage = useCallback((messageData) => {
     if (socket && isConnected) {
       console.log('[Socket] Emitting new global message:', messageData);
       socket.emit('new global message', messageData);
     }
-  };
+  }, [socket, isConnected]);
 
-  const setSelectedUser = (user) => {
+  const setSelectedUser = useCallback((user) => {
   dispatch({ type: "SET_SELECTED_USER", payload: user });
-};
+  }, []);
 
   const value = {
     ...state,
@@ -185,4 +187,8 @@ export const ChatProvider = ({ children }) => {
       {children}
     </ChatContext.Provider>
   );
-}; 
+};
+
+ChatProvider.propTypes = {
+  children: PropTypes.node.isRequired,
+};

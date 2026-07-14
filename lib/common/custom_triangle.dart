@@ -8,11 +8,6 @@ class CustomTriangle extends CustomPainter {
     final double width = size.width;
     final double height = size.height;
 
-    final double bluntHeight =
-        height * 0.19; // Adjust the blunt height as per your requirement
-    final double bluntOffset =
-        width * 0.022; // Adjust the blunt offset as per your requirement
-
     final path = Path();
     path.moveTo(0, 0); // Top left corner
 

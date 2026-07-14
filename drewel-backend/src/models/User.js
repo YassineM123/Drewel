@@ -35,6 +35,7 @@ const userSchema = new mongoose.Schema(
     otpCode: {
       type: String,
       default: null,
+      select: false,
     },
     isVerified: {
       type: Boolean,

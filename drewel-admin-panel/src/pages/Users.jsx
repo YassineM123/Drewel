@@ -1,8 +1,7 @@
-import React, { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Swal from "sweetalert2";
 import AddUser from "../components/AddUser";
 import TableUser from "../components/TableUser";
-import { deleteUser } from "../utils/authUtils";
 import axios from "axios";
 import { getUserList, API_URL } from "../utils/api";
 
@@ -60,7 +59,7 @@ const Users = () => {
       const res = await getUserList();
       // console.log("Response", res);
       setTableData(res);
-    } catch (error) {
+    } catch {
       Swal.fire({
         icon: "error",
         title: "Error",
@@ -204,7 +203,7 @@ const Users = () => {
       } else {
         throw new Error("Failed to update status");
       }
-    } catch (error) {
+    } catch {
       Swal.fire("Error", "Failed to update user status. Please try again.", "error");
 
       setTableData((prevData) =>

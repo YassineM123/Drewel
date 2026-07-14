@@ -57,7 +57,8 @@ const Services = () => {
       setTableData(res.services)
       setLoading(false)
     } catch (error) {
-
+      console.error("Failed to load services:", error);
+      setLoading(false);
     }
   }
 

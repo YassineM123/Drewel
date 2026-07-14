@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import Swal from "sweetalert2";
 import TableUser from "../components/TableUser";
@@ -30,21 +30,21 @@ const Drivers = () => {
   const [search, setSearch] = useState("");
   const [openDropdown, setOpenDropdown] = useState(null);
 
-  const fetchDrivers = async () => {
+  const fetchDrivers = useCallback(async () => {
     try {
       setLoading(true);
       const list = await getDriverList(statusFilter);
       setDrivers(Array.isArray(list) ? list : []);
-    } catch (error) {
+    } catch {
       Swal.fire("Error", "Failed to load drivers.", "error");
     } finally {
       setLoading(false);
     }
-  };
+  }, [statusFilter]);
 
   useEffect(() => {
     fetchDrivers();
-  }, [statusFilter]);
+  }, [fetchDrivers]);
 
   const filteredDrivers = useMemo(() => {
     const term = search.trim().toLowerCase();

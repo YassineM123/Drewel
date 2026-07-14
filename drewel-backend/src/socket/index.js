@@ -28,6 +28,8 @@ const app = express();
 const server = http.createServer(app);
 
 const normalizeCity = (city) => city?.trim().toLowerCase();
+const nearbyDriverFields =
+  "firstName lastName fullName phone whatsappNumber profileImageUrl city vehicleType lat long isOnline status updatedAt";
 
 // const io = new Server(server, {
 //   cors: {
@@ -67,6 +69,9 @@ io.on("connection", async (socket) => {
     }
 
     const userId = user._id;
+    const authenticatedAdmin = await Admin.exists({ _id: userId, role: "admin" });
+    const authenticatedDriver = await Driver.exists({ _id: userId });
+    const authenticatedUser = await User.exists({ _id: userId });
     socket.join(userId.toString());
     onlineUser.add(userId.toString());
     const userIdString = userId.toString();
@@ -119,12 +124,21 @@ io.on("connection", async (socket) => {
     //   }
     // });
 
-    socket.on("driver-location-update", async ({ driverId, lat, long, fullName, vehicleType, city }) => {
+    socket.on("driver-location-update", async ({ driverId, lat, long, fullName, vehicleType, city } = {}) => {
       try {
+        const targetDriverId = authenticatedAdmin && driverId ? driverId : userId;
+        if ((!authenticatedAdmin && !authenticatedDriver) || !mongoose.Types.ObjectId.isValid(targetDriverId)) {
+          socket.emit("error", { message: "Not authorized to update this driver" });
+          return;
+        }
+        if (!Number.isFinite(lat) || !Number.isFinite(long) || lat < -90 || lat > 90 || long < -180 || long > 180) {
+          socket.emit("error", { message: "Invalid driver coordinates" });
+          return;
+        }
         const normalizedCity = normalizeCity(city);
 
         const updatedDriver = await Driver.findByIdAndUpdate(
-          driverId,
+          targetDriverId,
           {
             lat,
             long,
@@ -134,7 +148,7 @@ io.on("connection", async (socket) => {
             updatedAt: new Date(),
           },
           { new: true }
-        );
+        ).select(nearbyDriverFields);
 
         if (!updatedDriver) return;
 
@@ -171,7 +185,9 @@ io.on("connection", async (socket) => {
           };
         }
 
-        const drivers = await Driver.find(filter).sort({ updatedAt: -1 });
+        const drivers = await Driver.find(filter)
+          .select(nearbyDriverFields)
+          .sort({ updatedAt: -1 });
 
         // ✅ Send initial snapshot immediately
         socket.emit("drivers-nearby", {
@@ -184,40 +200,57 @@ io.on("connection", async (socket) => {
       }
     });
 
-    socket.on("user-location-update", async ({ userId, lat, long }) => {
+    socket.on("user-location-update", async ({ userId: requestedUserId, lat, long } = {}) => {
       try {
-        const updateUserLocation = async (userId, lat, long) => {
+        const targetUserId = authenticatedAdmin && requestedUserId ? requestedUserId : userId;
+        if ((!authenticatedAdmin && !authenticatedUser) || !mongoose.Types.ObjectId.isValid(targetUserId)) {
+          socket.emit("error", { message: "Not authorized to update this user" });
+          return;
+        }
+        if (!Number.isFinite(lat) || !Number.isFinite(long) || lat < -90 || lat > 90 || long < -180 || long > 180) {
+          socket.emit("error", { message: "Invalid user coordinates" });
+          return;
+        }
+        const updateUserLocation = async (targetId, latitude, longitude) => {
           try {
-            const user = await User.findById(userId);
-            if (!user) {
+            const targetUser = await User.findById(targetId);
+            if (!targetUser) {
               throw new Error("User not found");
             }
-            user.lat = lat;
-            user.long = long;
-            await user.save();
-            return user;
+            targetUser.lat = latitude;
+            targetUser.long = longitude;
+            await targetUser.save();
+            return targetUser;
           }
           catch (error) {
             console.error("Error updating user location:", error);
             throw error;
           }
         };
-        const updatedUser = await updateUserLocation(userId, lat, long);
-        io.to(userId).emit("user-location-updated", updatedUser);
+        const updatedUser = await updateUserLocation(targetUserId, lat, long);
+        io.to(targetUserId.toString()).emit("user-location-updated", updatedUser);
       } catch (error) {
         console.error("Error updating user location:", error);
       }
     });
 
-    socket.on("update-isUpdate", async ({ driverId }) => {
+    socket.on("update-isUpdate", async ({ driverId, isUpdate } = {}) => {
       try {
-        const driver = await Driver.findById(driverId);
+        const targetDriverId = authenticatedAdmin && driverId ? driverId : userId;
+        if ((!authenticatedAdmin && !authenticatedDriver) || typeof isUpdate !== "boolean") {
+          socket.emit("error", { message: "Invalid driver update request" });
+          return;
+        }
+        const driver = await Driver.findById(targetDriverId);
         if (!driver) {
           throw new Error("Driver not found");
         }
         driver.isUpdate = isUpdate;
         await driver.save();
-        io.to(driverId).emit("isUpdate-updated", { driverId, isUpdate });
+        io.to(targetDriverId.toString()).emit("isUpdate-updated", {
+          driverId: targetDriverId,
+          isUpdate,
+        });
       } catch (error) {
         console.error("Error updating isUpdate status:", error);
       }

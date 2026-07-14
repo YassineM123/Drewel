@@ -14,7 +14,7 @@ class ProgressBar extends StatelessWidget {
 
   /// A [Widget] which is shown at the center of the modal loading barrier,
   /// defaults to the standard android spinny animation.
-  Widget? progressIndicator;
+  final Widget? progressIndicator;
 
   /// An [Offset] object which is applied to the [progressIndicator] when specified.
   final Offset? offset;
@@ -28,7 +28,7 @@ class ProgressBar extends StatelessWidget {
   /// A [double] value specifying the amount of background blur of the progress.
   final double blur;
 
-  ProgressBar({
+  const ProgressBar({
     super.key,
     required this.inAsyncCall,
     this.opacity = 0.1,
@@ -42,23 +42,25 @@ class ProgressBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    progressIndicator ??= CircularProgressIndicator(
-      backgroundColor: Theme.of(context).colorScheme.onSecondary,
-      color: Theme.of(context).primaryColor,
-      strokeCap: StrokeCap.round,
-      strokeWidth: 6,
-    );
+    final Widget resolvedProgressIndicator =
+        progressIndicator ??
+            CircularProgressIndicator(
+              backgroundColor: Theme.of(context).colorScheme.onSecondary,
+              color: Theme.of(context).primaryColor,
+              strokeCap: StrokeCap.round,
+              strokeWidth: 6,
+            );
 
     if (!inAsyncCall) return child;
 
     Widget layOutProgressIndicator;
     if (offset == null) {
-      layOutProgressIndicator = Center(child: progressIndicator);
+      layOutProgressIndicator = Center(child: resolvedProgressIndicator);
     } else {
       layOutProgressIndicator = Positioned(
         left: offset!.dx,
         top: offset!.dy,
-        child: progressIndicator!,
+        child: resolvedProgressIndicator,
       );
     }
 

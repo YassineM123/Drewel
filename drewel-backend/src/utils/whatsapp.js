@@ -220,7 +220,9 @@ export const sendOTPwhatsapp = async (phone, otp) => {
     }
 
     if (MOCK_OTP) {
-        console.log(`[MOCK WHATSAPP OTP] Phone: ${CUSTOMER_PHONE_NUMBER}, OTP: ${ONE_TIME_PASSWORD}`);
+        if (process.env.NODE_ENV !== "production") {
+            console.log(`[MOCK WHATSAPP OTP] Phone: ${CUSTOMER_PHONE_NUMBER}, OTP: ${ONE_TIME_PASSWORD}`);
+        }
         return {
             success: true,
             message: "MOCK OTP sent successfully (check console)",

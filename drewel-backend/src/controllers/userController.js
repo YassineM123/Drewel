@@ -12,6 +12,7 @@ import generateOtp from "../helpers/generateOtp.js";
 import { sendOtpUsingTwilio } from "../utils/sendOtp.js";
 import { serveUploadedFile } from "../utils/fileServing.js";
 import { buildPublicAssetUrl } from "../utils/publicAssets.js";
+import { sanitizeAuthSubject } from "../utils/authResponse.js";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
@@ -154,24 +155,21 @@ export const loginUser = async (req, res) => {
       }
     }
 
-    // await sendOtpUsingTwilio(
-    //   `${countryCode}${phone}`,
-    //   otpCode
-    // )
-    // .then((response) => {
-    //   if (!response.success) {
-    //     return res.status(500).json({
-    //       success: false,
-    //       message: response.message,
-    //     });
-    //   }
-    // });
+    const delivery = await sendOtpUsingTwilio(
+      `${normalizedCountryCode}${normalizedPhone}`,
+      otpCode
+    );
+    if (!delivery.success) {
+      return res.status(502).json({
+        success: false,
+        message: delivery.message || "Unable to send OTP",
+      });
+    }
 
     return res.status(200).json({
       success: true,
-      message: `Your OTP has been sent on registered number ${otpCode}`,
-      // token,
-      user,
+      message: "Your OTP has been sent on the registered number",
+      user: sanitizeAuthSubject(user),
     });
   } catch (error) {
     console.error("Login error:", error);
@@ -364,6 +362,15 @@ export const getUserDetails = async (req, res) => {
       return res.status(400).send({
         success: false,
         message: "Please provide a valid user ID",
+      });
+    }
+
+    const requesterId = req.user?._id;
+    const requesterIsAdmin = await isAdminUser(requesterId);
+    if (String(requesterId) !== String(userId) && !requesterIsAdmin) {
+      return res.status(403).send({
+        success: false,
+        message: "You are not authorized to view this user",
       });
     }
 

@@ -1,5 +1,5 @@
 // ChatApp.jsx
-import React, { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useChat } from "../../context/ChatContext";
 import ChatSidebar from "./ChatSidebar";
 import ChatMessages from "./ChatMessages";
@@ -9,11 +9,9 @@ import "./ChatApp.css";
 const ChatApp = () => {
   const {
     conversations,
-    currentConversation,
     messages,
     selectedUser,
     userDetails,
-    groupConversations,
     globalMessages,
     loading,
     error,
@@ -54,7 +52,7 @@ const ChatApp = () => {
       setCurrentUser(user);
       loadConversations(user._id);
     }
-  }, []);
+  }, [loadConversations]);
 
   useEffect(() => {
     if (activeTab === "global" && currentUser) {

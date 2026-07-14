@@ -1,11 +1,10 @@
-import React, { useEffect, useState, useRef } from "react";
+import { useEffect, useRef } from "react";
+import PropTypes from "prop-types";
 import { NavLink, useNavigate } from "react-router-dom";
-import profile from "../assets/images/profile.png";
 import logo1 from "../assets/images/logo1.jpg";
 import $ from "jquery";
-import BlogDropDown from "./BlogDropDown";
 
-const Headers = ({ isSideBarOpen, setIsSideBarOpen }) => {
+const Headers = ({ setIsSideBarOpen }) => {
   const sidebarRef = useRef(null);
   const headerRef = useRef(null);
   const navigate = useNavigate();
@@ -93,7 +92,7 @@ const Headers = ({ isSideBarOpen, setIsSideBarOpen }) => {
     return () => {
       document.removeEventListener("mousedown", handleClickOutside);
     };
-  }, []);
+  }, [setIsSideBarOpen]);
 
   const handleLogout = () => {
     localStorage.removeItem("authToken");
@@ -321,6 +320,10 @@ const Headers = ({ isSideBarOpen, setIsSideBarOpen }) => {
       </aside>
     </>
   );
+};
+
+Headers.propTypes = {
+  setIsSideBarOpen: PropTypes.func.isRequired,
 };
 
 export default Headers;

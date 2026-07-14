@@ -452,9 +452,9 @@ class ApiMethods {
     DriverListModel? driverListModel;
     http.Response? response = await MyHttp.getMethod(
       url:
-          '${ApiUrlConstants.endPointOfAllDrivers}?${ApiKeyConstants.vehicleType}=$vType',
+          '${ApiUrlConstants.endPointOfAvailableDrivers}?${ApiKeyConstants.vehicleType}=$vType',
 
-      // url: '${ApiUrlConstants.endPointOfAllDrivers}?${ApiKeyConstants.city}=$city&& ${ApiKeyConstants.vehicleType}=$vType',
+      // url: '${ApiUrlConstants.endPointOfAvailableDrivers}?${ApiKeyConstants.city}=$city&& ${ApiKeyConstants.vehicleType}=$vType',
       checkResponse: checkResponse,
     );
     if (response != null) {

@@ -13,8 +13,8 @@ const HelpSupport = () => {
   const [loadingUsers, setLoadingUsers] = useState(true);
   const [loadingMessages, setLoadingMessages] = useState(false);
   const [error, setError] = useState(null);
-  const [page, setPage] = useState(1);
-  const [limit, setLimit] = useState(50);
+  const page = 1;
+  const limit = 50;
 
   const ADMIN_ID = "6861224ceac0edaf19ffa056";
   const token = localStorage.getItem("authToken");
@@ -111,7 +111,7 @@ const HelpSupport = () => {
       socket.off("connect_error");
       socket.disconnect();
     };
-  }, [token]);
+  }, [token, page, limit]);
 
   console.log("Selected User ID:", users);
   useEffect(() => {

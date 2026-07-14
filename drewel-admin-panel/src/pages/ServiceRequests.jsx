@@ -4,6 +4,7 @@ import TableServiceRequest from "../components/TableServiceRequest";
 import axios from "axios";
 import Swal from "sweetalert2";
 import SafeImage from "../components/SafeImage";
+import { LEGACY_API_URL } from "../utils/api";
 
 const ServiceRequests = () => {
   const DEFAULT_ITEMS_PER_PAGE = 10;
@@ -52,7 +53,7 @@ const ServiceRequests = () => {
   const fetchData = async () => {
     setLoading(true);
     try {
-      const response = await axios.get("http://157.173.222.27:3008/api/v1/service/get-all");
+      const response = await axios.get(`${LEGACY_API_URL}/service/get-all`);
       console.log("Resp", response)
       setTableData(response.data?.services || []);
     } catch (error) {
@@ -119,7 +120,7 @@ const ServiceRequests = () => {
             return;
           }
   
-          await axios.delete(`http://157.173.222.27:3008/api/v1/service/delete/${id}`, {
+          await axios.delete(`${LEGACY_API_URL}/service/delete/${id}`, {
             headers: {
               Authorization: `Bearer ${authToken}`,
             },

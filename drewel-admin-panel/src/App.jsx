@@ -5,26 +5,18 @@ import Login from "./pages/Login";
 import ProtectedRoute from "./components/ProtectedRoute";
 import Dashboard from "./pages/Dashboard";
 import Users from "./pages/Users";
-import ServiceRequests from "./pages/ServiceRequests";
 import CmsManagement from "./pages/CmsManagement";
 import Faq from "./pages/Faq";
 import AccountSettings from "./pages/AccountSettings";
 import PushNotification from "./pages/PushNotification";
-import AddServiceRequest from "./components/AddServiceRequest";
-import AddProgram from "./components/AddProgram";
 import AddUser from "./components/AddUser";
 import Providers from "./pages/Providers";
-import Orders from "./pages/Orders";
-import Revenue from "./pages/Revenue";
-import Club from "./pages/Club";
-import GolfCourses from "./pages/GolfCourses";
 import Drivers from "./pages/Drivers";
 import DriverDetail from "./pages/DriverDetail";
 import EditDriver from "./pages/EditDriver";
 import Sponsor from "./pages/Sponsor";
 import ChatWrapper from "./components/chat/ChatWrapper";
 import OnlineDrivers from "./pages/OnlineDrivers";
-import UpdateProgram from "./components/UpdateProgram";
 
 function App() {
   return (

@@ -10,6 +10,14 @@ export const SOCKET_URL =
     import.meta.env.VITE_SOCKET_URL ||
     (import.meta.env.DEV ? "http://localhost:3001" : origin);
 
+// Older CMS/FAQ/service endpoints run under /api/v1. Production should
+// provide an HTTPS VITE_LEGACY_API_URL when those endpoints are hosted
+// separately; same-origin is the safe fallback behind a reverse proxy.
+export const LEGACY_API_URL = (
+    import.meta.env.VITE_LEGACY_API_URL ||
+    (import.meta.env.DEV ? "http://localhost:3008/api/v1" : `${origin}/api/v1`)
+).replace(/\/$/, "");
+
 export const getUserList = async () => {
     const userExists = localStorage.getItem("admin");
     const authTokenExist = localStorage.getItem("authToken");

@@ -2,18 +2,24 @@ import mongoose from "mongoose";
 import { sendResponse } from "../helpers/responseHelper.js";
 import Group from "../models/Group.js";
 
+const escapeRegex = (value) => String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
 export const createGroup = async (req, res) => {
   const { name, members } = req.body || {};
   try {
     const userId = req.user._id;
-    if (!name || !members) {
+    if (!name || !Array.isArray(members)) {
       return sendResponse(res, 200, false, "Name and members are required");
     }
 
+    if (members.some((member) => !mongoose.Types.ObjectId.isValid(member))) {
+      return sendResponse(res, 400, false, "Members must contain valid user IDs");
+    }
+
     const existingGroup = await Group.findOne({
-      or: [
+      $or: [
         {
-          name: new RegExp(`^${name}$`, "i"),
+          name: new RegExp(`^${escapeRegex(name)}$`, "i"),
           createdBy: userId,
         },
       ],
@@ -21,17 +27,10 @@ export const createGroup = async (req, res) => {
     if (existingGroup) {
       return sendResponse(res, 200, false, "Group already exists");
     }
-    let membersArray = [];
-    if (members.length > 0) {
-      {
-        membersArray = members.map((member) => {
-          return new mongoose.Types.ObjectId(member);
-        });
-      }
-    }
+    const membersArray = members.map((member) => new mongoose.Types.ObjectId(member));
     const group = new Group({
       name,
-      members,
+      members: membersArray,
       createdBy: userId,
     });
     await group.save();
@@ -99,19 +98,27 @@ export const updateGroup = async (req, res) => {
   const { name, members } = req.body || {};
   try {
     const userId = req.user._id;
-    if (!name || !members) {
+    if (!name || !Array.isArray(members)) {
       return sendResponse(res, 200, false, "Name and members are required");
     }
 
-    const group = await Group.findByIdAndUpdate(
-      groupId,
+    if (members.some((member) => !mongoose.Types.ObjectId.isValid(member))) {
+      return sendResponse(res, 400, false, "Members must contain valid user IDs");
+    }
+
+    if (!mongoose.Types.ObjectId.isValid(groupId)) {
+      return sendResponse(res, 400, false, "Please provide a valid group ID");
+    }
+
+    const group = await Group.findOneAndUpdate(
+      { _id: groupId, createdBy: userId },
       { name, members },
       { new: true }
     )
       .populate("members", "fullName email")
       .populate("createdBy", "fullName email");
     if (!group) {
-      return sendResponse(res, 404, false, "Group not found");
+      return sendResponse(res, 404, false, "Group not found or you are not its owner");
     }
     return res.status(200).json({
       success: true,

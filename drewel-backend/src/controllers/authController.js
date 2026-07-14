@@ -5,6 +5,9 @@ import Driver from "../models/Driver.js";
 import jwt from "jsonwebtoken";
 import OTP from "../models/otp.js";
 import { sendOTPwhatsapp } from "../utils/whatsapp.js";
+import generateOtp from "../helpers/generateOtp.js";
+import { sendOtpUsingTwilio } from "../utils/sendOtp.js";
+import { sanitizeAuthSubject } from "../utils/authResponse.js";
 
 const normalizePhoneDigits = (value = "") => String(value).replace(/\D/g, "");
 const normalizeCountryCode = (value = "") => {
@@ -90,67 +93,51 @@ const provisionAuthSubject = async ({
 
 export const forgotPassword = async (req, res) => {
   try {
-    const { email } = req.body;
-    console.log("req.body: ", req.body);
-
-    if (!email)
-      return res.status(200).send({
+    const { email: identifier } = req.body || {};
+    if (!identifier) {
+      return res.status(400).send({
         success: false,
-        message: "Please provide either email or password",
+        message: "Please provide an email or phone number",
       });
-    let phone = null;
-    if (!validator.isEmail(email)) {
-      phone = email;
-      if (!email && !phone) {
-        return res.status(200).send({
-          success: false,
-          message: "Please provide email or phone number and password",
-        });
-      }
     }
 
-    let user = await User.findOne({ $or: [{ email }, { phone }] });
-    // if (!user) user = await adminModel.findOne({ $or: [{ email }, { phone }] });
-    if (!user)
+    const normalizedIdentifier = String(identifier).trim();
+    const isEmail = validator.isEmail(normalizedIdentifier);
+    const phone = isEmail ? null : normalizePhoneDigits(normalizedIdentifier);
+    const user = await User.findOne(
+      isEmail ? { email: normalizedIdentifier.toLowerCase() } : { phone }
+    );
+    if (!user) {
       return res.status(200).json({
         success: false,
-        message: `No user found with provided email or mobile number`,
+        message: "No user found with provided email or mobile number",
       });
+    }
 
-    const otp = await generateOtp();
-
+    const otp = generateOtp(6);
     user.otpCode = otp;
     await user.save();
-    if (email) {
-      const isValidEmail = await sendMail(
-        user.email,
+
+    if (isEmail) {
+      const result = await sendMail(
+        normalizedIdentifier.toLowerCase(),
         "OTP to reset password",
         `Your otp to reset your password is : ${otp}`,
         ""
       );
-
-      if (!isValidEmail.success)
-        return res.status(200).send({
-          success: false,
-          message: "Please provide valid email",
-        });
-    }
-    if (phone) {
-      const isValidPhone = await sendOtpUsingTwilio(
-        user.countryCode + phone,
-        otp
-      );
-
-      // if(!isValidPhone.success) return res.status(200).send({
-      //   success:false,
-      //   message:'Please provide valid Phone number'
-      // })
+      if (!result.success) {
+        return res.status(502).send({ success: false, message: "Unable to send OTP" });
+      }
+    } else {
+      const result = await sendOtpUsingTwilio(`${user.countryCode || ""}${phone}`, otp);
+      if (!result.success) {
+        return res.status(502).send({ success: false, message: "Unable to send OTP" });
+      }
     }
 
     return res.status(200).json({
       success: true,
-      message: `Your OTP is sent `,
-      OTP: `${otp}`,
+      message: "Your OTP has been sent",
     });
   } catch (error) {
     console.error(error);
@@ -256,7 +243,7 @@ export const verifyOtp = async (req, res) => {
       success: true,
       message: `OTP is verified`,
       token,
-      user,
+      user: sanitizeAuthSubject(user),
     });
   } catch (error) {
     console.log("error: ", error);
@@ -342,7 +329,7 @@ export const sendOTPusingWhatsapp = async (req, res) => {
 
     return res.status(200).send({
       success: true,
-      message: response.data?.mocked 
+      message: response.data?.mocked && process.env.NODE_ENV !== "production"
         ? `OTP sent successfully via WhatsApp (Mock: ${finalOtp})` 
         : "OTP sent successfully via WhatsApp",
     });
@@ -429,7 +416,7 @@ export const verifyOTPWhatsapp = async (req, res) => {
       success: true,
       message: "OTP verified successfully",
       token,
-      user,
+      user: sanitizeAuthSubject(user),
     });
 
   } catch (error) {

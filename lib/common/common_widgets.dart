@@ -51,7 +51,7 @@ class CommonWidgets {
               ),
             )
           : null,
-      centerTitle: centerTitle ?? true,
+      centerTitle: centerTitle,
       title: Text(
         title ?? '',
         style: MyTextStyle.titleStyle20bb,

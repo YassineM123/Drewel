@@ -39,6 +39,7 @@ const driverSchema = new mongoose.Schema(
     otpCode: {
       type: String,
       default: "",
+      select: false,
     },
     fullName: {
       type: String,

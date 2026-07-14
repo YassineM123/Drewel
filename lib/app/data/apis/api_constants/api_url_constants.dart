@@ -51,6 +51,8 @@ class ApiUrlConstants {
   static String get endPointOfUserDetails =>
       '${baseUrl}users/get-user-details';
   static String get endPointOfAllDrivers => '${baseUrl}driver/all-drivers';
+  static String get endPointOfAvailableDrivers =>
+      '${baseUrl}driver/available';
   static String get endPointOfGetBanner => '${baseUrl}banner/get-all';
 
   // Delete account endpoints

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import dashSide from "../assets/images/dash.gif";
 import { getAllDashboard } from "../utils/authUtils";
@@ -31,6 +31,7 @@ const Dashboard = () => {
   };
 
   useEffect(() => {
+    const clockTimer = window.setInterval(() => setTime(new Date()), 1000);
     const fetchUserIP = async () => {
       try {
         const response = await fetch("https://api.ipify.org?format=json");
@@ -44,6 +45,7 @@ const Dashboard = () => {
     };
     getServicesData();
     fetchUserIP();
+    return () => window.clearInterval(clockTimer);
   }, []);
 
   const { hours, minutes, seconds, ampm } = formatTime(time);

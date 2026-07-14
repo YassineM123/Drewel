@@ -1,5 +1,5 @@
-import React, { useEffect, useRef, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { Link } from "react-router-dom";
 import Swal from "sweetalert2";
 import axios from "axios";
 import { API_URL } from "../utils/api";
@@ -22,7 +22,6 @@ const Providers = () => {
   const [showVehicleModal, setShowVehicleModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
 
-  const navigate = useNavigate();
   const authTokenExist = localStorage.getItem("authToken");
 
   const dropdownRef = useRef(null);
@@ -60,7 +59,7 @@ const Providers = () => {
   };
 
   // Fetch data from the API
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     setLoading(true);
     try {
       const response = await axios.get(
@@ -83,7 +82,7 @@ const Providers = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [authTokenExist]);
 
   useEffect(() => {
     fetchData();
@@ -98,17 +97,12 @@ const Providers = () => {
     return () => {
       document.removeEventListener("mousedown", handleClickOutside);
     };
-  }, []);
+  }, [fetchData]);
 
   const handleViewBusiness = (businessInfo) => {
     if (!businessInfo) return;
     setSelectedBusiness(businessInfo);
     setShowBusinessModal(true);
-  };
-
-  const handleCloseBusinessModal = () => {
-    setShowBusinessModal(false);
-    setSelectedBusiness(null);
   };
 
   const handleViewVehicle = (vehicleInfo) => {
@@ -240,11 +234,6 @@ const Providers = () => {
     currentPage * itemsPerPage,
     (currentPage + 1) * itemsPerPage
   );
-
-  // Handle edit action
-  const handleEdit = () => {
-    navigate("/manage-program/add-program");
-  };
 
   return (
     <main className="app-content">

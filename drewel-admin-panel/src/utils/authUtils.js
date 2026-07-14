@@ -97,7 +97,7 @@ export const getUserList000 = async () => {
     }
 };
 
-export const deleteUser = async () => {
+export const deleteUser = async (id) => {
     const userExists = localStorage.getItem("admin");
     const authTokenExist = localStorage.getItem("authToken");
     try {
@@ -108,12 +108,16 @@ export const deleteUser = async () => {
             throw new Error("Auth token does not exist in localStorage.");
         }
 
-        const response = await axios.get(`${API_URL}/user/delete/${id}`, {
+        if (!id) {
+            throw new Error("A user id is required.");
+        }
+
+        const response = await axios.delete(`${API_URL}/users/${id}`, {
             headers: {
                 Authorization: `Bearer ${authTokenExist}`
             }
         });
-        return response.data.users;
+        return response.data;
     } catch (error) {
         console.error("Error fetching user list:", error.message || error);
         throw error;

@@ -39,6 +39,29 @@ const toBoolean = (value) => {
   return undefined;
 };
 
+const escapeRegex = (value) => String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+export const AVAILABLE_DRIVER_FIELDS =
+  "firstName lastName fullName phone whatsappNumber profileImageUrl city vehicleType lat long isOnline status updatedAt";
+
+export const buildAvailableDriverFilter = (query = {}) => {
+  const filter = {
+    isOnline: true,
+    isApproved: true,
+    isRestricted: false,
+    status: DRIVER_STATUS.COMPLETED,
+  };
+  if (query.city) {
+    filter.city = { $regex: new RegExp(`^${escapeRegex(query.city)}$`, "i") };
+  }
+  if (query.vehicleType) {
+    filter.vehicleType = {
+      $regex: new RegExp(`^${escapeRegex(query.vehicleType)}$`, "i"),
+    };
+  }
+  return filter;
+};
+
 const getFileUrl = (req, file) =>
   buildPublicAssetUrl(req, "/api/users/get-image/", file?.filename);
 
@@ -514,8 +537,20 @@ export const updatePersonalDetails = async (req, res) => {
 
 export const updateDriverDetails = async (req, res) => {
   try {
-    const { id } = req.body || {};
-    const driver = await Driver.findById(id);
+    const driverId = req.params.driverId;
+    if (!driverId) {
+      return res.status(400).send({ success: false, message: "Driver ID is required" });
+    }
+
+    const requesterIsAdmin = await isAdminUser(req.user?._id);
+    if (!requesterIsAdmin && String(req.user?._id) !== String(driverId)) {
+      return res.status(403).send({
+        success: false,
+        message: "You can only update your own driver profile",
+      });
+    }
+
+    const driver = await Driver.findById(driverId);
     if (!driver) {
       return res.status(400).send({
         success: false,
@@ -523,13 +558,22 @@ export const updateDriverDetails = async (req, res) => {
       });
     }
 
+    const selfFields = [
+      "firstName", "lastName", "fullName", "address", "city", "vehicleType",
+      "whatsappNumber", "email", "phone", "countryCode", "lat", "long",
+    ];
+    const adminFields = [
+      ...selfFields, "contractNumber", "licenseCompany", "isRestricted",
+      "status", "rejectionReason",
+    ];
+    const allowedFields = requesterIsAdmin ? adminFields : selfFields;
     Object.keys(req.body || {}).forEach((key) => {
-      if (req.body[key] !== undefined && key !== "id") {
+      if (allowedFields.includes(key) && req.body[key] !== undefined) {
         driver[key] = req.body[key];
       }
     });
 
-    if (req.body?.status && Object.values(DRIVER_STATUS).includes(req.body.status)) {
+    if (requesterIsAdmin && req.body?.status && Object.values(DRIVER_STATUS).includes(req.body.status)) {
       applyStatusTransition(driver, req.body.status, req.body.rejectionReason);
     } else {
       syncLegacyFields(driver);
@@ -552,10 +596,38 @@ export const updateDriverDetails = async (req, res) => {
   }
 };
 
+export const getAvailableDrivers = async (req, res) => {
+  try {
+    const drivers = await Driver.find(buildAvailableDriverFilter(req.query))
+      .select(AVAILABLE_DRIVER_FIELDS)
+      .sort({ updatedAt: -1, _id: 1 })
+      .lean();
+
+    return res.status(200).send({
+      success: true,
+      message: "Available drivers fetched successfully",
+      drivers,
+    });
+  } catch (error) {
+    return res.status(500).send({
+      success: false,
+      message: "Failed to fetch available drivers",
+    });
+  }
+};
+
 export const updateDriverUpdated = async (req, res) => {
   try {
     const { id } = req.body || {};
-    const driver = await Driver.findById(id);
+    const targetId = id || req.user?._id;
+    const hasAccess = await canAccessDriver(req, targetId);
+    if (!hasAccess) {
+      return res.status(403).send({
+        success: false,
+        message: "You can only update your own driver status",
+      });
+    }
+    const driver = await Driver.findById(targetId);
     if (!driver) {
       return res.status(400).send({
         success: false,
@@ -666,6 +738,13 @@ export const addDriverDetails = async (req, res) => {
 export const getDriverDetails = async (req, res) => {
   try {
     const id = req.params.id;
+    const hasAccess = await canAccessDriver(req, id);
+    if (!hasAccess) {
+      return res.status(403).send({
+        success: false,
+        message: "You are not authorized to view this driver",
+      });
+    }
     const driver = await Driver.findById(id).populate("driverLogs");
     if (!driver) {
       return res.status(404).send({
@@ -713,7 +792,7 @@ export const getAllDrivers = async (req, res) => {
       filter.status = String(status);
     }
 
-    const drivers = await Driver.find(filter).sort({ createdAt: -1 });
+    const drivers = await Driver.find(filter).select("-otpCode -password").sort({ createdAt: -1 });
     return res.status(200).send({
       success: true,
       message: "Drivers fetched successfully",

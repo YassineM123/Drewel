@@ -1,4 +1,5 @@
-import React, { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import PropTypes from "prop-types";
 import Swal from "sweetalert2";
 
 const AddUser = ({ user, onClose }) => {
@@ -7,8 +8,6 @@ const AddUser = ({ user, onClose }) => {
     fullName: "",
     email: "",
   });
-  console.log("User", user)
-
   const [errors, setErrors] = useState({});
   const formRef = useRef(null);
 
@@ -22,7 +21,7 @@ const AddUser = ({ user, onClose }) => {
     }
     const handleClickOutside = (event) => {
       if (formRef.current && !formRef.current.contains(event.target)) {
-        onClose();
+        onClose?.();
       }
     };
     document.addEventListener("mousedown", handleClickOutside);
@@ -38,10 +37,6 @@ const AddUser = ({ user, onClose }) => {
 
     // Clear the error for the specific field when the user types
     setErrors((prevErrors) => ({ ...prevErrors, [id]: "" }));
-  };
-
-  const handlePasswordVisibility = () => {
-    setIsPasswordVisible((prev) => !prev);
   };
 
   // Handle form submission for both creation and update
@@ -98,7 +93,7 @@ const AddUser = ({ user, onClose }) => {
 
   const handleClose = () => {
     resetForm();
-    onClose();
+    onClose?.();
   };
 
   return (
@@ -126,7 +121,7 @@ const AddUser = ({ user, onClose }) => {
               <label className="form-label">Name</label>
               <input
                 className="form-control"
-                id="name"
+                id="fullName"
                 type="text"
                 placeholder="Enter Name"
                 value={formData.fullName}
@@ -160,6 +155,14 @@ const AddUser = ({ user, onClose }) => {
       </div>
     </div>
   );
+};
+
+AddUser.propTypes = {
+  user: PropTypes.shape({
+    fullName: PropTypes.string,
+    email: PropTypes.string,
+  }),
+  onClose: PropTypes.func,
 };
 
 export default AddUser;
