@@ -17,7 +17,6 @@ const ChatMessages = ({
   const [newMessage, setNewMessage] = useState('');
   const messagesEndRef = useRef(null);
   const containerRef = useRef(null);
-  const fileInputRef = useRef(null);
 
   // Robust scrolling: scroll to bottom using RAF to avoid layout jank.
   const scrollToBottom = (behavior = 'smooth') => {
@@ -86,26 +85,9 @@ const ChatMessages = ({
     scrollToBottom('smooth');
   };
 
-  const handleFileUpload = (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    const fileURL = URL.createObjectURL(file);
-    console.log('Uploading file:', fileURL);
-
-    const messageData = {
-      text: `File: ${file.name}`,
-      imageUrl: file.type.startsWith('image/') ? fileURL : null,
-      videoUrl: file.type.startsWith('video/') ? fileURL : null,
-    };
-
-    onSendMessage(messageData);
-    // free the object URL after some time (optional)
-    setTimeout(() => URL.revokeObjectURL(fileURL), 60000);
-  };
-
   const isMyMessage = (message) => {
-    return message?.msgByUserId === currentUser?._id;
+    const senderId = message?.msgByUserId?._id || message?.msgByUserId;
+    return String(senderId || '') === String(currentUser?._id || '');
   };
 
   const formatMessageTime = (timestamp) => {
@@ -129,7 +111,7 @@ const ChatMessages = ({
         {showAvatar && (
           <div className="message-avatar">
             <SafeImage
-              src={selectedUser?.avatarUrl || selectedUser?.profileImageUrl}
+              src={selectedUser?.avatarUrl || selectedUser?.profileImageUrl || selectedUser?.profilePicture}
               alt={selectedUser?.firstName || selectedUser?.userName}
               fallback="avatar"
               fallbackLabel={selectedUser?.fullName || selectedUser?.firstName}
@@ -197,7 +179,7 @@ const ChatMessages = ({
       <div className="messages-header">
         <div className="user-info">
           <SafeImage
-            src={selectedUser?.avatarUrl || selectedUser?.profileImageUrl}
+            src={selectedUser?.avatarUrl || selectedUser?.profileImageUrl || selectedUser?.profilePicture}
             alt={selectedUser?.fullName || selectedUser?.userName}
             className="user-avatar"
             fallback="avatar"
@@ -238,24 +220,6 @@ const ChatMessages = ({
 
       {/* Message Input */}
       <form className="message-input-container" onSubmit={handleSendMessage}>
-        <div className="input-actions">
-          <button
-            type="button"
-            className="file-upload-btn"
-            onClick={() => fileInputRef.current?.click()}
-            aria-label="Attach file"
-          >
-            📎
-          </button>
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="image/*,video/*"
-            onChange={handleFileUpload}
-            style={{ display: 'none' }}
-          />
-        </div>
-
         <div className="message-input-wrapper">
           <input
             type="text"

@@ -10,6 +10,7 @@ import '../../../../common/common_drawer.dart';
 import '../../../../common/common_methods.dart';
 import '../../../../common/common_widgets.dart';
 import '../../../../common/text_styles.dart';
+import '../../../data/apis/api_constants/api_key_constants.dart';
 import '../../../data/constants/icons_constant.dart';
 import '../../../data/constants/string_constants.dart';
 import '../controllers/user_home_controller.dart';
@@ -114,7 +115,8 @@ class UserHomeView extends GetView<UserHomeController> {
                             zoom: 12,
                           )));
                           // Get initial visible bounds after map is created
-                          await Future.delayed(const Duration(milliseconds: 500));
+                          await Future.delayed(
+                              const Duration(milliseconds: 500));
                           controller.onCameraIdle();
                         },
                       ),
@@ -384,10 +386,12 @@ class UserHomeView extends GetView<UserHomeController> {
         initialChildSize: isCompactSheet
             ? controller.emptyInitialSheetSize
             : controller.initialSheetSize,
-        minChildSize:
-            isCompactSheet ? controller.emptyMinSheetSize : controller.minSheetSize,
-        maxChildSize:
-            isCompactSheet ? controller.emptyMaxSheetSize : controller.maxSheetSize,
+        minChildSize: isCompactSheet
+            ? controller.emptyMinSheetSize
+            : controller.minSheetSize,
+        maxChildSize: isCompactSheet
+            ? controller.emptyMaxSheetSize
+            : controller.maxSheetSize,
         builder: (BuildContext context, ScrollController scrollController) {
           return Container(
             padding: EdgeInsets.symmetric(horizontal: 15.px, vertical: 10.px),
@@ -593,8 +597,8 @@ class UserHomeView extends GetView<UserHomeController> {
                   clipBehavior: Clip.none,
                   children: [
                     CommonWidgets.imageView(
-                      image:
-                          item.profileImageUrl ?? StringConstants.defaultNetworkImage,
+                      image: item.profileImageUrl ??
+                          StringConstants.defaultNetworkImage,
                       height: 64.px,
                       width: 64.px,
                       borderRadius: BorderRadius.circular(32.px),
@@ -727,7 +731,8 @@ class UserHomeView extends GetView<UserHomeController> {
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
             CommonWidgets.imageView(
-              image: item.profileImageUrl ?? StringConstants.defaultNetworkImage,
+              image:
+                  item.profileImageUrl ?? StringConstants.defaultNetworkImage,
               height: 55.px,
               width: 55.px,
               borderRadius: BorderRadius.circular(27.5.px),
@@ -843,6 +848,13 @@ class UserHomeView extends GetView<UserHomeController> {
 
   Widget _buildDriversPlaceholderState(BuildContext context) {
     final isDriversLoading = controller.isDriversLoading.value;
+    final bool isServiceUnavailable =
+        controller.isDriverServiceUnavailable.value;
+    final String city = controller.parameter[ApiKeyConstants.city] ?? '';
+    final String vehicleType = controller.selectedVehicleType;
+    final String emptyMessage = city.isNotEmpty && vehicleType.isNotEmpty
+        ? 'No online $vehicleType drivers in $city'
+        : 'No online drivers in this place';
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.center,
@@ -857,10 +869,20 @@ class UserHomeView extends GetView<UserHomeController> {
           ),
         ),
         Text(
-          isDriversLoading ? 'Finding drivers...' : 'No driver in this place',
+          isDriversLoading
+              ? 'Finding drivers...'
+              : isServiceUnavailable
+                  ? controller.driverServiceMessage.value
+                  : emptyMessage,
           style: MyTextStyle.titleStyle18bb,
           textAlign: TextAlign.center,
         ),
+        if (!isDriversLoading && isServiceUnavailable)
+          TextButton.icon(
+            onPressed: () => controller.callingGetAllDriverListApi(),
+            icon: const Icon(Icons.refresh),
+            label: const Text('Retry'),
+          ),
         const Spacer(),
         Align(
           alignment: Alignment.bottomCenter,

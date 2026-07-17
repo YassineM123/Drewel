@@ -28,6 +28,10 @@
 	<true/>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>This app needs access to the local network for development and debugging.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Drewel uses the camera to capture profile photos and required driver documents.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Drewel uses your photo library to select profile photos and required driver documents.</string>
 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
 	<string>This app requires your location at all times to function properly.</string>
 	<key>NSLocationAlwaysUsageDescription</key>

@@ -51,8 +51,11 @@ app.*.map.json
 !*.env.example
 !*.env.*.example
 *.pem
+*.jks
+*.keystore
 *_accessKeys*.csv
 drewel-backend/.env
+/tmp/device-check/
 
 # JavaScript dependencies
 **/node_modules/

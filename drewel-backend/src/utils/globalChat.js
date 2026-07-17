@@ -4,6 +4,7 @@ import Admin from "../models/Admin.js";
 import {
   ConversationModel,
   MessageModel,
+  GlobalConversation,
 } from "../models/ConversationModel.js";
 import User from "../models/User.js";
 import { io } from "../socket/index.js";
@@ -18,10 +19,15 @@ export const messagePageHandler = async (
 ) => {
   let userDetails = await User.findById(userId).select("-password");
   if (!userDetails) userDetails = await Admin.findById(userId);
+  if (!userDetails) userDetails = await Driver.findById(userId).select("-otpCode -password");
   if (userDetails) {
     const payload = {
       _id: userDetails?._id,
-      name: userDetails.fullName || userDetails.name || "",
+      fullName: userDetails.fullName || userDetails.name || "",
+      firstName: userDetails.firstName || "",
+      lastName: userDetails.lastName || "",
+      phone: userDetails.phone || "",
+      countryCode: userDetails.countryCode || "",
       profile_pic: userDetails?.profilePicture || userDetails.profileImageUrl,
       online: onlineUser.has(userId),
     };
@@ -52,17 +58,30 @@ export const messagePageHandler = async (
   socket.emit("message", getConversationMessage);
 };
 
-export const newMessageHandler = async (socket, userId, user, data) => {
+export const newMessageHandler = async (socket, userId, data = {}) => {
   try {
     const {
-      sender,
       receiver,
       text,
       imageUrl,
       videoUrl,
-      msgByUserId,
-      chatType,
     } = data;
+
+    if (!mongoose.Types.ObjectId.isValid(receiver)) {
+      throw new Error("Invalid message receiver");
+    }
+    const normalizedText = String(text || "").trim().slice(0, 4000);
+    if (!normalizedText && !imageUrl && !videoUrl) {
+      throw new Error("Message content is required");
+    }
+    const sender = userId.toString();
+    const msgByUserId = userId;
+
+    const receiverExists =
+      (await Admin.exists({ _id: receiver })) ||
+      (await Driver.exists({ _id: receiver })) ||
+      (await User.exists({ _id: receiver }));
+    if (!receiverExists) throw new Error("Message receiver not found");
 
     let conversation = await ConversationModel.findOne({
       $or: [
@@ -97,7 +116,7 @@ export const newMessageHandler = async (socket, userId, user, data) => {
 
     // Create and save message
     const message = new MessageModel({
-      text,
+      text: normalizedText,
       imageUrl,
       videoUrl,
       msgByUserId,
@@ -135,61 +154,44 @@ export const newMessageHandler = async (socket, userId, user, data) => {
   }
 };
 
-export const messageSeenHandler = async (msgByUserId) => {
+export const messageSeenHandler = async (socket, currentUserId, otherUserId) => {
   try {
-    msgByUserId = new mongoose.Types.ObjectId(msgByUserId);
-    let conversation = await ConversationModel.findOne({
+    if (!mongoose.Types.ObjectId.isValid(otherUserId)) return;
+    const conversation = await ConversationModel.findOne({
       $or: [
-        { sender: user._id, receiver: msgByUserId },
-        { sender: msgByUserId, receiver: user._id },
+        { sender: currentUserId, receiver: otherUserId },
+        { sender: otherUserId, receiver: currentUserId },
       ],
     });
+
+    if (!conversation) return;
 
     const conversationMessageId = conversation?.messages || [];
 
     await MessageModel.updateMany(
-      { _id: { $in: conversationMessageId }, msgByUserId: msgByUserId },
+      { _id: { $in: conversationMessageId }, msgByUserId: otherUserId },
       { $set: { seen: true } }
     );
-    // Send conversation
-    const conversationSender = await getConversation(userIdString);
-    const conversationReceiver = await getConversation(msgByUserId);
 
-    io.to(userIdString).emit("conversation", conversationSender);
-    io.to(msgByUserId).emit("conversation", conversationReceiver);
-
-    const receiver = user?._id;
-    const chatNotification = await ChatNotifications.findOne({
-      sender: msgByUserId,
-      receiver: receiver,
-    });
-    if (chatNotification) {
-      chatNotification.unreadCount = 0;
-      chatNotification.isRead = true;
-      await chatNotification.save();
-      const chatNotifications = await getUsersChatNotifications(receiver);
-      io.to(receiver?.toString()).emit("chat-notifications", {
-        chatNotifications,
-      });
-    }
-  } catch (error) {}
+    const currentConversationList = await getConversation(currentUserId);
+    const otherConversationList = await getConversation(otherUserId);
+    io.to(currentUserId.toString()).emit("conversation", currentConversationList);
+    io.to(otherUserId.toString()).emit("conversation", otherConversationList);
+  } catch (error) {
+    console.error("Error marking messages as seen:", error);
+    socket.emit("error", { message: "Unable to mark messages as seen" });
+  }
 };
 
 export const sidebarHandler = async (socket, currentUserId, page, limit) => {
-  console.log("currentUserId: ", currentUserId);
   const conversation = await getConversation(currentUserId, page, limit);
-
-  if (currentUserId && mongoose.Types.ObjectId.isValid(currentUserId)) {
-    const user = await Admin.findById(currentUserId);
-  }
-  console.log("conversation: ", conversation);
   socket.emit("conversation", conversation);
 };
 export const globalMessagePageHandler = async (socket) => {
   const getConversationMessage = await GlobalConversation.findOne()
     .populate({
       path: "messages",
-      populate: { path: "msgByUserId", select: "userName avatarUrl winStreak" }, // to show sender info
+      populate: { path: "msgByUserId", select: "fullName firstName lastName userName profilePicture profileImageUrl role" },
     })
     .sort({ updatedAt: -1 });
 
@@ -197,10 +199,14 @@ export const globalMessagePageHandler = async (socket) => {
   socket.emit("globalMessages", getConversationMessage);
 };
 
-export const newGlobalMessageHandler = async (io, socket, data) => {
+export const newGlobalMessageHandler = async (io, socket, currentUserId, data = {}) => {
   try {
-    const { text, imageUrl, videoUrl, msgByUserId } = data;
-    console.log("data: ", data);
+    const { imageUrl, videoUrl } = data;
+    const text = String(data.text || "").trim().slice(0, 4000);
+    const msgByUserId = currentUserId;
+    if (!text && !imageUrl && !videoUrl) {
+      throw new Error("Message content is required");
+    }
 
     // Always operate on the single global conversation
     let conversation = await GlobalConversation.findOne();
@@ -237,7 +243,7 @@ export const newGlobalMessageHandler = async (io, socket, data) => {
       path: "messages",
       populate: {
         path: "msgByUserId",
-        select: "userName avatarUrl winStreak role",
+        select: "fullName firstName lastName userName profilePicture profileImageUrl role",
       }, // to show sender info
     });
 

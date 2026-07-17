@@ -136,8 +136,7 @@ export const getS3ObjectByFileName = async (prefixes, fileName) => {
       const notFound =
         error?.name === "NoSuchKey" ||
         error?.name === "NotFound" ||
-        error?.$metadata?.httpStatusCode === 404 ||
-        error?.$metadata?.httpStatusCode === 403; // S3 returns 403 instead of 404 when s3:ListBucket is missing
+        error?.$metadata?.httpStatusCode === 404;
       if (!notFound) throw error;
     }
   }

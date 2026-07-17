@@ -29,14 +29,17 @@ const Drivers = () => {
   const [statusFilter, setStatusFilter] = useState("all");
   const [search, setSearch] = useState("");
   const [openDropdown, setOpenDropdown] = useState(null);
+  const [loadError, setLoadError] = useState("");
 
   const fetchDrivers = useCallback(async () => {
     try {
       setLoading(true);
+      setLoadError("");
       const list = await getDriverList(statusFilter);
       setDrivers(Array.isArray(list) ? list : []);
-    } catch {
-      Swal.fire("Error", "Failed to load drivers.", "error");
+    } catch (error) {
+      setDrivers([]);
+      setLoadError(error?.response?.data?.message || "Unable to load drivers right now.");
     } finally {
       setLoading(false);
     }
@@ -134,6 +137,13 @@ const Drivers = () => {
             style={{ minHeight: 200 }}
           >
             <div className="loader" />
+          </div>
+        ) : loadError ? (
+          <div className="alert alert-danger text-center" role="alert">
+            <div>{loadError}</div>
+            <button type="button" className="btn btn-outline-danger btn-sm mt-2" onClick={fetchDrivers}>
+              Retry
+            </button>
           </div>
         ) : (
           <div className="table-responsive">

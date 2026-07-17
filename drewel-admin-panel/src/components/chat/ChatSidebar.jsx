@@ -77,7 +77,7 @@ const ChatSidebar = ({ conversations, selectedUser, onUserSelect, loading }) => 
               >
                 <div className="conversation-avatar">
                   <SafeImage
-                    src={otherUser.avatarUrl || otherUser.profileImageUrl}
+                    src={otherUser.avatarUrl || otherUser.profileImageUrl || otherUser.profilePicture}
                     alt={otherUser.firstName || otherUser.userName}
                     fallback="avatar"
                     fallbackLabel={otherUser.fullName || otherUser.firstName}

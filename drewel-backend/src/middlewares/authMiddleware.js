@@ -35,7 +35,7 @@ export const requireSignIn = async (req, res, next) => {
       errorMessage = "Invalid token";
     }
 
-    return res.status(403).json({
+    return res.status(401).json({
       success: false,
       message: errorMessage,
     });

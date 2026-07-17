@@ -72,8 +72,6 @@ io.on("connection", async (socket) => {
     const authenticatedAdmin = await Admin.exists({ _id: userId, role: "admin" });
     const authenticatedDriver = await Driver.exists({ _id: userId });
     const authenticatedUser = await User.exists({ _id: userId });
-    socket.join(userId.toString());
-    onlineUser.add(userId.toString());
     const userIdString = userId.toString();
     socket.join(userIdString);
     onlineUser.add(userIdString);
@@ -83,17 +81,23 @@ io.on("connection", async (socket) => {
     });
 
     socket.on("new message", async (data) => {
-      await newMessageHandler(socket, userId, user, data);
+      await newMessageHandler(socket, userId, data);
     });
-    socket.on("sidebar", async (currentUserId, page, limit) => {
-      page = 1;
-      limit = 100;
-      await sidebarHandler(socket, currentUserId, page, limit);
+    socket.on("sidebar", async (_currentUserId, page, limit) => {
+      await sidebarHandler(socket, userIdString, page, limit);
     });
 
     // Seen
     socket.on("seen", async (msgByUserId) => {
-      await messageSeenHandler(msgByUserId);
+      await messageSeenHandler(socket, userId, msgByUserId);
+    });
+
+    socket.on("global-message-page", async () => {
+      await globalMessagePageHandler(socket);
+    });
+
+    socket.on("new global message", async (data) => {
+      await newGlobalMessageHandler(io, socket, userId, data);
     });
 
     // socket.on("driver-location-update", async ({ driverId, lat, long, fullName, vehicleType, city }) => {
@@ -271,6 +275,7 @@ io.on("connection", async (socket) => {
     });
   } catch (error) {
     console.error("Error during socket connection:", error);
+    socket.emit("auth-error", { message: "Your session is invalid or expired" });
     socket.disconnect(true);
   }
 });

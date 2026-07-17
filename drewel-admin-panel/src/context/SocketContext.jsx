@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { io } from 'socket.io-client';
 import { SOCKET_URL } from '../utils/api';
+import { isAuthTokenUsable, redirectToLogin } from '../utils/session';
 
 const SocketContext = createContext();
 
@@ -16,18 +17,28 @@ export const SocketProvider = ({ children }) => {
   const [socket, setSocket] = useState(null);
   const [isConnected, setIsConnected] = useState(false);
   const [onlineUsers, setOnlineUsers] = useState([]);
+  const [authToken, setAuthToken] = useState(() => localStorage.getItem('authToken'));
 
   useEffect(() => {
-    const token = localStorage.getItem('authToken');
-    
-    if (!token) {
-      console.log('No auth token found');
+    const syncToken = () => setAuthToken(localStorage.getItem('authToken'));
+    window.addEventListener('admin-auth-changed', syncToken);
+    window.addEventListener('storage', syncToken);
+    return () => {
+      window.removeEventListener('admin-auth-changed', syncToken);
+      window.removeEventListener('storage', syncToken);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!isAuthTokenUsable(authToken)) {
+      setSocket(null);
+      setIsConnected(false);
       return;
     }
 
     const newSocket = io(SOCKET_URL, {
       auth: {
-        token: token
+        token: authToken
       },
     });
 
@@ -53,7 +64,13 @@ export const SocketProvider = ({ children }) => {
 
     newSocket.on('connect_error', (err) => {
       console.error('Socket connection error:', err);
-      console.error('Could not connect to socket server. Please check if the backend URL is correct:', SOCKET_URL);
+      if (/unauthor|token|session/i.test(err?.message || '')) {
+        redirectToLogin();
+      }
+    });
+
+    newSocket.on('auth-error', () => {
+      redirectToLogin();
     });
 
     setSocket(newSocket);
@@ -61,8 +78,10 @@ export const SocketProvider = ({ children }) => {
     // Cleanup on unmount
     return () => {
       newSocket.close();
+      setSocket(null);
+      setIsConnected(false);
     };
-  }, []);
+  }, [authToken]);
 
   const value = {
     socket,

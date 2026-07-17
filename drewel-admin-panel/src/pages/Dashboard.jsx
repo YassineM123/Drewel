@@ -6,7 +6,12 @@ import { getAllDashboard } from "../utils/authUtils";
 const Dashboard = () => {
   const [time, setTime] = useState(new Date());
   const [userIP, setUserIP] = useState("");
-  const [servicesData, setServicesData] = useState()
+  const [servicesData, setServicesData] = useState({
+    totalUsers: 0,
+    totalDrivers: 0,
+    onlineDrivers: 0,
+    restrictedUsers: 0,
+  });
 
   const formatTime = (date) => {
     let hours = date.getHours();
@@ -102,13 +107,13 @@ const Dashboard = () => {
               </Link>
             </div>
             <div className="col-md-6 col-lg-6">
-              <Link className="text-decoration-none" to="/drivers?restricted=true">
+              <Link className="text-decoration-none" to="/users">
                 <div className="widget-small ctm-bg-2 coloured-icon">
                   <i className="icon fa-light fa-user-group"></i>
                   <div className="info">
                     <h4>Total restrict User</h4>
                     <p style={{ marginTop: "15px", display: "block", fontSize: "24px" }}>
-                      <b>{servicesData?.restrictedDrivers}</b>
+                      <b>{servicesData?.restrictedUsers ?? servicesData?.restrictedDrivers}</b>
                     </p>
                   </div>
                 </div>

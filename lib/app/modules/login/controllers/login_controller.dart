@@ -78,8 +78,7 @@ class LoginController extends GetxController {
           ApiKeyConstants.countryCode: countryDailCode.value,
           ApiKeyConstants.type: type,
         };
-        _log(
-            'Normal OTP requested. phone=$phone, countryCode=${countryDailCode.value}, type=$type');
+        _log('Normal OTP requested. type=$type');
         SendOtpModel? sendOtpModel =
             await ApiMethods.sendOtpApi(bodyParams: bodyParams);
         if (sendOtpModel != null &&
@@ -121,8 +120,7 @@ class LoginController extends GetxController {
     try {
       showWhatsAppOtpLoading.value = true;
       final String phone = _getPhoneWithoutCountryCode();
-      _log(
-          'WhatsApp OTP requested. phone=$phone, countryCode=${countryDailCode.value}, type=$type');
+      _log('WhatsApp OTP requested. type=$type');
       Map<String, String> bodyParams = {
         ApiKeyConstants.phone: phone,
         ApiKeyConstants.countryCode: countryDailCode.value,

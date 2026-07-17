@@ -94,7 +94,7 @@ class OtpController extends GetxController {
             ApiKeyConstants.type: selectedType,
           };
           _log(
-              'Calling verifyOtpWhatsAppApi. phone=${parameter[ApiKeyConstants.phone] ?? ''}, type=$selectedType, otpLength=${otp.length}');
+              'Calling verifyOtpWhatsAppApi. type=$selectedType, otpLength=${otp.length}');
           loginModel =
               await ApiMethods.verifyOtpWhatsAppApi(bodyParams: bodyParams);
         } else {
@@ -104,7 +104,7 @@ class OtpController extends GetxController {
             ApiKeyConstants.type: selectedType,
           };
           _log(
-              'Calling otpVerifyApi. phone=${parameter[ApiKeyConstants.phone] ?? ''}, type=$selectedType, otpLength=${otp.length}');
+              'Calling otpVerifyApi. type=$selectedType, otpLength=${otp.length}');
           loginModel = await ApiMethods.otpVerifyApi(bodyParams: bodyParams);
         }
         if (loginModel != null &&
@@ -113,7 +113,7 @@ class OtpController extends GetxController {
             loginModel.user != null) {
           pin.clear();
           _log(
-              'OTP verify success. userId=${loginModel.user?.sId ?? ''}, isApproved=${loginModel.user?.isApproved ?? false}');
+              'OTP verify success. isApproved=${loginModel.user?.isApproved ?? false}');
           SharedPreferences sp = await SharedPreferences.getInstance();
           sp.setString(ApiKeyConstants.token, loginModel.token!);
           sp.setString(ApiKeyConstants.userId, loginModel.user?.sId ?? '');

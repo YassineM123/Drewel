@@ -5,6 +5,11 @@ import logo1 from "../assets/images/logo1.jpg";
 import videobg from "../assets/images/video.mp4";
 import axios from "axios";
 import { API_URL } from "../utils/api";
+import {
+  clearAdminSession,
+  isAuthTokenUsable,
+  notifyAdminSessionChanged,
+} from "../utils/session";
 
 const Login = () => {
   const [formData, setFormData] = useState({ email: "", password: "" });
@@ -19,8 +24,10 @@ const Login = () => {
 
   useEffect(() => {
     const token = localStorage.getItem("authToken");
-    if (token) {
+    if (isAuthTokenUsable(token)) {
       navigate("/");
+    } else if (token) {
+      clearAdminSession();
     }
   }, [navigate]);
 
@@ -38,8 +45,12 @@ const Login = () => {
   const getUserLogin = async (data) => {
     try {
       const res = await axios.post(`${API_URL}/admin/login`, data);
+        if (!res.data?.success || !res.data?.token || !res.data?.admin) {
+          throw new Error(res.data?.message || "Login failed.");
+        }
         localStorage.setItem("authToken", res.data.token);
         localStorage.setItem("admin", JSON.stringify(res.data.admin));
+        notifyAdminSessionChanged();
         // console.log("Navigating to home...");
          navigate("/"); // ← Check if this is executed
       if (res.data.status) {

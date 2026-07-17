@@ -48,9 +48,15 @@ const ChatApp = () => {
     // Get current user from localStorage
     const adminData = localStorage.getItem('admin');
     if (adminData) {
-      const user = JSON.parse(adminData);
-      setCurrentUser(user);
-      loadConversations(user._id);
+      try {
+        const user = JSON.parse(adminData);
+        if (user?._id) {
+          setCurrentUser(user);
+          loadConversations(user._id);
+        }
+      } catch {
+        setCurrentUser(null);
+      }
     }
   }, [loadConversations]);
 
@@ -130,12 +136,6 @@ const ChatApp = () => {
                 Chats
               </button>
               <button
-                className={`tab-button ${activeTab === "groups" ? "active" : ""}`}
-                onClick={() => setActiveTab("groups")}
-              >
-                Groups
-              </button>
-              <button
                 className={`tab-button ${activeTab === "global" ? "active" : ""}`}
                 onClick={() => setActiveTab("global")}
               >
@@ -196,11 +196,6 @@ const ChatApp = () => {
                 onSendMessage={handleGlobalMessageSend}
                 loading={loading}
               />
-            ) : activeTab === "groups" ? (
-              <div className="chat-placeholder">
-                <h3>Group Chat</h3>
-                <p>Select a group from the sidebar</p>
-              </div>
             ) : (
               <div className="chat-placeholder">
                 <h3>Welcome to Chat</h3>

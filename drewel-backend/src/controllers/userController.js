@@ -399,10 +399,17 @@ export const getUserDetails = async (req, res) => {
 
 export const dashBoardData = async (req, res) => {
   try {
-    const totalUsers = await User.countDocuments();
-    const totalDrivers = await Driver.countDocuments();
-    const onlineDrivers = await Driver.countDocuments({ isOnline: true });
-    const restrictedDrivers = await User.countDocuments({ isRestricted: true });
+    const [totalUsers, totalDrivers, onlineDrivers, restrictedUsers] =
+      await Promise.all([
+        User.countDocuments(),
+        Driver.countDocuments(),
+        Driver.countDocuments({
+          isOnline: true,
+          isApproved: true,
+          isRestricted: false,
+        }),
+        User.countDocuments({ isRestricted: true }),
+      ]);
 
     return res.status(200).send({
       success: true,
@@ -411,11 +418,15 @@ export const dashBoardData = async (req, res) => {
         totalUsers,
         totalDrivers,
         onlineDrivers,
-        restrictedDrivers,
+        restrictedUsers,
       },
     });
   } catch (error) {
-    console.log("error ==> ", error);
+    console.error("Dashboard data error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to fetch dashboard data",
+    });
   }
 };
 

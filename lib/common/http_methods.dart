@@ -91,22 +91,23 @@ class MyHttp {
       "Authorization": 'Bearer $token',
       'Accept': 'application/json'
     };
-    if (kDebugMode) print("URL:: $url");
+    if (kDebugMode) {
+      print("URL:: $url");
+    }
 
     try {
       http.Response? response = await _client.get(
         Uri.parse(url),
         headers: authorization,
       );
-      if (kDebugMode) print("CALLING:: ${response.body}");
+      if (kDebugMode) print("HTTP GET completed: ${response.statusCode}");
       if (await CommonWidgets.responseCheckForGetMethod(response: response)) {
         checkResponse?.call(response.statusCode);
         return response;
       } else {
         checkResponse?.call(response.statusCode);
         if (kDebugMode) {
-          print(
-              "ERROR::statusCode=${response.statusCode}: :response=${response.body}");
+          print("HTTP GET failed: statusCode=${response.statusCode}");
         }
         return null;
       }
@@ -123,24 +124,33 @@ class MyHttp {
     SharedPreferences sharedPreferences = await SharedPreferences.getInstance();
     String? token = sharedPreferences.getString(ApiKeyConstants.token) ?? '';
     Map<String, String> authorization = {};
-    authorization = {"Authorization": token, 'Accept': 'application/json'};
+    authorization = {
+      "Authorization": 'Bearer $token',
+      'Accept': 'application/json'
+    };
     if (kDebugMode) print("endPointUri:: $endPointUri");
     if (kDebugMode) print("BASEURL:: $baseUri");
     if (await CommonWidgets.internetConnectionCheckerMethod()) {
       try {
-        Uri uri = Uri.http(baseUri, endPointUri, queryParameters);
+        final Uri configuredBase =
+            Uri.parse(baseUri.contains('://') ? baseUri : 'https://$baseUri');
+        final Uri uri = configuredBase.replace(
+          path: endPointUri.startsWith('/') ? endPointUri : '/$endPointUri',
+          queryParameters: queryParameters.map(
+            (String key, dynamic value) => MapEntry(key, value.toString()),
+          ),
+        );
         if (kDebugMode) print("URI:: $uri");
         http.Response? response =
             await _client.get(uri, headers: authorization);
-        if (kDebugMode) print("CALLING:: ${response.body}");
+        if (kDebugMode) print("HTTP GET completed: ${response.statusCode}");
         if (await CommonWidgets.responseCheckForGetMethod(
           response: response,
         )) {
           return response;
         } else {
           if (kDebugMode) {
-            print(
-                "ERROR::statusCode=${response.statusCode}: :response=${response.body}");
+            print("HTTP GET failed: statusCode=${response.statusCode}");
           }
           return null;
         }
@@ -170,7 +180,9 @@ class MyHttp {
       'Content-Type': 'application/json'
     };
     if (kDebugMode) print("URL:: $url");
-    if (kDebugMode) print("bodyParams:: ${bodyParams ?? {}}");
+    if (kDebugMode) {
+      print("HTTP POST body fields: ${bodyParams?.keys.toList() ?? []}");
+    }
     if (await CommonWidgets.internetConnectionCheckerMethod()) {
       Future<http.Response?> doPost(http.Client client) async {
         final response = await client.post(
@@ -179,7 +191,7 @@ class MyHttp {
           headers: authorization,
         );
         if (kDebugMode) print("CALLING:: ${response.statusCode}");
-        if (kDebugMode) print("CALLING:: ${response.body}");
+        if (kDebugMode) print("HTTP POST response received");
         if (await CommonWidgets.responseCheckForPostMethod(
             response: response, wantSnackBar: wantSnackBar)) {
           checkResponse?.call(response.statusCode);
@@ -187,8 +199,7 @@ class MyHttp {
         } else {
           checkResponse?.call(response.statusCode);
           if (kDebugMode) {
-            print(
-                "ERROR::statusCode=${response.statusCode}: :response=${response.body}");
+            print("HTTP POST failed: statusCode=${response.statusCode}");
           }
           return returnResponseOnError ? response : null;
         }
@@ -247,14 +258,16 @@ class MyHttp {
       'Content-Type': 'application/json'
     };
     if (kDebugMode) print("URL:: $url");
-    if (kDebugMode) print("bodyParams:: ${bodyParams ?? {}}");
+    if (kDebugMode) {
+      print("HTTP DELETE body fields: ${bodyParams?.keys.toList() ?? []}");
+    }
     if (await CommonWidgets.internetConnectionCheckerMethod()) {
       try {
         http.Response? response = await _client.delete(
           Uri.parse(url),
           headers: authorization,
         );
-        if (kDebugMode) print("CALLING:: ${response.body}");
+        if (kDebugMode) print("HTTP DELETE completed: ${response.statusCode}");
         if (await CommonWidgets.responseCheckForPostMethod(
             response: response)) {
           checkResponse?.call(response.statusCode);
@@ -262,8 +275,7 @@ class MyHttp {
         } else {
           checkResponse?.call(response.statusCode);
           if (kDebugMode) {
-            print(
-                "ERROR::statusCode=${response.statusCode}: :response=${response.body}");
+            print("HTTP DELETE failed: statusCode=${response.statusCode}");
           }
           return null;
         }
@@ -298,7 +310,9 @@ class MyHttp {
       'Accept': 'application/json',
       'Content-Type': 'application/json'
     };
-    if (kDebugMode) print("bodyParams:: ${bodyParams ?? {}}");
+    if (kDebugMode) {
+      print("MULTIPART body fields: ${bodyParams?.keys.toList() ?? []}");
+    }
     if (kDebugMode) print("URL:: $url");
     if (await CommonWidgets.internetConnectionCheckerMethod()) {
       try {
@@ -340,21 +354,23 @@ class MyHttp {
         }
 
         if (bodyParams != null) {
-          if (kDebugMode) print("bodyParams:: $bodyParams");
+          if (kDebugMode) {
+            print("MULTIPART fields: ${bodyParams.keys.toList()}");
+          }
           bodyParams.forEach((key, value) {
             request.fields[key] = value;
           });
         }
         var response = await _client.send(request);
         res = await http.Response.fromStream(response);
-        if (kDebugMode) print("CALLING:: ${res.body}");
+        if (kDebugMode) print("MULTIPART completed: ${res.statusCode}");
         if (await CommonWidgets.responseCheckForPostMethod(response: res)) {
           checkResponse?.call(response.statusCode);
           return res;
         } else {
           checkResponse?.call(response.statusCode);
           if (kDebugMode) {
-            print("ERROR::statusCode=${res.statusCode}: :response=${res.body}");
+            print("MULTIPART failed: statusCode=${res.statusCode}");
           }
           return null;
         }
@@ -379,7 +395,9 @@ class MyHttp {
       void Function(int)? checkResponse}) async {
     SharedPreferences sharedPreferences = await SharedPreferences.getInstance();
     String? token = sharedPreferences.getString(ApiKeyConstants.token);
-    if (kDebugMode) print("bodyParams:: ${bodyParams ?? {}}");
+    if (kDebugMode) {
+      print("MULTIPART body fields: ${bodyParams?.keys.toList() ?? []}");
+    }
     if (kDebugMode) print("URL:: $url");
     if (await CommonWidgets.internetConnectionCheckerMethod()) {
       try {
@@ -408,21 +426,23 @@ class MyHttp {
         }
 
         if (bodyParams != null) {
-          if (kDebugMode) print("bodyParams:: $bodyParams");
+          if (kDebugMode) {
+            print("MULTIPART fields: ${bodyParams.keys.toList()}");
+          }
           bodyParams.forEach((key, value) {
             request.fields[key] = value;
           });
         }
         var response = await request.send();
         res = await http.Response.fromStream(response);
-        if (kDebugMode) print("CALLING:: ${res.body}");
+        if (kDebugMode) print("MULTIPART completed: ${res.statusCode}");
         if (await CommonWidgets.responseCheckForPostMethod(response: res)) {
           checkResponse?.call(response.statusCode);
           return res;
         } else {
           checkResponse?.call(response.statusCode);
           if (kDebugMode) {
-            print("ERROR::statusCode=${res.statusCode}: :response=${res.body}");
+            print("MULTIPART failed: statusCode=${res.statusCode}");
           }
           return null;
         }
@@ -460,7 +480,9 @@ class MyHttp {
     SharedPreferences sharedPreferences = await SharedPreferences.getInstance();
     String? token = sharedPreferences.getString(ApiKeyConstants.token);
 
-    if (kDebugMode) print("bodyParams:: ${bodyParams ?? {}}");
+    if (kDebugMode) {
+      print("MULTIPART body fields: ${bodyParams?.keys.toList() ?? []}");
+    }
     if (kDebugMode) print("URL:: $url");
 
     if (await CommonWidgets.internetConnectionCheckerMethod()) {
@@ -520,7 +542,7 @@ class MyHttp {
         var res = await http.Response.fromStream(streamedResponse)
             .timeout(multipartTimeout);
 
-        if (kDebugMode) print("CALLING:: ${res.body}");
+        if (kDebugMode) print("MULTIPART completed: ${res.statusCode}");
 
         checkResponse?.call(res.statusCode);
 

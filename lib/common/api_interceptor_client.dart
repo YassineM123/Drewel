@@ -10,6 +10,20 @@ class ApiInterceptorClient extends http.BaseClient {
   final http.Client _innerClient;
 
   static const int _maxLogBodyLength = 600;
+  static const Set<String> _sensitiveFieldNames = <String>{
+    'authorization',
+    'password',
+    'passwordconfirmation',
+    'confirmpassword',
+    'otp',
+    'token',
+    'accesstoken',
+    'refreshtoken',
+    'email',
+    'phone',
+    'phonenumber',
+    'whatsappnumber',
+  };
 
   @override
   Future<http.StreamedResponse> send(http.BaseRequest request) async {
@@ -55,7 +69,7 @@ class ApiInterceptorClient extends http.BaseClient {
   void _logRequest(http.BaseRequest request) {
     if (!kDebugMode) return;
 
-    print('[API][REQUEST] ${request.method} ${request.url}');
+    print('[API][REQUEST] ${request.method} ${_redactUri(request.url)}');
     print('[API][HEADERS] ${_maskSensitiveHeaders(request.headers)}');
 
     final String bodyPreview = _buildRequestBodyPreview(request);
@@ -86,21 +100,15 @@ class ApiInterceptorClient extends http.BaseClient {
     final Map<String, String> masked = Map<String, String>.from(headers);
     for (final String key in masked.keys.toList()) {
       if (key.toLowerCase() == 'authorization') {
-        masked[key] = _maskToken(masked[key] ?? '');
+        masked[key] = '<redacted>';
       }
     }
     return masked;
   }
 
-  String _maskToken(String token) {
-    if (token.isEmpty) return token;
-    if (token.length <= 14) return '***';
-    return '${token.substring(0, 10)}...${token.substring(token.length - 4)}';
-  }
-
   String _buildRequestBodyPreview(http.BaseRequest request) {
     if (request is http.Request) {
-      return _truncate(request.body);
+      return _redactTextBody(request.body);
     }
 
     if (request is http.MultipartRequest) {
@@ -110,7 +118,7 @@ class ApiInterceptorClient extends http.BaseClient {
             .map((file) => '${file.field}:${file.filename}')
             .toList(),
       };
-      return _truncate(jsonEncode(payload));
+      return _truncate(jsonEncode(_redactJsonValue(payload)));
     }
 
     return '';
@@ -133,7 +141,55 @@ class ApiInterceptorClient extends http.BaseClient {
     }
 
     final String decoded = utf8.decode(bytes, allowMalformed: true);
-    return _truncate(decoded);
+    return _redactTextBody(decoded);
+  }
+
+  Uri _redactUri(Uri uri) {
+    if (!uri.hasQuery) return uri;
+    final Map<String, String> query = <String, String>{};
+    uri.queryParameters.forEach((String key, String value) {
+      query[key] = _isSensitiveField(key) ? '<redacted>' : value;
+    });
+    return uri.replace(queryParameters: query);
+  }
+
+  String _redactTextBody(String value) {
+    if (value.trim().isEmpty) return '';
+    try {
+      final dynamic decoded = jsonDecode(value);
+      return _truncate(jsonEncode(_redactJsonValue(decoded)));
+    } catch (_) {
+      // Non-JSON response bodies (including proxy HTML) are intentionally not
+      // copied to device logs because they can contain user or server details.
+      return '<${value.length} text characters>';
+    }
+  }
+
+  dynamic _redactJsonValue(dynamic value) {
+    if (value is Map) {
+      return value.map((dynamic key, dynamic item) {
+        final String field = key.toString();
+        return MapEntry(
+          field,
+          _isSensitiveField(field) ? '<redacted>' : _redactJsonValue(item),
+        );
+      });
+    }
+    if (value is List) {
+      return value.map(_redactJsonValue).toList();
+    }
+    return value;
+  }
+
+  bool _isSensitiveField(String field) {
+    final String normalized = field.toLowerCase().replaceAll(
+          RegExp(r'[^a-z0-9]'),
+          '',
+        );
+    return _sensitiveFieldNames.contains(normalized) ||
+        normalized.contains('otp') ||
+        normalized.endsWith('token') ||
+        normalized.endsWith('password');
   }
 
   String _truncate(String value) {

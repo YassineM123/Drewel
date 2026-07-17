@@ -447,14 +447,16 @@ class ApiMethods {
   ///  Get all driver list api....
   static Future<DriverListModel?> getAllDriverListApi(
       {void Function(int)? checkResponse,
-      // required String city,
+      required String city,
       required String vType}) async {
     DriverListModel? driverListModel;
+    final Uri uri = Uri.parse(ApiUrlConstants.endPointOfAvailableDrivers)
+        .replace(queryParameters: <String, String>{
+      if (city.trim().isNotEmpty) ApiKeyConstants.city: city.trim(),
+      if (vType.trim().isNotEmpty) ApiKeyConstants.vehicleType: vType.trim(),
+    });
     http.Response? response = await MyHttp.getMethod(
-      url:
-          '${ApiUrlConstants.endPointOfAvailableDrivers}?${ApiKeyConstants.vehicleType}=$vType',
-
-      // url: '${ApiUrlConstants.endPointOfAvailableDrivers}?${ApiKeyConstants.city}=$city&& ${ApiKeyConstants.vehicleType}=$vType',
+      url: uri.toString(),
       checkResponse: checkResponse,
     );
     if (response != null) {

@@ -73,10 +73,15 @@ class UserHomeController extends GetxController
   final SocketService socketService = SocketService();
   String? _currentCity;
   bool _isRefreshingDriverList = false;
+  bool _isControllerClosed = false;
   static const int _driverPollingIntervalSeconds = 5;
+  static const int _maxDriverPollingIntervalSeconds = 60;
+  int _consecutiveDriverRefreshFailures = 0;
 
   // Loading state for drivers
   final isDriversLoading = true.obs;
+  final isDriverServiceUnavailable = false.obs;
+  final driverServiceMessage = ''.obs;
 
   // User location state
   final isUserLocationLoaded = false.obs;
@@ -403,6 +408,9 @@ class UserHomeController extends GetxController
   }
 
   /// Filter and sort drivers based on visible map bounds and vehicle type
+  String _normalizeVehicleType(String value) =>
+      value.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]+'), ' ').trim();
+
   void filterDriversByVisibleBounds() {
     if (currentVisibleBounds == null || allDriversList.isEmpty) {
       visibleDriversList = [];
@@ -420,13 +428,12 @@ class UserHomeController extends GetxController
 
       // Filter by vehicle type if selected
       if (selectedVehicleType.isNotEmpty) {
-        String driverVehicleType =
-            (driver.vehicleType ?? '').toLowerCase().trim();
-        String filterVehicleType = selectedVehicleType.toLowerCase().trim();
-
-        // Check if vehicle type matches (case-insensitive)
-        if (!driverVehicleType.contains(filterVehicleType) &&
-            !filterVehicleType.contains(driverVehicleType)) {
+        final String driverVehicleType =
+            _normalizeVehicleType(driver.vehicleType ?? '');
+        final String filterVehicleType =
+            _normalizeVehicleType(selectedVehicleType);
+        if (driverVehicleType.isEmpty ||
+            driverVehicleType != filterVehicleType) {
           return false;
         }
       }
@@ -493,11 +500,7 @@ class UserHomeController extends GetxController
           infoWindow: InfoWindow(
             title: 'Your Selected Location',
             snippet: selectedLocationAddress.value.isNotEmpty
-                ? '${selectedLocationAddress.value.substring(
-                        0,
-                        selectedLocationAddress.value.length > 50
-                            ? 50
-                            : selectedLocationAddress.value.length)}...'
+                ? '${selectedLocationAddress.value.substring(0, selectedLocationAddress.value.length > 50 ? 50 : selectedLocationAddress.value.length)}...'
                 : 'Drag to move',
           ),
           zIndex: 3, // Show above everything
@@ -606,10 +609,13 @@ class UserHomeController extends GetxController
     _initSocket();
   }
 
-
   @override
   void onClose() {
+    _isControllerClosed = true;
     WidgetsBinding.instance.removeObserver(this);
+    _placesDebounce?.cancel();
+    locationController.dispose();
+    locationFocusNode.dispose();
     animationController.dispose();
     _stopDriverPolling();
     _disconnectSocket();
@@ -640,11 +646,19 @@ class UserHomeController extends GetxController
   }
 
   void _startDriverPolling() {
+    if (_isControllerClosed) return;
     _stopDriverPolling();
-    _driverPollingTimer = Timer.periodic(
-      const Duration(seconds: _driverPollingIntervalSeconds),
-      (_) => callingGetAllDriverListApi(showLoader: false, showError: false),
+    final int multiplier = 1 << math.min(_consecutiveDriverRefreshFailures, 4);
+    final int delaySeconds = math.min(
+      _driverPollingIntervalSeconds * multiplier,
+      _maxDriverPollingIntervalSeconds,
     );
+    _driverPollingTimer = Timer(Duration(seconds: delaySeconds), () async {
+      if (_isControllerClosed) return;
+      await callingGetAllDriverListApi(showLoader: false, showError: false);
+      if (_isControllerClosed) return;
+      _startDriverPolling();
+    });
   }
 
   void _stopDriverPolling() {
@@ -730,7 +744,8 @@ class UserHomeController extends GetxController
     return null;
   }
 
-  Iterable<Map<String, dynamic>> _extractNearbyDriverUpdates(dynamic data) sync* {
+  Iterable<Map<String, dynamic>> _extractNearbyDriverUpdates(
+      dynamic data) sync* {
     if (data is List) {
       for (final dynamic item in data) {
         final Map<String, dynamic>? map = _asStringMap(item);
@@ -772,7 +787,8 @@ class UserHomeController extends GetxController
 
   bool _applyDriverLocationUpdate(Map<String, dynamic> driverUpdate) {
     final String? driverId = _extractDriverId(driverUpdate);
-    final double? newLat = _extractCoordinate(driverUpdate, ['lat', 'latitude']);
+    final double? newLat =
+        _extractCoordinate(driverUpdate, ['lat', 'latitude']);
     final double? newLong =
         _extractCoordinate(driverUpdate, ['long', 'lng', 'longitude']);
 
@@ -780,7 +796,8 @@ class UserHomeController extends GetxController
       return false;
     }
 
-    final int index = allDriversList.indexWhere((Drivers d) => d.sId == driverId);
+    final int index =
+        allDriversList.indexWhere((Drivers d) => d.sId == driverId);
     if (index == -1) {
       print('Driver update received for unknown driver: $driverId');
       return false;
@@ -794,9 +811,37 @@ class UserHomeController extends GetxController
 
   /// Handle incoming driver location updates from socket
   void _handleDriversNearbyUpdate(dynamic data) {
-    if (data == null) return;
+    if (data == null || _isControllerClosed) return;
 
     try {
+      final Map<String, dynamic>? payload = _asStringMap(data);
+      final String type = (payload?['type'] ?? '').toString().toUpperCase();
+      if (type == 'INITIAL' && payload?['drivers'] is List) {
+        final List<Drivers> initialDrivers = <Drivers>[];
+        for (final dynamic item in payload!['drivers'] as List) {
+          final Map<String, dynamic>? driverMap = _asStringMap(item);
+          if (driverMap != null) {
+            initialDrivers.add(Drivers.fromJson(driverMap));
+          }
+        }
+
+        allDriversList = initialDrivers;
+        _consecutiveDriverRefreshFailures = 0;
+        isDriverServiceUnavailable.value = false;
+        driverServiceMessage.value = '';
+        isDriversLoading.value = false;
+        if (currentVisibleBounds != null) {
+          filterDriversByVisibleBounds();
+        } else {
+          driversList = List<Drivers>.from(initialDrivers);
+          updateDriverMarkers();
+          _syncDriverLoaderAnimation();
+          syncBottomSheetSize();
+          increment();
+        }
+        return;
+      }
+
       bool hasAppliedUpdate = false;
       bool shouldRefreshFromApi = false;
 
@@ -1374,7 +1419,7 @@ class UserHomeController extends GetxController
           ApiKeyConstants.profileImage: loginModel.user?.profileImageUrl ?? '',
           ApiKeyConstants.fullName: loginModel.user?.fullName ?? '',
         };
-        print('get user details successfully completed....$userData');
+        print('User details loaded successfully');
       } else {
         CommonWidgets.snackBarView(
             title: loginModel?.message ?? 'Get user data Failed ...');
@@ -1391,6 +1436,7 @@ class UserHomeController extends GetxController
   }) async {
     if (_isRefreshingDriverList) return;
     _isRefreshingDriverList = true;
+    int? responseStatus;
 
     if (showLoader) {
       isDriversLoading.value = true;
@@ -1405,14 +1451,20 @@ class UserHomeController extends GetxController
 
     try {
       DriverListModel? driverListModel = await ApiMethods.getAllDriverListApi(
-          // city: parameter[ApiKeyConstants.city]??'',
-          vType: parameter[ApiKeyConstants.vehicleType] ?? '');
+        city: parameter[ApiKeyConstants.city] ?? '',
+        vType: parameter[ApiKeyConstants.vehicleType] ?? '',
+        checkResponse: (int status) => responseStatus = status,
+      );
+      if (_isControllerClosed) return;
       if (driverListModel != null &&
           driverListModel.success != null &&
           driverListModel.success! &&
           driverListModel.drivers != null) {
         // Store all drivers in master list
         allDriversList = driverListModel.drivers!;
+        _consecutiveDriverRefreshFailures = 0;
+        isDriverServiceUnavailable.value = false;
+        driverServiceMessage.value = '';
 
         print('Total drivers from API: ${allDriversList.length}');
 
@@ -1427,22 +1479,25 @@ class UserHomeController extends GetxController
           _syncDriverLoaderAnimation();
         }
       } else {
-        if (showError) {
-          CommonWidgets.snackBarView(
-              title: driverListModel?.message ?? 'Driver not found ...');
-        }
+        _consecutiveDriverRefreshFailures++;
+        isDriverServiceUnavailable.value = true;
+        driverServiceMessage.value = responseStatus == 401
+            ? 'Your session expired. Please sign in again.'
+            : 'Driver service is temporarily unavailable.';
       }
     } catch (e) {
-      if (showError) {
-        CommonWidgets.snackBarView(title: 'Somethings wrong 1...}');
-      }
+      _consecutiveDriverRefreshFailures++;
+      isDriverServiceUnavailable.value = true;
+      driverServiceMessage.value = 'Unable to load drivers. Please retry.';
       print("Error: -----${e.toString()}");
     } finally {
       _isRefreshingDriverList = false;
-      isDriversLoading.value = false;
-      syncBottomSheetSize();
-      _syncDriverLoaderAnimation();
-      increment();
+      if (!_isControllerClosed) {
+        isDriversLoading.value = false;
+        syncBottomSheetSize();
+        _syncDriverLoaderAnimation();
+        increment();
+      }
     }
   }
 }

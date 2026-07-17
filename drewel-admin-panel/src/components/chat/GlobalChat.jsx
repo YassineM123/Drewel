@@ -36,8 +36,9 @@ const GlobalChat = ({ messages, currentUser, onSendMessage, loading }) => {
   };
 
   const renderMessage = (message) => {
-    const isMine = message.msgByUserId === currentUser?._id;
-    const sender = message.msgByUserId; // In a real app, you'd have sender details
+    const senderId = message.msgByUserId?._id || message.msgByUserId;
+    const isMine = String(senderId) === String(currentUser?._id);
+    const sender = message.msgByUserId; // Populated on the backend when available
 
     return (
       <div

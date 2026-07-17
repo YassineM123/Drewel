@@ -1,4 +1,5 @@
 import axios from "axios";
+import { redirectToLogin } from "./session";
 
 const origin =
     typeof window !== "undefined" ? window.location.origin : "http://localhost:3001";
@@ -18,6 +19,34 @@ export const LEGACY_API_URL = (
     (import.meta.env.DEV ? "http://localhost:3008/api/v1" : `${origin}/api/v1`)
 ).replace(/\/$/, "");
 
+export const apiClient = axios.create();
+
+apiClient.interceptors.request.use((config) => {
+    const token = localStorage.getItem("authToken");
+    if (token && !config.headers.Authorization) {
+        config.headers.Authorization = `Bearer ${token}`;
+    }
+    return config;
+});
+
+apiClient.interceptors.response.use(
+    (response) => response,
+    (error) => {
+        const status = error?.response?.status;
+        const message = String(error?.response?.data?.message || "").toLowerCase();
+        const isAuthenticationFailure =
+            status === 401 ||
+            (status === 403 && (
+                message.includes("token") ||
+                message.includes("login") ||
+                message.includes("admin")
+            ));
+
+        if (isAuthenticationFailure) redirectToLogin();
+        return Promise.reject(error);
+    }
+);
+
 export const getUserList = async () => {
     const userExists = localStorage.getItem("admin");
     const authTokenExist = localStorage.getItem("authToken");
@@ -30,7 +59,7 @@ export const getUserList = async () => {
             throw new Error("Auth token does not exist in localStorage.");
         }
 
-        const response = await axios.get(`${API_URL}/users/get-all`, {
+        const response = await apiClient.get(`${API_URL}/users/get-all`, {
             headers: {
                 Authorization: `Bearer ${authTokenExist}`
             }
@@ -58,7 +87,7 @@ export const getDriverList = async (status = "all") => {
             status && status !== "all"
                 ? `${API_URL}/admin/drivers?status=${encodeURIComponent(status)}`
                 : `${API_URL}/admin/drivers`;
-        const response = await axios.get(endpoint, {
+        const response = await apiClient.get(endpoint, {
             headers: {
                 Authorization: `Bearer ${authTokenExist}`
             }
@@ -75,7 +104,7 @@ export const getDriverDetailForReview = async (driverId) => {
     if (!authTokenExist) {
         throw new Error("Auth token does not exist in localStorage.");
     }
-    const response = await axios.get(`${API_URL}/admin/driver/${driverId}`, {
+    const response = await apiClient.get(`${API_URL}/admin/driver/${driverId}`, {
         headers: {
             Authorization: `Bearer ${authTokenExist}`,
         },
@@ -88,7 +117,7 @@ export const updateDriverReviewStatus = async (driverId, payload) => {
     if (!authTokenExist) {
         throw new Error("Auth token does not exist in localStorage.");
     }
-    const response = await axios.put(
+    const response = await apiClient.put(
         `${API_URL}/admin/driver/${driverId}/status`,
         payload,
         {
@@ -108,7 +137,7 @@ export const getOnlineDriverList = async () => {
             throw new Error("Auth token does not exist in localStorage.");
         }
 
-        const response = await axios.get(`${API_URL}/admin/drivers/online`, {
+        const response = await apiClient.get(`${API_URL}/admin/drivers/online`, {
             headers: {
                 Authorization: `Bearer ${authTokenExist}`
             }
@@ -127,7 +156,7 @@ export const getOnlineDriverList = async () => {
 export const getClubList = async () => {
     const authTokenExist = localStorage.getItem("authToken");
     try {
-        const response = await axios.get(`${API_URL}/admin/get-clubs`, {
+        const response = await apiClient.get(`${API_URL}/admin/get-clubs`, {
             headers: {
                 Authorization: `Bearer ${authTokenExist}`
             }
@@ -142,7 +171,7 @@ export const getClubList = async () => {
 export const getGolfCoursesList = async () => {
     const authTokenExist = localStorage.getItem("authToken");
     try {
-        const response = await axios.get(`${API_URL}/admin/getGolfCourses`, {
+        const response = await apiClient.get(`${API_URL}/admin/getGolfCourses`, {
             headers: {
                 Authorization: `Bearer ${authTokenExist}`
             }
@@ -164,7 +193,7 @@ export const addDriver = async (formData) => {
         if (!authTokenExist) {
             throw new Error("Auth token does not exist in localStorage.");
         }
-        const response = await axios.post(
+        const response = await apiClient.post(
             `${API_URL}/driver/add-personal-details`,
             formData,
             {

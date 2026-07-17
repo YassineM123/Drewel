@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import Swal from "sweetalert2";
-import axios from "axios";
-import { API_URL } from "../utils/api";
+import { API_URL, apiClient } from "../utils/api";
 import SafeImage from "../components/SafeImage";
 
 const baseURL = API_URL; // Centralized API URL
@@ -28,11 +27,7 @@ function Sponsor() {
     setLoading(true);
     setLoadError("");
     try {
-      const token = localStorage.getItem("authToken");
-      if (!token) throw new Error("Your session has expired. Please sign in again.");
-      const res = await axios.get(`${baseURL}/banner/get-all`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const res = await apiClient.get(`${baseURL}/banner/get-all`);
       if (!res.data?.success || !Array.isArray(res.data?.banners)) {
         throw new Error(res.data?.message || "The server returned an invalid banner list.");
       }
@@ -109,22 +104,18 @@ function Sponsor() {
     }
     setFormLoading(true);
     try {
-      const token = localStorage.getItem("authToken");
-      if (!token) throw new Error("Your session has expired. Please sign in again.");
       const formData = new FormData();
       if (image) formData.append("image", image);
       let res;
       if (editMode && selectedBanner) {
-        res = await axios.put(
+        res = await apiClient.put(
           `${baseURL}/banner/update/${selectedBanner._id}`,
-          formData,
-          { headers: { Authorization: `Bearer ${token}` } }
+          formData
         );
       } else {
-        res = await axios.post(
+        res = await apiClient.post(
           `${baseURL}/banner/add-banner`,
-          formData,
-          { headers: { Authorization: `Bearer ${token}` } }
+          formData
         );
       }
       if (res.data.success) {
@@ -152,11 +143,7 @@ function Sponsor() {
     });
     if (!confirm.isConfirmed) return;
     try {
-      const token = localStorage.getItem("authToken");
-      if (!token) throw new Error("Your session has expired. Please sign in again.");
-      const res = await axios.delete(`${baseURL}/banner/delete/${banner._id}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const res = await apiClient.delete(`${baseURL}/banner/delete/${banner._id}`);
       if (res.data.success) {
         Swal.fire({ icon: "success", title: "Deleted!" });
         await fetchBanners();

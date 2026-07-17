@@ -62,23 +62,29 @@ export const ChatProvider = ({ children }) => {
   const { socket, isConnected } = useSocket();
 
   useEffect(() => {
+    if (!isConnected) {
+      dispatch({ type: 'SET_LOADING', payload: false });
+    }
+  }, [isConnected]);
+
+  useEffect(() => {
     if (!socket || !isConnected) return;
 
     // Listen for conversation updates
     socket.on('conversation', (conversations) => {
       console.log('[Socket] Received conversation:', conversations);
-      dispatch({ type: 'SET_CONVERSATIONS', payload: conversations });
+      dispatch({ type: 'SET_CONVERSATIONS', payload: Array.isArray(conversations) ? conversations : [] });
+      dispatch({ type: 'SET_ERROR', payload: null });
       dispatch({ type: 'SET_LOADING', payload: false });
     });
 
     // Listen for new messages
     socket.on('message', (conversation) => {
       console.log('[Socket] Received message:', conversation);
-      if (conversation && conversation.messages) {
-        dispatch({ type: 'SET_MESSAGES', payload: conversation.messages });
-        dispatch({ type: 'SET_CURRENT_CONVERSATION', payload: conversation });
-        dispatch({ type: 'SET_LOADING', payload: false });
-      }
+      dispatch({ type: 'SET_MESSAGES', payload: conversation?.messages || [] });
+      dispatch({ type: 'SET_CURRENT_CONVERSATION', payload: conversation || null });
+      dispatch({ type: 'SET_ERROR', payload: null });
+      dispatch({ type: 'SET_LOADING', payload: false });
     });
 
     // Listen for user details
@@ -100,10 +106,9 @@ export const ChatProvider = ({ children }) => {
     // Listen for global messages
     socket.on('globalMessages', (globalData) => {
       console.log('[Socket] Received globalMessages:', globalData);
-      if (globalData && globalData.messages) {
-        dispatch({ type: 'SET_GLOBAL_MESSAGES', payload: globalData.messages });
-        dispatch({ type: 'SET_LOADING', payload: false });
-      }
+      dispatch({ type: 'SET_GLOBAL_MESSAGES', payload: globalData?.messages || [] });
+      dispatch({ type: 'SET_ERROR', payload: null });
+      dispatch({ type: 'SET_LOADING', payload: false });
     });
 
     // Listen for errors

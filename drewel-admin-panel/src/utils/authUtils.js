@@ -1,5 +1,5 @@
 import axios from "axios";
-import { API_URL } from "./api";
+import { API_URL, apiClient } from "./api";
 
 
 export const getAllServices = async () => {
@@ -48,7 +48,7 @@ export const getAllDashboard = async () => {
         if (!userExists) {
             throw new Error("User is not logged in or does not exist in localStorage.");
         }
-        const response = await axios.get(`${API_URL}/admin/dashboard`, {
+        const response = await apiClient.get(`${API_URL}/admin/dashboard`, {
             headers: {
                 Authorization: `Bearer ${authTokenExist}`,
             },

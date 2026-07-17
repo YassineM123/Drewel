@@ -16,11 +16,13 @@
 import React from "react";
 import { Navigate, Outlet } from "react-router-dom";
 import Layout from "./Layout";
+import { clearAdminSession, isAuthTokenUsable } from "../utils/session";
 
 const ProtectedRoute = () => {
   const token = localStorage.getItem("authToken");
 
-  if (!token) {
+  if (!isAuthTokenUsable(token)) {
+    clearAdminSession();
     return <Navigate to="/login" replace />;
   }
 
