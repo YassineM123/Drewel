@@ -5,8 +5,9 @@ import 'package:responsive_sizer/responsive_sizer.dart';
 
 import '../../../../common/colors.dart';
 import '../../../../common/common_widgets.dart';
+import '../../../../common/drewel_app_bar.dart';
+import '../../../../common/drewel_pop_scope.dart';
 import '../../../../common/text_styles.dart';
-import '../../../data/constants/icons_constant.dart';
 import '../../../data/constants/image_constants.dart';
 import '../controllers/support_chat_controller.dart';
 
@@ -14,84 +15,71 @@ class SupportChatView extends GetView<SupportChatController> {
   const SupportChatView({super.key});
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: primaryColor,
-      resizeToAvoidBottomInset: true, // Fixes keyboard overlap
-      floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
-      floatingActionButton: Container(
-        margin: EdgeInsets.all(15.px),
-        padding: EdgeInsets.symmetric(horizontal: 15.px, vertical: 5.px),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(50.px),
-          border: Border.all(color: backgroundColor.withOpacity(0.2)),
+    return DrewelPopScope(
+      child: Scaffold(
+        appBar: const DrewelAppBar(
+          title: '',
+          showBackButton: true,
         ),
-        child: TextFormField(
-          controller: controller.messageController,
-          decoration: InputDecoration(
-            hintText: 'Type a message',
-            hintStyle: MyTextStyle.titleStyle16b,
-            border: InputBorder.none,
-            focusedBorder: InputBorder.none,
-            enabledBorder: InputBorder.none,
-            suffixIcon: Row(
-              mainAxisSize: MainAxisSize.min,
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                GestureDetector(
-                  onTap: (){
-                    if(controller.messageController.text.isNotEmpty){
-                      controller.sendMessage();
-                    }else{
-                      CommonWidgets.showMyToastMessage('Enter message first ...');
-                    }
-                  },
-                    child: Icon(Icons.send, size: 25.px, color: primaryColor)),
-                SizedBox(width: 8.px,)
-                // Padding(
-                //   padding:  EdgeInsets.symmetric(horizontal: 8.px),
-                //   child: CommonWidgets.appIcons(assetName: IconConstants.icMic,
-                //   height: 26.px,width: 12.px),
-                // )
-              ],
+        backgroundColor: primaryColor,
+        resizeToAvoidBottomInset: true, // Fixes keyboard overlap
+        floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
+        floatingActionButton: Container(
+          margin: EdgeInsets.all(15.px),
+          padding: EdgeInsets.symmetric(horizontal: 15.px, vertical: 5.px),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(50.px),
+            border: Border.all(color: backgroundColor.withOpacity(0.2)),
+          ),
+          child: TextFormField(
+            controller: controller.messageController,
+            decoration: InputDecoration(
+              hintText: 'Type a message',
+              hintStyle: MyTextStyle.titleStyle16b,
+              border: InputBorder.none,
+              focusedBorder: InputBorder.none,
+              enabledBorder: InputBorder.none,
+              suffixIcon: Row(
+                mainAxisSize: MainAxisSize.min,
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  GestureDetector(
+                      onTap: () {
+                        if (controller.messageController.text.isNotEmpty) {
+                          controller.sendMessage();
+                        } else {
+                          CommonWidgets.showMyToastMessage(
+                              'Enter message first ...');
+                        }
+                      },
+                      child:
+                          Icon(Icons.send, size: 25.px, color: primaryColor)),
+                  SizedBox(
+                    width: 8.px,
+                  )
+                  // Padding(
+                  //   padding:  EdgeInsets.symmetric(horizontal: 8.px),
+                  //   child: CommonWidgets.appIcons(assetName: IconConstants.icMic,
+                  //   height: 26.px,width: 12.px),
+                  // )
+                ],
+              ),
+              contentPadding: EdgeInsets.symmetric(vertical: 10.px),
             ),
-            contentPadding: EdgeInsets.symmetric(vertical: 10.px),
           ),
         ),
-      ),
-      body: Obx(() {
-        controller.count.value; // Forces rebuild
-        return SafeArea(
-          bottom: false,
-          child: Column(
+        body: Obx(() {
+          controller.count.value; // Forces rebuild
+          return Column(
             mainAxisAlignment: MainAxisAlignment.start,
             children: [
-              ListTile(
-                leading: GestureDetector(
-                  onTap: () {
-                    Get.back();
-                  },
-                  child: CommonWidgets.appIcons(
-                      assetName: IconConstants.icBack,
-                      height: 40.px,
-                      width: 40.px),
-                ),
-                title: Padding(
-                  padding: EdgeInsets.only(right: 50.px),
-                  child: Center(
-                    child: CommonWidgets.appIcons(
-                        assetName: IconConstants.icLogo,
-                        height: 60.px,
-                        width: 150.px,
-                        fit: BoxFit.contain),
-                  ),
-                ),
-              ),
-              Expanded( // Replaces fixed height container
+              Expanded(
+                // Replaces fixed height container
                 child: Container(
                   width: double.infinity,
                   margin: EdgeInsets.only(top: 10.px),
                   padding:
-                  EdgeInsets.symmetric(horizontal: 15.px, vertical: 25.px),
+                      EdgeInsets.symmetric(horizontal: 15.px, vertical: 25.px),
                   decoration: BoxDecoration(
                     color: primary3Color,
                     borderRadius: BorderRadius.only(
@@ -118,7 +106,8 @@ class SupportChatView extends GetView<SupportChatController> {
                       ),
                       SizedBox(height: 10.px),
                       Divider(
-                          color: Colors.black.withOpacity(0.2), thickness: 1.px),
+                          color: Colors.black.withOpacity(0.2),
+                          thickness: 1.px),
                       Expanded(
                         child: showConversationList(),
                       ),
@@ -128,9 +117,9 @@ class SupportChatView extends GetView<SupportChatController> {
                 ),
               ),
             ],
-          ),
-        );
-      }),
+          );
+        }),
+      ),
     );
   }
 
@@ -153,7 +142,7 @@ class SupportChatView extends GetView<SupportChatController> {
         ),
       );
     }
-    
+
     // Show empty state if no messages
     if (controller.messageList.isEmpty) {
       return Center(
@@ -179,7 +168,7 @@ class SupportChatView extends GetView<SupportChatController> {
         ),
       );
     }
-    
+
     // Show messages list
     return ListView.builder(
       itemCount: controller.messageList.length,
@@ -193,32 +182,43 @@ class SupportChatView extends GetView<SupportChatController> {
           margin: EdgeInsets.only(
             top: 5.px,
             bottom: 5.px,
-            left: controller.messageList[index].msgByUserId == controller.userId ? 100.px : 0,
-            right: controller.messageList[index].msgByUserId == controller.userId ? 0.px : 100.px,
+            left: controller.messageList[index].msgByUserId == controller.userId
+                ? 100.px
+                : 0,
+            right:
+                controller.messageList[index].msgByUserId == controller.userId
+                    ? 0.px
+                    : 100.px,
           ),
           decoration: BoxDecoration(
-            color: controller.messageList[index].msgByUserId == controller.userId
-                ? primaryColor
-                : primary3Color,
-            border: Border.all(color: backgroundColor.withOpacity(0.5), width: 1.px),
+            color:
+                controller.messageList[index].msgByUserId == controller.userId
+                    ? primaryColor
+                    : primary3Color,
+            border: Border.all(
+                color: backgroundColor.withOpacity(0.5), width: 1.px),
             borderRadius: BorderRadius.only(
               topLeft: Radius.circular(16.px),
               topRight: Radius.circular(16.px),
               bottomRight: Radius.circular(
-                  controller.messageList[index].msgByUserId == controller.userId ? 0.px : 16.px),
+                  controller.messageList[index].msgByUserId == controller.userId
+                      ? 0.px
+                      : 16.px),
               bottomLeft: Radius.circular(
-                  controller.messageList[index].msgByUserId == controller.userId ? 16.px : 0.px),
+                  controller.messageList[index].msgByUserId == controller.userId
+                      ? 16.px
+                      : 0.px),
             ),
           ),
           child: Text(
             controller.messageList[index].text ?? '',
-            style: controller.messageList[index].msgByUserId == controller.userId
-                ? MyTextStyle.titleStyle16w
-                : MyTextStyle.titleStyle16b,
+            style:
+                controller.messageList[index].msgByUserId == controller.userId
+                    ? MyTextStyle.titleStyle16w
+                    : MyTextStyle.titleStyle16b,
           ),
         );
       },
     );
   }
 }
-

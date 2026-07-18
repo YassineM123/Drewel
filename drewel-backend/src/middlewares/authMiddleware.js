@@ -52,7 +52,7 @@ export const isAdmin = async (req, res, next) => {
       });
     }
 
-    const user = await Admin.findById(userId).select("role").lean();
+    const user = await Admin.findById(userId).select("role fullName email").lean();
     if (!user || user.role !== "admin") {
       return res.status(403).json({
         success: false,
@@ -60,6 +60,7 @@ export const isAdmin = async (req, res, next) => {
       });
     }
 
+    req.admin = user;
     return next();
   } catch (error) {
     console.error(error);

@@ -1,9 +1,11 @@
-
 import 'package:socket_io_client/socket_io_client.dart' as IO;
-
 
 class SocketService {
   IO.Socket? _socket;
+  bool _locationTrackingReady = false;
+  Map<String, dynamic>? _pendingDriverLocation;
+  void Function()? _locationTrackingReadyCallback;
+  Function(dynamic)? _driversNearbyCallback;
 
   // Initialize and connect the socket
   void connect(String url, String token) {
@@ -12,7 +14,7 @@ class SocketService {
       print('Socket already connected');
       return;
     }
-    
+
     // Dispose old socket if exists but not connected - prevents stale socket instances
     if (_socket != null && !_socket!.connected) {
       print('Disposing stale socket...');
@@ -23,7 +25,7 @@ class SocketService {
     _socket = IO.io(
       url,
       IO.OptionBuilder()
-          .setTransports(['websocket'])  // Use WebSocket transport
+          .setTransports(['websocket']) // Use WebSocket transport
           .disableAutoConnect() // Disable auto-connect to handle it manually
           .setAuth({'token': token}) // Pass token in headers
           .build(),
@@ -31,16 +33,32 @@ class SocketService {
 
     // IMPORTANT: Set up listeners BEFORE calling connect()
     _socket!.on('connect', (_) {
+      _locationTrackingReady = false;
       print('Connected to the WebSocket server');
     });
 
     _socket!.on('disconnect', (_) {
+      _locationTrackingReady = false;
       print('Disconnected from the WebSocket server');
     });
 
     _socket!.on('connect_error', (err) {
       print('Connection error: $err');
     });
+
+    // Authentication is asynchronous on the server. Waiting for this event
+    // prevents the first room join/location update from being emitted before
+    // the server has registered its location handlers.
+    _socket!.on('location-tracking-ready', (_) {
+      _locationTrackingReady = true;
+      _flushPendingDriverLocation();
+      _locationTrackingReadyCallback?.call();
+    });
+
+    final Function(dynamic)? driversNearbyCallback = _driversNearbyCallback;
+    if (driversNearbyCallback != null) {
+      _socket!.on('drivers-nearby', driversNearbyCallback);
+    }
 
     // Now connect AFTER listeners are set up
     _socket!.connect();
@@ -53,6 +71,8 @@ class SocketService {
       _socket!.dispose();
       _socket = null;
     }
+    _locationTrackingReady = false;
+    _pendingDriverLocation = null;
   }
 
   // Emit an event - check _socket!.connected directly for real-time state
@@ -92,7 +112,7 @@ class SocketService {
       _socket!.off(event);
     }
   }
-  
+
   // Check if socket is connected - use actual socket state
   bool get isConnected => _socket != null && _socket!.connected;
 
@@ -105,35 +125,70 @@ class SocketService {
   }
 
   // Event-specific methods
-  void onMessagePage(Function(dynamic) callback) => on('message-page', callback);
-  void onMessageUser(Function(dynamic) callback) => on('message-user', callback);
+  void onMessagePage(Function(dynamic) callback) =>
+      on('message-page', callback);
+  void onMessageUser(Function(dynamic) callback) =>
+      on('message-user', callback);
   void onOnlineUser(Function(dynamic) callback) => on('onlineUser', callback);
-  void onConversation(Function(dynamic) callback) => on('conversation', callback);
+  void onConversation(Function(dynamic) callback) =>
+      on('conversation', callback);
 
-  void emitNewMessage(Map<String, dynamic> messageData) => emit('new message', messageData);
+  void emitNewMessage(Map<String, dynamic> messageData) =>
+      emit('new message', messageData);
   void emitSeen(String msgByUserId) => emit('seen', msgByUserId);
   void emitJoinGroupRoom(String groupId) => emit('join-group-room', groupId);
-  
+
   // ==================== LOCATION TRACKING EVENTS ====================
-  
+
   /// Driver emits their location update (called every 5-10 seconds when online)
   /// Data: { driverId, lat, long, fullName, vehicleType, city }
-  void emitDriverLocationUpdate(Map<String, dynamic> locationData) => 
-      emit('driver-location-update', locationData);
-  
+  void emitDriverLocationUpdate(Map<String, dynamic> locationData) {
+    // Always retain the newest GPS fix. It is flushed when the authenticated
+    // location channel is ready and again after every reconnect.
+    _pendingDriverLocation = Map<String, dynamic>.from(locationData);
+    _flushPendingDriverLocation();
+  }
+
+  void _flushPendingDriverLocation() {
+    final Map<String, dynamic>? location = _pendingDriverLocation;
+    if (location == null ||
+        !_locationTrackingReady ||
+        _socket == null ||
+        !_socket!.connected) {
+      return;
+    }
+    _socket!.emit('driver-location-update', location);
+  }
+
+  /// Called whenever authenticated location handlers are ready, including
+  /// after automatic Socket.IO reconnects.
+  void onLocationTrackingReady(void Function() callback) {
+    _locationTrackingReadyCallback = callback;
+    if (_locationTrackingReady && isConnected) {
+      callback();
+    }
+  }
+
   /// User emits their location update
   /// Data: { userId, lat, long }
-  void emitUserLocationUpdate(Map<String, dynamic> locationData) => 
+  void emitUserLocationUpdate(Map<String, dynamic> locationData) =>
       emit('user-location-update', locationData);
-  
+
   /// User listens for nearby drivers updates
   /// Callback receives: [{ driverId, lat, long, fullName, vehicleType, ... }, ...]
-  void onDriversNearby(Function(dynamic) callback) => on('drivers-nearby', callback);
-  
+  void onDriversNearby(Function(dynamic) callback) {
+    _driversNearbyCallback = callback;
+    if (_socket != null) {
+      _socket!.off('drivers-nearby');
+      _socket!.on('drivers-nearby', callback);
+    }
+  }
+
   /// Driver listens for customer location during active booking
   /// Callback receives: { userId, lat, long }
-  void onCustomerLocation(Function(dynamic) callback) => on('customer-location', callback);
-  
+  void onCustomerLocation(Function(dynamic) callback) =>
+      on('customer-location', callback);
+
   /// User joins a room to receive driver updates for a specific city
   /// Data: { city, vehicleType? }
   void emitJoinCityRoom(String city, {String? vehicleType}) => emit(
@@ -144,7 +199,8 @@ class SocketService {
             'vehicleType': vehicleType,
         },
       );
-  
+
   /// User leaves city room
-  void emitLeaveCityRoom(String city) => emit('leave-city-room', {'city': city});
+  void emitLeaveCityRoom(String city) =>
+      emit('leave-city-room', {'city': city});
 }

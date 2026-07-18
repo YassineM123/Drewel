@@ -36,6 +36,8 @@ class User {
   bool? isRestricted;
   String? status;
   String? rejectionReason;
+  String? profileRequestStatus;
+  String? profileRejectionReason;
   int? iV;
   String? otpCode;
   String? address;
@@ -50,26 +52,28 @@ class User {
 
   User(
       {this.sId,
-        this.countryCode,
-        this.phone,
-        this.firstName,
-        this.lastName,
-        this.isVerified,
-        this.isApproved,
-        this.isRestricted,
-        this.status,
-        this.rejectionReason,
-        this.iV,
-        this.otpCode,
-        this.address,
-        this.fullName,
-        this.carLicenseUrl,
-        this.drivingLicenseUrl,
-        this.idProofUrl,
-        this.licenseCompany,
-        this.passportCopyUrl,
-        this.updatedAt,
-        this.profileImageUrl});
+      this.countryCode,
+      this.phone,
+      this.firstName,
+      this.lastName,
+      this.isVerified,
+      this.isApproved,
+      this.isRestricted,
+      this.status,
+      this.rejectionReason,
+      this.profileRequestStatus,
+      this.profileRejectionReason,
+      this.iV,
+      this.otpCode,
+      this.address,
+      this.fullName,
+      this.carLicenseUrl,
+      this.drivingLicenseUrl,
+      this.idProofUrl,
+      this.licenseCompany,
+      this.passportCopyUrl,
+      this.updatedAt,
+      this.profileImageUrl});
 
   User.fromJson(Map<String, dynamic> json) {
     sId = json['_id'];
@@ -82,6 +86,8 @@ class User {
     isRestricted = json['isRestricted'];
     status = json['status'];
     rejectionReason = json['rejectionReason'];
+    profileRequestStatus = json['profileRequestStatus'];
+    profileRejectionReason = json['profileRejectionReason'];
     iV = json['__v'];
     otpCode = json['otpCode'];
     address = json['address'];
@@ -107,6 +113,8 @@ class User {
     data['isRestricted'] = isRestricted;
     data['status'] = status;
     data['rejectionReason'] = rejectionReason;
+    data['profileRequestStatus'] = profileRequestStatus;
+    data['profileRejectionReason'] = profileRejectionReason;
     data['__v'] = iV;
     data['otpCode'] = otpCode;
     data['address'] = address;

@@ -2,6 +2,8 @@ import 'dart:io';
 
 import 'package:drewel/common/colors.dart';
 import 'package:drewel/common/common_widgets.dart';
+import 'package:drewel/common/drewel_app_bar.dart';
+import 'package:drewel/common/drewel_pop_scope.dart';
 import 'package:drewel/common/text_styles.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -22,84 +24,96 @@ class DriverCompleteProfileView extends GetView<DriverRegisterController> {
       controller.refreshTick.value;
       final bool isLocked = controller.isProfileLocked;
 
-      return Scaffold(
-        backgroundColor: primaryColor,
-        body: Stack(
-          children: <Widget>[
-            Column(
-              children: <Widget>[
-                SizedBox(height: 50.px),
-                CommonWidgets.appIcons(
-                  assetName: IconConstants.icLogo,
-                  height: 90.px,
-                  width: 200.px,
-                  fit: BoxFit.contain,
-                ),
-                Expanded(
-                  child: Container(
-                    width: double.infinity,
-                    margin: EdgeInsets.only(top: 20.px),
-                    padding:
-                        EdgeInsets.symmetric(horizontal: 18.px, vertical: 20.px),
-                    decoration: BoxDecoration(
-                      color: primary3Color,
-                      borderRadius: BorderRadius.only(
-                        topLeft: Radius.circular(30.px),
-                        topRight: Radius.circular(30.px),
+      return DrewelPopScope(
+        fallbackRoute: '/user-type',
+        hasUnsavedChanges: controller.hasUnsavedChanges,
+        child: Scaffold(
+          appBar: const DrewelAppBar(
+            title: '',
+            showBackButton: true,
+            fallbackRoute: '/user-type',
+          ),
+          backgroundColor: primaryColor,
+          body: Stack(
+            children: <Widget>[
+              Column(
+                children: <Widget>[
+                  SizedBox(height: 50.px),
+                  CommonWidgets.appIcons(
+                    assetName: IconConstants.icLogo,
+                    height: 90.px,
+                    width: 200.px,
+                    fit: BoxFit.contain,
+                  ),
+                  Expanded(
+                    child: Container(
+                      width: double.infinity,
+                      margin: EdgeInsets.only(top: 20.px),
+                      padding: EdgeInsets.symmetric(
+                          horizontal: 18.px, vertical: 20.px),
+                      decoration: BoxDecoration(
+                        color: primary3Color,
+                        borderRadius: BorderRadius.only(
+                          topLeft: Radius.circular(30.px),
+                          topRight: Radius.circular(30.px),
+                        ),
                       ),
-                    ),
-                    child: SingleChildScrollView(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: <Widget>[
-                          if (isLocked) ...<Widget>[
-                            Container(
-                              width: double.infinity,
-                              padding: EdgeInsets.all(12.px),
-                              decoration: BoxDecoration(
-                                color: Colors.orange.withOpacity(0.1),
-                                borderRadius: BorderRadius.circular(10.px),
-                                border: Border.all(
-                                  color: Colors.orange.withOpacity(0.5),
+                      child: SingleChildScrollView(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: <Widget>[
+                            if (isLocked) ...<Widget>[
+                              Container(
+                                width: double.infinity,
+                                padding: EdgeInsets.all(12.px),
+                                decoration: BoxDecoration(
+                                  color: Colors.orange.withValues(alpha: 0.1),
+                                  borderRadius: BorderRadius.circular(10.px),
+                                  border: Border.all(
+                                    color: Colors.orange.withValues(alpha: 0.5),
+                                  ),
+                                ),
+                                child: Row(
+                                  children: <Widget>[
+                                    Icon(Icons.lock_outline,
+                                        color: Colors.orange, size: 18.px),
+                                    SizedBox(width: 8.px),
+                                    Expanded(
+                                      child: Text(
+                                        controller.isProfilePending
+                                            ? 'Request 2 is waiting for approval'
+                                            : 'Waiting for Request 1 approval',
+                                        style: MyTextStyle.titleStyle14b,
+                                      ),
+                                    ),
+                                    TextButton(
+                                      onPressed: controller.openStatusModal,
+                                      child: const Text('View Status'),
+                                    ),
+                                  ],
                                 ),
                               ),
-                              child: Row(
-                                children: <Widget>[
-                                  Icon(Icons.lock_outline,
-                                      color: Colors.orange, size: 18.px),
-                                  SizedBox(width: 8.px),
-                                  Expanded(
-                                    child: Text(
-                                      'Waiting for admin approval',
-                                      style: MyTextStyle.titleStyle14b,
-                                    ),
-                                  ),
-                                  TextButton(
-                                    onPressed: controller.openStatusModal,
-                                    child: const Text('View Status'),
-                                  ),
-                                ],
+                              SizedBox(height: 16.px),
+                            ],
+                            AbsorbPointer(
+                              absorbing: isLocked,
+                              child: Opacity(
+                                opacity: isLocked ? 0.55 : 1,
+                                child: _buildStep3Section(context),
                               ),
                             ),
-                            SizedBox(height: 16.px),
+                            SizedBox(height: 24.px),
                           ],
-                          AbsorbPointer(
-                            absorbing: isLocked,
-                            child: Opacity(
-                              opacity: isLocked ? 0.55 : 1,
-                              child: _buildStep3Section(context),
-                            ),
-                          ),
-                          SizedBox(height: 24.px),
-                        ],
+                        ),
                       ),
                     ),
                   ),
-                ),
-              ],
-            ),
-            if (controller.showStatusModal.value) _buildStatusOverlay(context),
-          ],
+                ],
+              ),
+              if (controller.showStatusModal.value)
+                _buildStatusOverlay(context),
+            ],
+          ),
         ),
       );
     });
@@ -111,7 +125,7 @@ class DriverCompleteProfileView extends GetView<DriverRegisterController> {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(12.px),
-        border: Border.all(color: primaryColor.withOpacity(0.2)),
+        border: Border.all(color: primaryColor.withValues(alpha: 0.2)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -169,7 +183,8 @@ class DriverCompleteProfileView extends GetView<DriverRegisterController> {
             physics: const NeverScrollableScrollPhysics(),
             itemCount: controller.documentConfig.length,
             itemBuilder: (BuildContext context, int index) {
-              final Map<String, String> config = controller.documentConfig[index];
+              final Map<String, String> config =
+                  controller.documentConfig[index];
               final File? file = controller.selectedFiles[index];
               final String existingUrl = controller.existingFileUrls[index];
               final bool hasExisting = existingUrl.trim().isNotEmpty;
@@ -178,7 +193,8 @@ class DriverCompleteProfileView extends GetView<DriverRegisterController> {
                 padding: EdgeInsets.all(10.px),
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(10.px),
-                  border: Border.all(color: Colors.black.withOpacity(0.15)),
+                  border:
+                      Border.all(color: Colors.black.withValues(alpha: 0.15)),
                 ),
                 child: Row(
                   children: <Widget>[
@@ -248,12 +264,15 @@ class DriverCompleteProfileView extends GetView<DriverRegisterController> {
   }
 
   Widget _buildStatusOverlay(BuildContext context) {
-    final String badge = controller.driverStatus.value.isEmpty
-        ? ApiKeyConstants.pending
-        : controller.driverStatus.value;
+    final String badge =
+        controller.isProfileSubmitted && !controller.isProfileApproved
+            ? controller.profileRequestStatus.value
+            : controller.driverStatus.value.isEmpty
+                ? ApiKeyConstants.pending
+                : controller.driverStatus.value;
     return Positioned.fill(
       child: Container(
-        color: Colors.black.withOpacity(0.5),
+        color: Colors.black.withValues(alpha: 0.5),
         alignment: Alignment.center,
         child: Container(
           width: MediaQuery.of(context).size.width * 0.86,
@@ -274,25 +293,29 @@ class DriverCompleteProfileView extends GetView<DriverRegisterController> {
               ),
               SizedBox(height: 12.px),
               Container(
-                padding: EdgeInsets.symmetric(horizontal: 12.px, vertical: 6.px),
+                padding:
+                    EdgeInsets.symmetric(horizontal: 12.px, vertical: 6.px),
                 decoration: BoxDecoration(
-                  color: primaryColor.withOpacity(0.1),
+                  color: primaryColor.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(20.px),
                   border: Border.all(color: primaryColor),
                 ),
                 child: Text(
                   badge == ApiKeyConstants.pending
-                      ? 'Pending Approval'
+                      ? controller.isProfilePending
+                          ? 'REQUEST 2 - PENDING APPROVAL'
+                          : 'REQUEST 1 - PENDING APPROVAL'
                       : badge.toUpperCase(),
-                  style: MyTextStyle.titleStyle12b.copyWith(color: primaryColor),
+                  style:
+                      MyTextStyle.titleStyle12b.copyWith(color: primaryColor),
                 ),
               ),
               SizedBox(height: 14.px),
               CommonWidgets.commonElevatedButton(
                 context: context,
                 onPressed: controller.closeStatusModal,
-                child:
-                    Text(StringConstants.close, style: MyTextStyle.titleStyle16bw),
+                child: Text(StringConstants.close,
+                    style: MyTextStyle.titleStyle16bw),
               ),
             ],
           ),

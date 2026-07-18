@@ -51,13 +51,8 @@ const Login = () => {
         localStorage.setItem("authToken", res.data.token);
         localStorage.setItem("admin", JSON.stringify(res.data.admin));
         notifyAdminSessionChanged();
-        // console.log("Navigating to home...");
-         navigate("/"); // ← Check if this is executed
-      if (res.data.status) {
-        // console.log("Response Login", res)
-        
+        navigate("/");
         return res.data;
-      }
     } catch (error) {
       throw new Error(error.response?.data?.message || "Login failed.");
     }

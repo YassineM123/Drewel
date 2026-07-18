@@ -35,4 +35,36 @@ void main() {
       expect(driver.carLicenseFrontUrl, 'https://cdn.example.com/legacy.jpg');
     });
   });
+
+  group('Driver approval stages', () {
+    test('parses Request 2 independently from the aggregate status', () {
+      final Driver driver = Driver.fromJson(<String, dynamic>{
+        'status': 'approved',
+        'isApproved': true,
+        'profileRequestStatus': 'pending',
+        'profileSubmittedAt': '2026-07-18T09:00:00.000Z',
+        'profileApprovedAt': null,
+        'profileApprovedBy': null,
+        'profileRejectionReason': '',
+      });
+
+      expect(driver.status, 'approved');
+      expect(driver.profileRequestStatus, 'pending');
+      expect(driver.profileSubmittedAt, '2026-07-18T09:00:00.000Z');
+      expect(driver.profileApprovedAt, isNull);
+      expect(driver.toJson()['profileRequestStatus'], 'pending');
+    });
+
+    test('preserves Request 2 rejection metadata', () {
+      final Driver driver = Driver.fromJson(<String, dynamic>{
+        'status': 'approved',
+        'profileRequestStatus': 'rejected',
+        'profileRejectionReason': 'Passport image is unreadable',
+      });
+
+      expect(driver.status, 'approved');
+      expect(driver.profileRequestStatus, 'rejected');
+      expect(driver.profileRejectionReason, 'Passport image is unreadable');
+    });
+  });
 }

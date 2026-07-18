@@ -43,6 +43,11 @@ class Driver {
   bool? isRestricted;
   String? status;
   String? rejectionReason;
+  String? profileRequestStatus;
+  String? profileSubmittedAt;
+  String? profileApprovedAt;
+  dynamic profileApprovedBy;
+  String? profileRejectionReason;
   String? otpCode;
   String? fullName;
   String? address;
@@ -88,6 +93,11 @@ class Driver {
     this.isRestricted,
     this.status,
     this.rejectionReason,
+    this.profileRequestStatus,
+    this.profileSubmittedAt,
+    this.profileApprovedAt,
+    this.profileApprovedBy,
+    this.profileRejectionReason,
     this.otpCode,
     this.fullName,
     this.address,
@@ -134,6 +144,11 @@ class Driver {
     isRestricted = json['isRestricted'];
     status = json['status'];
     rejectionReason = json['rejectionReason'];
+    profileRequestStatus = json['profileRequestStatus'];
+    profileSubmittedAt = json['profileSubmittedAt'];
+    profileApprovedAt = json['profileApprovedAt'];
+    profileApprovedBy = json['profileApprovedBy'];
+    profileRejectionReason = json['profileRejectionReason'];
     otpCode = json['otpCode'];
     fullName = json['fullName'];
     address = json['address'];
@@ -207,6 +222,11 @@ class Driver {
     data['isRestricted'] = isRestricted;
     data['status'] = status;
     data['rejectionReason'] = rejectionReason;
+    data['profileRequestStatus'] = profileRequestStatus;
+    data['profileSubmittedAt'] = profileSubmittedAt;
+    data['profileApprovedAt'] = profileApprovedAt;
+    data['profileApprovedBy'] = profileApprovedBy;
+    data['profileRejectionReason'] = profileRejectionReason;
     data['otpCode'] = otpCode;
     data['fullName'] = fullName;
     data['address'] = address;

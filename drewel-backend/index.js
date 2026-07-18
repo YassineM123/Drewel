@@ -1,7 +1,9 @@
 import express from "express";
 import cors from "cors";
 import cookieParser from "cookie-parser";
+import bcrypt from "bcryptjs";
 import connectDB from "./src/connection.js";
+import Admin from "./src/models/Admin.js";
 import { loadEnv } from "./src/utils/loadEnv.js";
 import userRoutes from "./src/routes/userRoutes.js";
 import notificationRoutes from "./src/routes/notificationRoutes.js";
@@ -25,6 +27,10 @@ const PORT = process.env.PORT || 3001;
 const HOST = process.env.HOST || "127.0.0.1";
 const ALLOW_START_WITHOUT_DB =
   String(process.env.ALLOW_START_WITHOUT_DB || "false").toLowerCase() === "true";
+const LOCAL_ADMIN_BOOTSTRAP =
+  String(process.env.LOCAL_ADMIN_BOOTSTRAP || "false").toLowerCase() === "true";
+const LOCAL_ADMIN_EMAIL = String(process.env.LOCAL_ADMIN_EMAIL || "").trim().toLowerCase();
+const LOCAL_ADMIN_PASSWORD = String(process.env.LOCAL_ADMIN_PASSWORD || "").trim();
 
 const trustProxyHops = Number.parseInt(process.env.TRUST_PROXY_HOPS || "0", 10);
 if (Number.isInteger(trustProxyHops) && trustProxyHops > 0) {
@@ -48,6 +54,38 @@ const corsOptions = {
 };
 
 app.use(cors(corsOptions));
+
+const bootstrapLocalAdmin = async () => {
+  if (
+    !LOCAL_ADMIN_BOOTSTRAP ||
+    String(process.env.NODE_ENV || "development").toLowerCase() === "production"
+  ) {
+    return;
+  }
+
+  if (!LOCAL_ADMIN_EMAIL || !LOCAL_ADMIN_PASSWORD) {
+    throw new Error(
+      "LOCAL_ADMIN_EMAIL and LOCAL_ADMIN_PASSWORD are required when LOCAL_ADMIN_BOOTSTRAP=true"
+    );
+  }
+
+  const existingAdmin = await Admin.findOne({ email: LOCAL_ADMIN_EMAIL }).select("_id");
+  if (existingAdmin) {
+    return;
+  }
+
+  const hashedPassword = await bcrypt.hash(LOCAL_ADMIN_PASSWORD, 10);
+  await Admin.create({
+    fullName: "Local Admin",
+    email: LOCAL_ADMIN_EMAIL,
+    password: hashedPassword,
+    role: "admin",
+  });
+
+  console.log(
+    `Created local admin account: ${LOCAL_ADMIN_EMAIL}. Use it to log in to the admin panel.`
+  );
+};
 
 app.use("/api/users", userRoutes);
 app.use("/api/notification", notificationRoutes);
@@ -79,7 +117,8 @@ app.use((err, req, res, next) => {
 });
 
 connectDB()
-  .then(() => {
+  .then(async () => {
+    await bootstrapLocalAdmin();
     server.listen(PORT, HOST, () => {
       console.log("server running at " + HOST + ":" + PORT);
     });

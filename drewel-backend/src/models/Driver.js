@@ -140,6 +140,16 @@ const driverSchema = new mongoose.Schema(
       type: Date,
       default: null,
     },
+    approvedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Admin",
+      default: null,
+      index: true,
+    },
+    pendingSince: {
+      type: Date,
+      default: null,
+    },
     completedAt: {
       type: Date,
       default: null,
@@ -148,9 +158,47 @@ const driverSchema = new mongoose.Schema(
       type: String,
       default: "",
     },
+    profileRequestStatus: {
+      type: String,
+      enum: ["not_submitted", "pending", "approved", "rejected"],
+      default: "not_submitted",
+      index: true,
+    },
+    profileSubmittedAt: {
+      type: Date,
+      default: null,
+    },
+    profileApprovedAt: {
+      type: Date,
+      default: null,
+    },
+    profileApprovedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Admin",
+      default: null,
+      index: true,
+    },
+    profileRejectionReason: {
+      type: String,
+      default: "",
+      maxlength: 1000,
+    },
     isRestricted: {
       type: Boolean,
       default: false,
+    },
+    isDeleted: {
+      type: Boolean,
+      default: false,
+      index: true,
+    },
+    deletedAt: {
+      type: Date,
+      default: null,
+    },
+    deletedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      default: null,
     },
     profileImageUrl: {
       type: String,
@@ -172,5 +220,11 @@ const driverSchema = new mongoose.Schema(
   },
   { timestamps: true }
 );
+
+driverSchema.index({ status: 1, approvedAt: -1, _id: -1 });
+driverSchema.index({ status: 1, basicRequestSubmittedAt: -1, _id: -1 });
+driverSchema.index({ status: 1, approvedBy: 1, approvedAt: -1 });
+driverSchema.index({ profileRequestStatus: 1, profileSubmittedAt: -1, _id: -1 });
+driverSchema.index({ profileRequestStatus: 1, profileApprovedBy: 1, profileApprovedAt: -1 });
 
 export default mongoose.model("Driver", driverSchema);

@@ -9,14 +9,55 @@ import '../../../../common/colors.dart';
 import '../../../../common/common_drawer.dart';
 import '../../../../common/common_methods.dart';
 import '../../../../common/common_widgets.dart';
+import '../../../../common/drewel_app_bar.dart';
+import '../../../../common/drewel_navigation.dart';
+import '../../../../common/drewel_pop_scope.dart';
 import '../../../../common/text_styles.dart';
 import '../../../data/apis/api_constants/api_key_constants.dart';
 import '../../../data/constants/icons_constant.dart';
 import '../../../data/constants/string_constants.dart';
+import '../../../routes/app_pages.dart';
 import '../controllers/user_home_controller.dart';
 
-class UserHomeView extends GetView<UserHomeController> {
+class UserHomeView extends StatefulWidget {
   const UserHomeView({super.key});
+
+  @override
+  State<UserHomeView> createState() => _UserHomeViewState();
+}
+
+class _UserHomeViewState extends State<UserHomeView> {
+  late final UserHomeController controller;
+  bool _isLeaving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    controller = Get.find<UserHomeController>();
+  }
+
+  Future<void> _handleBack() async {
+    if (_isLeaving) return;
+    _isLeaving = true;
+    controller.locationFocusNode.unfocus();
+    controller.clearPlaceSuggestions();
+    CommonMethods.unFocsKeyBoard();
+    await WidgetsBinding.instance.endOfFrame;
+    if (!mounted) return;
+    final NavigatorState navigator = Navigator.of(context);
+    if (Get.previousRoute == Routes.USER_REGISTER && navigator.canPop()) {
+      navigator.pop();
+      return;
+    }
+    await DrewelNavigation.resetTo(Routes.USER_REGISTER);
+  }
+
+  @override
+  void dispose() {
+    controller.disposeViewResources();
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
     return Obx(() {
@@ -24,343 +65,362 @@ class UserHomeView extends GetView<UserHomeController> {
       controller.sheetSize.value;
       final screenHeight = MediaQuery.of(context).size.height - 120.px;
       final mapHeight = screenHeight * (1 - controller.sheetSize.value);
-      return Scaffold(
-          key: controller.scaffoldKey,
-          endDrawer: CustomDrawer(
-            userData: Map<String, String>.from(controller.userData),
-          ),
-          resizeToAvoidBottomInset: false,
-          backgroundColor: primaryColor,
-          body: Column(
-            mainAxisAlignment: MainAxisAlignment.end,
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              ListTile(
-                leading: GestureDetector(
-                  onTap: () {
-                    Get.back();
-                  },
+      return DrewelPopScope(
+        fallbackRoute: Routes.USER_REGISTER,
+        onBack: _handleBack,
+        child: Scaffold(
+            key: controller.scaffoldKey,
+            appBar: DrewelAppBar(
+              title: '',
+              titleWidget: Semantics(
+                label: 'Drewel',
+                image: true,
+                child: ExcludeSemantics(
                   child: CommonWidgets.appIcons(
-                      assetName: IconConstants.icBack,
-                      height: 40.px,
-                      width: 40.px),
-                ),
-                title: Center(
-                  child: CommonWidgets.appIcons(
-                      assetName: IconConstants.icLogo,
-                      height: 60.px,
-                      width: 150.px,
-                      fit: BoxFit.contain),
-                ),
-                trailing: GestureDetector(
-                  onTap: () {
-                    // Hide keyboard & clear only suggestions when opening drawer
-                    controller.locationFocusNode.unfocus();
-                    controller.clearPlaceSuggestions();
-                    CommonMethods.unFocsKeyBoard();
-                    controller.clickOnMenu();
-                  },
-                  child: CommonWidgets.appIcons(
-                    assetName: IconConstants.icMenu,
-                    height: 40.px,
-                    width: 40.px,
+                    assetName: IconConstants.icLogo,
+                    height: 52,
+                    width: 150,
+                    fit: BoxFit.contain,
                   ),
                 ),
               ),
-              Container(
-                width: MediaQuery.of(context).size.width,
-                height: MediaQuery.of(context).size.height - 130.px,
-                margin: EdgeInsets.only(top: 10.px),
-                decoration: BoxDecoration(
-                    color: primary3Color,
-                    borderRadius: BorderRadius.only(
-                        topRight: Radius.circular(40.px),
-                        topLeft: Radius.circular(40.px))),
-                clipBehavior: Clip.hardEdge,
-                child: Stack(
-                  children: [
-                    Container(
-                      width: MediaQuery.of(context).size.width,
-                      height: mapHeight,
-                      padding: EdgeInsets.only(top: 0.px),
-                      child: GoogleMap(
-                        mapType: MapType.normal,
-                        zoomGesturesEnabled: true,
-                        tiltGesturesEnabled: true,
-                        myLocationButtonEnabled: false,
-                        markers: controller.markers,
-                        // Track camera movement for updating driver list
-                        onCameraMove: (CameraPosition cameraPosition) {
-                          controller.onCameraMove(cameraPosition);
-                        },
-                        // When camera stops moving, filter drivers by visible bounds
-                        onCameraIdle: () {
-                          controller.onCameraIdle();
-                        },
-                        // Tap on map to set location
-                        onTap: (LatLng position) {
-                          controller.setSelectedLocation(position);
-                        },
-                        minMaxZoomPreference: MinMaxZoomPreference.unbounded,
-                        initialCameraPosition: CameraPosition(
-                          target: controller.mapPosition,
-                          zoom: 12,
+              showBackButton: true,
+              showMenuButton: true,
+              onBack: _handleBack,
+              backIcon: ExcludeSemantics(
+                child: CommonWidgets.appIcons(
+                  assetName: IconConstants.icBack,
+                  height: 40,
+                  width: 40,
+                  fit: BoxFit.contain,
+                ),
+              ),
+              menuIcon: ExcludeSemantics(
+                child: CommonWidgets.appIcons(
+                  assetName: IconConstants.icMenu,
+                  height: 32,
+                  width: 32,
+                  fit: BoxFit.contain,
+                ),
+              ),
+              onMenu: () {
+                controller.locationFocusNode.unfocus();
+                controller.clearPlaceSuggestions();
+                CommonMethods.unFocsKeyBoard();
+                controller.clickOnMenu();
+              },
+            ),
+            endDrawer: CustomDrawer(
+              userData: Map<String, String>.from(controller.userData),
+            ),
+            resizeToAvoidBottomInset: false,
+            backgroundColor: primaryColor,
+            body: Column(
+              mainAxisAlignment: MainAxisAlignment.end,
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Expanded(
+                  child: Container(
+                    width: MediaQuery.of(context).size.width,
+                    margin: EdgeInsets.only(top: 10.px),
+                    decoration: BoxDecoration(
+                        color: primary3Color,
+                        borderRadius: BorderRadius.only(
+                            topRight: Radius.circular(40.px),
+                            topLeft: Radius.circular(40.px))),
+                    clipBehavior: Clip.hardEdge,
+                    child: Stack(
+                      children: [
+                        Container(
+                          width: MediaQuery.of(context).size.width,
+                          height: mapHeight,
+                          padding: EdgeInsets.only(top: 0.px),
+                          child: GoogleMap(
+                            mapType: MapType.normal,
+                            zoomGesturesEnabled: true,
+                            tiltGesturesEnabled: true,
+                            myLocationButtonEnabled: false,
+                            markers: controller.markers,
+                            // Track camera movement for updating driver list
+                            onCameraMove: (CameraPosition cameraPosition) {
+                              controller.onCameraMove(cameraPosition);
+                            },
+                            // When camera stops moving, filter drivers by visible bounds
+                            onCameraIdle: () {
+                              controller.onCameraIdle();
+                            },
+                            // Tap on map to set location
+                            onTap: (LatLng position) {
+                              controller.setSelectedLocation(position);
+                            },
+                            minMaxZoomPreference:
+                                MinMaxZoomPreference.unbounded,
+                            initialCameraPosition: CameraPosition(
+                              target: controller.mapPosition,
+                              zoom: 12,
+                            ),
+                            onMapCreated:
+                                (GoogleMapController googlecontroller) async {
+                              await controller.onMapCreated(googlecontroller);
+                            },
+                          ),
                         ),
-                        onMapCreated:
-                            (GoogleMapController googlecontroller) async {
-                          controller.xController = googlecontroller;
-                          controller.xController!.animateCamera(
-                              CameraUpdate.newCameraPosition(CameraPosition(
-                            target: controller.mapPosition,
-                            zoom: 12,
-                          )));
-                          // Get initial visible bounds after map is created
-                          await Future.delayed(
-                              const Duration(milliseconds: 500));
-                          controller.onCameraIdle();
-                        },
-                      ),
-                    ),
-                    // Distance Card - Shows when driver is selected
-                    if (controller.selectIndex >= 0 &&
-                        controller.hasReferenceLocation &&
-                        controller.selectedDriverDistance.value > 0)
-                      Positioned(
-                        top: 80.px,
-                        left: 20.px,
-                        child: _buildDistancePopup(context),
-                      ),
-                    Positioned(
-                      top: 20.px,
-                      left: 20.px,
-                      right: 20.px,
-                      child: Column(
-                        children: [
-                          Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
+                        // Distance Card - Shows when driver is selected
+                        if (controller.selectIndex >= 0 &&
+                            controller.hasReferenceLocation &&
+                            controller.selectedDriverDistance.value > 0)
+                          Positioned(
+                            top: 80.px,
+                            left: 20.px,
+                            child: _buildDistancePopup(context),
+                          ),
+                        Positioned(
+                          top: 20.px,
+                          left: 20.px,
+                          right: 20.px,
+                          child: Column(
                             children: [
-                              Expanded(
-                                child: Column(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Container(
-                                      padding: EdgeInsets.symmetric(
-                                          horizontal: 10.px),
-                                      decoration: BoxDecoration(
-                                          color: primary3Color,
-                                          borderRadius:
-                                              BorderRadius.circular(12.px),
-                                          border: Border.all(
-                                              color: Colors.black
-                                                  .withOpacity(0.1))),
-                                      child: Row(
-                                        children: [
-                                          CommonWidgets.appIcons(
-                                              assetName:
-                                                  IconConstants.icStarLocation,
-                                              height: 20.px,
-                                              width: 20.px),
-                                          SizedBox(width: 8.px),
-                                          Expanded(
-                                            child: TextField(
-                                              controller:
-                                                  controller.locationController,
-                                              focusNode:
-                                                  controller.locationFocusNode,
-                                              style: MyTextStyle.titleStyle14b,
-                                              decoration: InputDecoration(
-                                                hintText: StringConstants
-                                                    .searchLocation,
-                                                border: InputBorder.none,
-                                                disabledBorder:
-                                                    InputBorder.none,
-                                                focusedBorder: InputBorder.none,
-                                                enabledBorder: InputBorder.none,
-                                                hintStyle:
-                                                    MyTextStyle.titleStyle14b,
-                                                contentPadding: EdgeInsets.zero,
+                              Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Expanded(
+                                    child: Column(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Container(
+                                          padding: EdgeInsets.symmetric(
+                                              horizontal: 10.px),
+                                          decoration: BoxDecoration(
+                                              color: primary3Color,
+                                              borderRadius:
+                                                  BorderRadius.circular(12.px),
+                                              border: Border.all(
+                                                  color: Colors.black
+                                                      .withOpacity(0.1))),
+                                          child: Row(
+                                            children: [
+                                              CommonWidgets.appIcons(
+                                                  assetName: IconConstants
+                                                      .icStarLocation,
+                                                  height: 20.px,
+                                                  width: 20.px),
+                                              SizedBox(width: 8.px),
+                                              Expanded(
+                                                child: TextField(
+                                                  controller: controller
+                                                      .locationController,
+                                                  focusNode: controller
+                                                      .locationFocusNode,
+                                                  style:
+                                                      MyTextStyle.titleStyle14b,
+                                                  decoration: InputDecoration(
+                                                    hintText: StringConstants
+                                                        .searchLocation,
+                                                    border: InputBorder.none,
+                                                    disabledBorder:
+                                                        InputBorder.none,
+                                                    focusedBorder:
+                                                        InputBorder.none,
+                                                    enabledBorder:
+                                                        InputBorder.none,
+                                                    hintStyle: MyTextStyle
+                                                        .titleStyle14b,
+                                                    contentPadding:
+                                                        EdgeInsets.zero,
+                                                  ),
+                                                  onChanged: controller
+                                                      .onLocationTextChanged,
+                                                ),
                                               ),
-                                              onChanged: controller
-                                                  .onLocationTextChanged,
+                                            ],
+                                          ),
+                                        ),
+                                        Obx(() {
+                                          if (controller
+                                              .placeSuggestions.isEmpty) {
+                                            return const SizedBox.shrink();
+                                          }
+                                          return Container(
+                                            margin: EdgeInsets.only(top: 4.px),
+                                            decoration: BoxDecoration(
+                                              color: Colors.white,
+                                              borderRadius:
+                                                  BorderRadius.circular(10.px),
+                                              boxShadow: [
+                                                BoxShadow(
+                                                  color: Colors.black
+                                                      .withOpacity(0.08),
+                                                  blurRadius: 6,
+                                                  offset: const Offset(0, 2),
+                                                ),
+                                              ],
                                             ),
+                                            constraints: BoxConstraints(
+                                              maxHeight: 300.px,
+                                            ),
+                                            child: ListView.separated(
+                                              shrinkWrap: true,
+                                              padding: EdgeInsets.zero,
+                                              itemCount: controller
+                                                  .placeSuggestions.length,
+                                              separatorBuilder: (_, __) =>
+                                                  const Divider(height: 1),
+                                              itemBuilder: (context, index) {
+                                                final prediction = controller
+                                                    .placeSuggestions[index];
+                                                return InkWell(
+                                                  onTap: () async {
+                                                    await controller
+                                                        .clickOnLocation(
+                                                            prediction);
+                                                    controller
+                                                        .clearPlaceSuggestions();
+                                                    controller.locationFocusNode
+                                                        .unfocus();
+                                                    CommonMethods
+                                                        .unFocsKeyBoard();
+                                                  },
+                                                  child: Padding(
+                                                    padding:
+                                                        EdgeInsets.symmetric(
+                                                            horizontal: 12.px,
+                                                            vertical: 10.px),
+                                                    child: Row(
+                                                      children: [
+                                                        Icon(
+                                                            Icons
+                                                                .location_on_rounded,
+                                                            color: Colors
+                                                                .blueAccent,
+                                                            size: 20.px),
+                                                        SizedBox(width: 10.px),
+                                                        Expanded(
+                                                          child: Text(
+                                                            prediction
+                                                                    .description ??
+                                                                '',
+                                                            style: TextStyle(
+                                                              fontSize: 14.px,
+                                                              fontWeight:
+                                                                  FontWeight
+                                                                      .w500,
+                                                              color: Colors
+                                                                  .black87,
+                                                            ),
+                                                          ),
+                                                        ),
+                                                      ],
+                                                    ),
+                                                  ),
+                                                );
+                                              },
+                                            ),
+                                          );
+                                        }),
+                                      ],
+                                    ),
+                                  ),
+                                  SizedBox(width: 10.px),
+                                  GestureDetector(
+                                    onTap: () {
+                                      controller.goToUserLocation();
+                                    },
+                                    child: Container(
+                                      padding: EdgeInsets.all(12.px),
+                                      decoration: BoxDecoration(
+                                        color: controller
+                                                .isUserLocationLoaded.value
+                                            ? primaryColor
+                                            : primary3Color,
+                                        borderRadius:
+                                            BorderRadius.circular(12.px),
+                                        border: Border.all(
+                                          color: controller
+                                                  .isUserLocationLoaded.value
+                                              ? primaryColor
+                                              : Colors.black.withOpacity(0.2),
+                                        ),
+                                        boxShadow: [
+                                          BoxShadow(
+                                            color:
+                                                Colors.black.withOpacity(0.1),
+                                            blurRadius: 8,
+                                            offset: const Offset(0, 2),
                                           ),
                                         ],
                                       ),
-                                    ),
-                                    Obx(() {
-                                      if (controller.placeSuggestions.isEmpty) {
-                                        return const SizedBox.shrink();
-                                      }
-                                      return Container(
-                                        margin: EdgeInsets.only(top: 4.px),
-                                        decoration: BoxDecoration(
-                                          color: Colors.white,
-                                          borderRadius:
-                                              BorderRadius.circular(10.px),
-                                          boxShadow: [
-                                            BoxShadow(
-                                              color: Colors.black
-                                                  .withOpacity(0.08),
-                                              blurRadius: 6,
-                                              offset: const Offset(0, 2),
-                                            ),
-                                          ],
-                                        ),
-                                        constraints: BoxConstraints(
-                                          maxHeight: 300.px,
-                                        ),
-                                        child: ListView.separated(
-                                          shrinkWrap: true,
-                                          padding: EdgeInsets.zero,
-                                          itemCount: controller
-                                              .placeSuggestions.length,
-                                          separatorBuilder: (_, __) =>
-                                              const Divider(height: 1),
-                                          itemBuilder: (context, index) {
-                                            final prediction = controller
-                                                .placeSuggestions[index];
-                                            return InkWell(
-                                              onTap: () async {
-                                                await controller
-                                                    .clickOnLocation(
-                                                        prediction);
-                                                controller
-                                                    .clearPlaceSuggestions();
-                                                controller.locationFocusNode
-                                                    .unfocus();
-                                                CommonMethods.unFocsKeyBoard();
-                                              },
-                                              child: Padding(
-                                                padding: EdgeInsets.symmetric(
-                                                    horizontal: 12.px,
-                                                    vertical: 10.px),
-                                                child: Row(
-                                                  children: [
-                                                    Icon(
-                                                        Icons
-                                                            .location_on_rounded,
-                                                        color:
-                                                            Colors.blueAccent,
-                                                        size: 20.px),
-                                                    SizedBox(width: 10.px),
-                                                    Expanded(
-                                                      child: Text(
-                                                        prediction
-                                                                .description ??
-                                                            '',
-                                                        style: TextStyle(
-                                                          fontSize: 14.px,
-                                                          fontWeight:
-                                                              FontWeight.w500,
-                                                          color: Colors.black87,
-                                                        ),
-                                                      ),
-                                                    ),
-                                                  ],
-                                                ),
-                                              ),
-                                            );
-                                          },
-                                        ),
-                                      );
-                                    }),
-                                  ],
-                                ),
-                              ),
-                              SizedBox(width: 10.px),
-                              GestureDetector(
-                                onTap: () {
-                                  controller.goToUserLocation();
-                                },
-                                child: Container(
-                                  padding: EdgeInsets.all(12.px),
-                                  decoration: BoxDecoration(
-                                    color: controller.isUserLocationLoaded.value
-                                        ? primaryColor
-                                        : primary3Color,
-                                    borderRadius: BorderRadius.circular(12.px),
-                                    border: Border.all(
-                                      color:
-                                          controller.isUserLocationLoaded.value
-                                              ? primaryColor
-                                              : Colors.black.withOpacity(0.2),
-                                    ),
-                                    boxShadow: [
-                                      BoxShadow(
-                                        color: Colors.black.withOpacity(0.1),
-                                        blurRadius: 8,
-                                        offset: const Offset(0, 2),
-                                      ),
-                                    ],
-                                  ),
-                                  child: Icon(
-                                    Icons.my_location,
-                                    color: controller.isUserLocationLoaded.value
-                                        ? Colors.white
-                                        : primaryColor,
-                                    size: 24.px,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                          // Selected location hint
-                          if (controller.isSelectedLocationSet.value)
-                            Container(
-                              margin: EdgeInsets.only(top: 8.px),
-                              padding: EdgeInsets.symmetric(
-                                  horizontal: 12.px, vertical: 8.px),
-                              decoration: BoxDecoration(
-                                color: primaryColor.withOpacity(0.1),
-                                borderRadius: BorderRadius.circular(8.px),
-                                border: Border.all(
-                                    color: primaryColor.withOpacity(0.3)),
-                              ),
-                              child: Row(
-                                children: [
-                                  Icon(Icons.touch_app,
-                                      color: primaryColor, size: 16.px),
-                                  SizedBox(width: 8.px),
-                                  Expanded(
-                                    child: Text(
-                                      'Tap map or drag marker to change location',
-                                      style: MyTextStyle.titleStyle12b
-                                          .copyWith(color: primaryColor),
-                                    ),
-                                  ),
-                                  SizedBox(width: 8.px),
-                                  GestureDetector(
-                                    onTap: () {
-                                      controller.clearSelectedLocation();
-                                    },
-                                    child: Container(
-                                      padding: EdgeInsets.all(6.px),
-                                      decoration: BoxDecoration(
-                                        color: Colors.red.shade50,
-                                        borderRadius:
-                                            BorderRadius.circular(8.px),
-                                        border: Border.all(
-                                            color: Colors.red.withOpacity(0.3)),
-                                      ),
                                       child: Icon(
-                                        Icons.close,
-                                        color: Colors.red,
-                                        size: 16.px,
+                                        Icons.my_location,
+                                        color: controller
+                                                .isUserLocationLoaded.value
+                                            ? Colors.white
+                                            : primaryColor,
+                                        size: 24.px,
                                       ),
                                     ),
                                   ),
                                 ],
                               ),
-                            ),
-                        ],
-                      ),
+                              // Selected location hint
+                              if (controller.isSelectedLocationSet.value)
+                                Container(
+                                  margin: EdgeInsets.only(top: 8.px),
+                                  padding: EdgeInsets.symmetric(
+                                      horizontal: 12.px, vertical: 8.px),
+                                  decoration: BoxDecoration(
+                                    color: primaryColor.withOpacity(0.1),
+                                    borderRadius: BorderRadius.circular(8.px),
+                                    border: Border.all(
+                                        color: primaryColor.withOpacity(0.3)),
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      Icon(Icons.touch_app,
+                                          color: primaryColor, size: 16.px),
+                                      SizedBox(width: 8.px),
+                                      Expanded(
+                                        child: Text(
+                                          'Tap map or drag marker to change location',
+                                          style: MyTextStyle.titleStyle12b
+                                              .copyWith(color: primaryColor),
+                                        ),
+                                      ),
+                                      SizedBox(width: 8.px),
+                                      GestureDetector(
+                                        onTap: () {
+                                          controller.clearSelectedLocation();
+                                        },
+                                        child: Container(
+                                          padding: EdgeInsets.all(6.px),
+                                          decoration: BoxDecoration(
+                                            color: Colors.red.shade50,
+                                            borderRadius:
+                                                BorderRadius.circular(8.px),
+                                            border: Border.all(
+                                                color: Colors.red
+                                                    .withOpacity(0.3)),
+                                          ),
+                                          child: Icon(
+                                            Icons.close,
+                                            color: Colors.red,
+                                            size: 16.px,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ),
+                        showDriverList()
+                      ],
                     ),
-                    showDriverList()
-                  ],
+                  ),
                 ),
-              )
-            ],
-          ));
+              ],
+            )),
+      );
     });
   }
 
@@ -425,6 +485,28 @@ class UserHomeView extends GetView<UserHomeController> {
                               StringConstants.chooseTheDriver,
                               style: MyTextStyle.titleStyle18bb,
                             ),
+                            if (controller
+                                .regionalDriverMessage.value.isNotEmpty) ...[
+                              SizedBox(height: 6.px),
+                              Container(
+                                width: double.infinity,
+                                padding: EdgeInsets.symmetric(
+                                  horizontal: 12.px,
+                                  vertical: 8.px,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: primaryColor.withValues(alpha: 0.08),
+                                  borderRadius: BorderRadius.circular(12.px),
+                                ),
+                                child: Text(
+                                  controller.regionalDriverMessage.value,
+                                  textAlign: TextAlign.center,
+                                  style: MyTextStyle.titleStyle12b.copyWith(
+                                    color: Colors.grey[700],
+                                  ),
+                                ),
+                              ),
+                            ],
                             SizedBox(height: 10.px),
                           ],
                         );

@@ -24,6 +24,7 @@ const Headers = ({ setIsSideBarOpen }) => {
 
       // Toggle the current treeview
       $parent.toggleClass("is-expanded");
+      $(this).attr("aria-expanded", $parent.hasClass("is-expanded") ? "true" : "false");
     });
 
     const currentUrl = window.location.href;
@@ -192,6 +193,19 @@ const Headers = ({ setIsSideBarOpen }) => {
               ></i>
               <span className="app-menu__label">Total Drivers</span>
             </NavLink>
+          </li>
+          <li className="treeview">
+            <button type="button" className="app-menu__item" data-toggle="treeview" aria-haspopup="true" aria-expanded="false" style={{ background: "none", borderTop: 0, borderRight: 0, borderBottom: 0, width: "100%", textAlign: "left" }}>
+              <i className="app-menu__icon mx-3 fa-regular fa-file-lines" aria-hidden="true"></i>
+              <span className="app-menu__label">Requests</span>
+              <i className="treeview-indicator fa fa-angle-right" aria-hidden="true"></i>
+            </button>
+            <ul className="treeview-menu">
+              <li><NavLink className={({ isActive }) => `treeview-item${isActive ? " active" : ""}`} to="/requests/pending">Pending Requests</NavLink></li>
+              <li><NavLink className={({ isActive }) => `treeview-item${isActive ? " active" : ""}`} to="/requests/approved">Approved Requests</NavLink></li>
+              <li><NavLink className={({ isActive }) => `treeview-item${isActive ? " active" : ""}`} to="/requests/rejected">Rejected Requests</NavLink></li>
+              <li><NavLink className={({ isActive }) => `treeview-item${isActive ? " active" : ""}`} to="/requests/all">All Requests</NavLink></li>
+            </ul>
           </li>
           <li>
             <NavLink className="app-menu__item" to="/sponsor">

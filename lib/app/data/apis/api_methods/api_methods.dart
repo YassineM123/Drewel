@@ -1,10 +1,12 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:drewel/app/data/apis/api_constants/api_key_constants.dart';
 import 'package:drewel/app/data/apis/api_models/get_all_driver_model.dart';
 import 'package:drewel/app/data/apis/api_models/get_banner_model.dart';
 import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../../../common/http_methods.dart';
 import '../api_constants/api_url_constants.dart';
 import '../api_models/get_add_driver_details_model.dart';
@@ -29,21 +31,10 @@ class ApiMethods {
     final String status = '${driverMap['status'] ?? ''}'.trim().toLowerCase();
     final bool isApproved = driverMap['isApproved'] == true ||
         '${driverMap['isApproved'] ?? ''}'.trim().toLowerCase() == 'true';
-
-    final bool hasRequiredDocs = <String>[
-      '${driverMap['licenseCarUrl'] ?? driverMap['carLicenseFrontUrl'] ?? ''}',
-      '${driverMap['licenseDriverUrl'] ?? driverMap['drivingLicenseFrontUrl'] ?? ''}',
-      '${driverMap['profileImageUrl'] ?? ''}',
-      '${driverMap['idDocumentUrl'] ?? driverMap['idProofFrontUrl'] ?? ''}',
-      '${driverMap['passportCopyUrl'] ?? ''}',
-    ].every((String v) => v.trim().isNotEmpty);
-
-    if (status == ApiKeyConstants.completed) return ApiKeyConstants.completed;
-    if (isApproved) {
-      return hasRequiredDocs
-          ? ApiKeyConstants.completed
-          : ApiKeyConstants.approvedStatus;
+    if (status == ApiKeyConstants.completed) {
+      return ApiKeyConstants.completed;
     }
+    if (isApproved) return ApiKeyConstants.approvedStatus;
     if (status == ApiKeyConstants.approvedStatus) {
       return ApiKeyConstants.approvedStatus;
     }
@@ -283,6 +274,12 @@ class ApiMethods {
         return <String, dynamic>{
           'success': true,
           'status': status,
+          'profileRequestStatus':
+              '${driverMap['profileRequestStatus'] ?? 'not_submitted'}'
+                  .trim()
+                  .toLowerCase(),
+          'profileRejectionReason':
+              '${driverMap['profileRejectionReason'] ?? ''}'.trim(),
           ApiKeyConstants.rejectionReason:
               '${driverMap['rejectionReason'] ?? ''}'.trim(),
           'isProfileUnlocked': status == ApiKeyConstants.approvedStatus,
@@ -297,7 +294,18 @@ class ApiMethods {
     );
     if (response != null) {
       final Map<String, dynamic>? decoded = _tryDecodeMap(response.body);
-      if (decoded != null) return decoded;
+      if (decoded != null) {
+        if (decoded['profileRequestStatus'] == null &&
+            decoded['profile_request_status'] != null) {
+          decoded['profileRequestStatus'] = decoded['profile_request_status'];
+        }
+        if (decoded['profileRejectionReason'] == null &&
+            decoded['profile_rejection_reason'] != null) {
+          decoded['profileRejectionReason'] =
+              decoded['profile_rejection_reason'];
+        }
+        return decoded;
+      }
     }
 
     return null;
@@ -449,21 +457,45 @@ class ApiMethods {
       {void Function(int)? checkResponse,
       required String city,
       required String vType}) async {
-    DriverListModel? driverListModel;
     final Uri uri = Uri.parse(ApiUrlConstants.endPointOfAvailableDrivers)
         .replace(queryParameters: <String, String>{
       if (city.trim().isNotEmpty) ApiKeyConstants.city: city.trim(),
       if (vType.trim().isNotEmpty) ApiKeyConstants.vehicleType: vType.trim(),
     });
-    http.Response? response = await MyHttp.getMethod(
-      url: uri.toString(),
-      checkResponse: checkResponse,
-    );
-    if (response != null) {
-      driverListModel = DriverListModel.fromJson(jsonDecode(response.body));
-      return driverListModel;
+    try {
+      final SharedPreferences sharedPreferences =
+          await SharedPreferences.getInstance();
+      final String token =
+          sharedPreferences.getString(ApiKeyConstants.token) ?? '';
+      final Map<String, String> headers = <String, String>{
+        'Authorization': 'Bearer $token',
+        'Accept': 'application/json',
+      };
+
+      if (kDebugMode) {
+        print("URL:: $uri");
+        print(
+            "[API][HEADERS] {Authorization: <redacted>, Accept: application/json}");
+      }
+
+      final http.Response response = await http.get(uri, headers: headers);
+      if (kDebugMode) {
+        print("[API][RESPONSE] GET $uri status=${response.statusCode}");
+      }
+      checkResponse?.call(response.statusCode);
+
+      final Map<String, dynamic>? decoded = _tryDecodeMap(response.body);
+      if (decoded != null) {
+        return DriverListModel.fromJson(decoded);
+      }
+
+      return null;
+    } catch (e) {
+      if (kDebugMode) {
+        print("EXCEPTION:: Available drivers request failed: $e");
+      }
+      return null;
     }
-    return null;
   }
 
   ///  Get banner list api....

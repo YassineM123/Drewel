@@ -1,5 +1,31 @@
 import mongoose from "mongoose";
 import colors from "colors";
+import dns from "node:dns";
+
+export const parseMongoDnsServers = (value = "") =>
+  String(value)
+    .split(",")
+    .map((server) => server.trim())
+    .filter(Boolean);
+
+export const configureMongoSrvDns = (
+  uri,
+  configuredServers = process.env.MONGO_DNS_SERVERS || "",
+  dnsAdapter = dns
+) => {
+  const servers = parseMongoDnsServers(configuredServers);
+  if (!String(uri).startsWith("mongodb+srv://") || servers.length === 0) {
+    return [];
+  }
+
+  try {
+    dnsAdapter.setServers(servers);
+  } catch (error) {
+    throw new Error(`Invalid MONGO_DNS_SERVERS configuration: ${error.message}`);
+  }
+
+  return servers;
+};
 
 const resolveMongoConfig = () => {
   const uri = process.env.MONGO_URI || process.env.MONGODB_URI || "";
@@ -22,6 +48,11 @@ async function connectDB() {
   }
 
   try {
+    const dnsServers = configureMongoSrvDns(uri);
+    if (dnsServers.length > 0) {
+      console.log(`MongoDB SRV DNS override enabled: ${dnsServers.join(", ")}`);
+    }
+
     const connectOptions = {
       dbName,
       serverSelectionTimeoutMS: 30000,

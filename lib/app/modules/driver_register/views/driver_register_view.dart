@@ -1,5 +1,7 @@
 import 'package:drewel/common/colors.dart';
 import 'package:drewel/common/common_widgets.dart';
+import 'package:drewel/common/drewel_app_bar.dart';
+import 'package:drewel/common/drewel_pop_scope.dart';
 import 'package:drewel/common/text_styles.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
@@ -18,49 +20,59 @@ class DriverRegisterView extends GetView<DriverRegisterController> {
     return Obx(() {
       controller.refreshTick.value;
 
-      return Scaffold(
-        backgroundColor: primaryColor,
-        body: Stack(
-          children: <Widget>[
-            Column(
-              children: <Widget>[
-                SizedBox(height: 50.px),
-                CommonWidgets.appIcons(
-                  assetName: IconConstants.icLogo,
-                  height: 90.px,
-                  width: 200.px,
-                  fit: BoxFit.contain,
-                ),
-                Expanded(
-                  child: Container(
-                    width: double.infinity,
-                    margin: EdgeInsets.only(top: 20.px),
-                    padding:
-                        EdgeInsets.symmetric(horizontal: 18.px, vertical: 20.px),
-                    decoration: BoxDecoration(
-                      color: primary3Color,
-                      borderRadius: BorderRadius.only(
-                        topLeft: Radius.circular(30.px),
-                        topRight: Radius.circular(30.px),
+      return DrewelPopScope(
+        fallbackRoute: '/user-type',
+        hasUnsavedChanges: controller.hasUnsavedChanges,
+        child: Scaffold(
+          appBar: const DrewelAppBar(
+            title: '',
+            showBackButton: true,
+            fallbackRoute: '/user-type',
+          ),
+          backgroundColor: primaryColor,
+          body: Stack(
+            children: <Widget>[
+              Column(
+                children: <Widget>[
+                  SizedBox(height: 50.px),
+                  CommonWidgets.appIcons(
+                    assetName: IconConstants.icLogo,
+                    height: 90.px,
+                    width: 200.px,
+                    fit: BoxFit.contain,
+                  ),
+                  Expanded(
+                    child: Container(
+                      width: double.infinity,
+                      margin: EdgeInsets.only(top: 20.px),
+                      padding: EdgeInsets.symmetric(
+                          horizontal: 18.px, vertical: 20.px),
+                      decoration: BoxDecoration(
+                        color: primary3Color,
+                        borderRadius: BorderRadius.only(
+                          topLeft: Radius.circular(30.px),
+                          topRight: Radius.circular(30.px),
+                        ),
                       ),
-                    ),
-                    child: SingleChildScrollView(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: <Widget>[
-                          _buildStep1Section(context),
-                          SizedBox(height: 16.px),
-                          _buildStatusBanner(context),
-                          SizedBox(height: 24.px),
-                        ],
+                      child: SingleChildScrollView(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: <Widget>[
+                            _buildStep1Section(context),
+                            SizedBox(height: 16.px),
+                            _buildStatusBanner(context),
+                            SizedBox(height: 24.px),
+                          ],
+                        ),
                       ),
                     ),
                   ),
-                ),
-              ],
-            ),
-            if (controller.showStatusModal.value) _buildStatusOverlay(context),
-          ],
+                ],
+              ),
+              if (controller.showStatusModal.value)
+                _buildStatusOverlay(context),
+            ],
+          ),
         ),
       );
     });
@@ -186,7 +198,8 @@ class DriverRegisterView extends GetView<DriverRegisterController> {
               ),
               SizedBox(height: 12.px),
               Container(
-                padding: EdgeInsets.symmetric(horizontal: 12.px, vertical: 6.px),
+                padding:
+                    EdgeInsets.symmetric(horizontal: 12.px, vertical: 6.px),
                 decoration: BoxDecoration(
                   color: primaryColor.withOpacity(0.1),
                   borderRadius: BorderRadius.circular(20.px),
@@ -196,14 +209,16 @@ class DriverRegisterView extends GetView<DriverRegisterController> {
                   badge == ApiKeyConstants.pending
                       ? 'Pending Approval'
                       : badge.toUpperCase(),
-                  style: MyTextStyle.titleStyle12b.copyWith(color: primaryColor),
+                  style:
+                      MyTextStyle.titleStyle12b.copyWith(color: primaryColor),
                 ),
               ),
               SizedBox(height: 14.px),
               CommonWidgets.commonElevatedButton(
                 context: context,
                 onPressed: controller.closeStatusModal,
-                child: Text(StringConstants.close, style: MyTextStyle.titleStyle16bw),
+                child: Text(StringConstants.close,
+                    style: MyTextStyle.titleStyle16bw),
               ),
             ],
           ),

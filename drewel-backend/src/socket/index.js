@@ -23,13 +23,23 @@ import {
   sidebarHandler,
 } from "../utils/globalChat.js";
 import Admin from "../models/Admin.js";
+import {
+  AVAILABLE_DRIVER_FIELDS,
+  buildAvailableDriverFilter,
+} from "../utils/availableDrivers.js";
 
 const app = express();
 const server = http.createServer(app);
 
-const normalizeCity = (city) => city?.trim().toLowerCase();
-const nearbyDriverFields =
-  "firstName lastName fullName phone whatsappNumber profileImageUrl city vehicleType lat long isOnline status updatedAt";
+const normalizeCity = (city) => String(city ?? "").trim().toLowerCase();
+const normalizeVehicleRoom = (vehicleType) => {
+  const normalized = String(vehicleType ?? "").trim().toLowerCase();
+  return normalized ? `drivers:vehicle:${normalized}` : "drivers:vehicle:all";
+};
+
+const acknowledgeSocketEvent = (acknowledge, payload) => {
+  if (typeof acknowledge === "function") acknowledge(payload);
+};
 
 // const io = new Server(server, {
 //   cors: {
@@ -128,18 +138,26 @@ io.on("connection", async (socket) => {
     //   }
     // });
 
-    socket.on("driver-location-update", async ({ driverId, lat, long, fullName, vehicleType, city } = {}) => {
+    socket.on("driver-location-update", async ({ driverId, lat, long, fullName, vehicleType, city } = {}, acknowledge) => {
       try {
         const targetDriverId = authenticatedAdmin && driverId ? driverId : userId;
         if ((!authenticatedAdmin && !authenticatedDriver) || !mongoose.Types.ObjectId.isValid(targetDriverId)) {
           socket.emit("error", { message: "Not authorized to update this driver" });
+          acknowledgeSocketEvent(acknowledge, { ok: false, error: "NOT_AUTHORIZED" });
           return;
         }
         if (!Number.isFinite(lat) || !Number.isFinite(long) || lat < -90 || lat > 90 || long < -180 || long > 180) {
           socket.emit("error", { message: "Invalid driver coordinates" });
+          acknowledgeSocketEvent(acknowledge, { ok: false, error: "INVALID_COORDINATES" });
           return;
         }
-        const normalizedCity = normalizeCity(city);
+        const trimmedCity = String(city ?? "").trim();
+        const normalizedCity = normalizeCity(trimmedCity);
+        if (!normalizedCity) {
+          socket.emit("error", { message: "Driver city is required" });
+          acknowledgeSocketEvent(acknowledge, { ok: false, error: "CITY_REQUIRED" });
+          return;
+        }
 
         const updatedDriver = await Driver.findByIdAndUpdate(
           targetDriverId,
@@ -148,49 +166,69 @@ io.on("connection", async (socket) => {
             long,
             fullName,
             vehicleType,
-            city: normalizedCity,
+            city: trimmedCity,
             updatedAt: new Date(),
           },
           { new: true }
-        ).select(nearbyDriverFields);
+        ).select(AVAILABLE_DRIVER_FIELDS);
 
-        if (!updatedDriver) return;
+        if (!updatedDriver) {
+          acknowledgeSocketEvent(acknowledge, { ok: false, error: "DRIVER_NOT_FOUND" });
+          return;
+        }
+
+        const availableDriver = await Driver.findOne({
+          _id: updatedDriver._id,
+          ...buildAvailableDriverFilter({ city: trimmedCity }),
+        }).select(AVAILABLE_DRIVER_FIELDS);
 
         // ✅ 1. Send update to all USERS in that city
-        io.to(normalizedCity).emit("drivers-nearby", {
-          type: "UPDATE",
-          driver: updatedDriver,
-        });
+        if (availableDriver) {
+          io.to(normalizedCity).to(normalizeVehicleRoom(updatedDriver.vehicleType)).emit("drivers-nearby", {
+            type: "UPDATE",
+            driver: availableDriver,
+          });
+        } else {
+          io.to(normalizedCity).to(normalizeVehicleRoom(updatedDriver.vehicleType)).emit("drivers-nearby", {
+            type: "REMOVE",
+            driverId: updatedDriver._id,
+          });
+        }
 
         // ✅ 2. Send ACK to DRIVER
         socket.emit("driver-location-updated", updatedDriver);
+        acknowledgeSocketEvent(acknowledge, {
+          ok: true,
+          driverId: updatedDriver._id.toString(),
+          updatedAt: updatedDriver.updatedAt,
+        });
 
       } catch (error) {
         console.error(error);
+        acknowledgeSocketEvent(acknowledge, { ok: false, error: "LOCATION_UPDATE_FAILED" });
       }
     });
 
-    socket.on("join-city-room", async ({ city, vehicleType }) => {
+    socket.on("join-city-room", async ({ city, vehicleType } = {}, acknowledge) => {
       try {
-        const normalizedCity = normalizeCity(city);
-
-        socket.join(normalizedCity);
-
-        // ✅ Fetch latest drivers immediately
-        const filter = {
-          city: normalizedCity,
-          isApproved: true,
-          isRestricted: false,
-        };
-
-        if (vehicleType) {
-          filter.vehicleType = {
-            $regex: new RegExp(`^${vehicleType}$`, "i"),
-          };
+        const trimmedCity = String(city ?? "").trim();
+        const normalizedCity = normalizeCity(trimmedCity);
+        if (!normalizedCity) {
+          socket.emit("error", { message: "City is required" });
+          acknowledgeSocketEvent(acknowledge, { ok: false, error: "CITY_REQUIRED" });
+          return;
         }
 
+        socket.join(normalizedCity);
+        socket.join(normalizeVehicleRoom(vehicleType));
+
+        // ✅ Fetch latest drivers immediately
+        const filter = buildAvailableDriverFilter({
+          vehicleType,
+        });
+
         const drivers = await Driver.find(filter)
-          .select(nearbyDriverFields)
+          .select(AVAILABLE_DRIVER_FIELDS)
           .sort({ updatedAt: -1 });
 
         // ✅ Send initial snapshot immediately
@@ -198,10 +236,20 @@ io.on("connection", async (socket) => {
           type: "INITIAL",
           drivers,
         });
+        acknowledgeSocketEvent(acknowledge, {
+          ok: true,
+          count: drivers.length,
+        });
 
       } catch (error) {
         console.error("Error joining city room:", error);
+        acknowledgeSocketEvent(acknowledge, { ok: false, error: "ROOM_JOIN_FAILED" });
       }
+    });
+
+    socket.on("leave-city-room", ({ city } = {}) => {
+      const normalizedCity = normalizeCity(city);
+      if (normalizedCity) socket.leave(normalizedCity);
     });
 
     socket.on("user-location-update", async ({ userId: requestedUserId, lat, long } = {}) => {
@@ -273,6 +321,14 @@ io.on("connection", async (socket) => {
       onlineUser.delete(userIdString);
       io.emit("onlineUser", Array.from(onlineUser));
     });
+
+    // Authentication and every realtime location handler are installed now.
+    // Clients wait for this after each reconnect before resending their latest
+    // GPS position or rejoining discovery rooms.
+    socket.on("location-tracking-status", (acknowledge) => {
+      acknowledgeSocketEvent(acknowledge, { ok: true, ready: true });
+    });
+    socket.emit("location-tracking-ready", { ready: true });
   } catch (error) {
     console.error("Error during socket connection:", error);
     socket.emit("auth-error", { message: "Your session is invalid or expired" });

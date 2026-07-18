@@ -35,12 +35,16 @@ class DriverRegisterController extends GetxController {
 
   final RxString driverStatus = ''.obs;
   final RxString rejectionReason = ''.obs;
+  final RxString profileRequestStatus = 'not_submitted'.obs;
+  final RxString profileRejectionReason = ''.obs;
   final RxBool showStatusModal = false.obs;
   final RxBool showBasicLoading = false.obs;
   final RxBool showSubmitLoading = false.obs;
   final RxBool showStatusLoading = false.obs;
   final RxBool hasSubmittedRequest = false.obs;
   final RxInt refreshTick = 0.obs;
+  final Map<String, String> _initialValues = <String, String>{};
+  bool _initialValuesReady = false;
 
   Timer? _statusPollTimer;
 
@@ -59,17 +63,66 @@ class DriverRegisterController extends GetxController {
   bool get isApproved => driverStatus.value == ApiKeyConstants.approvedStatus;
   bool get isRejected => driverStatus.value == ApiKeyConstants.rejected;
   bool get isCompleted => driverStatus.value == ApiKeyConstants.completed;
-  bool get isProfileLocked => !isApproved;
+  bool get isProfilePending => profileRequestStatus.value == 'pending';
+  bool get isProfileApproved => profileRequestStatus.value == 'approved';
+  bool get isProfileRejected => profileRequestStatus.value == 'rejected';
+  bool get isProfileSubmitted => profileRequestStatus.value != 'not_submitted';
+  bool get isProfileLocked =>
+      !isApproved || isProfilePending || isProfileApproved;
 
   @override
   void onInit() {
     super.onInit();
+    for (final TextEditingController textController in <TextEditingController>[
+      firstNameController,
+      lastNameController,
+      whatsappController,
+      addressController,
+      contractNumberController,
+      licenseCompanyController,
+      cityController,
+      typeController,
+    ]) {
+      textController.addListener(_notifyFormChanged);
+    }
     _bootstrap();
+  }
+
+  void _notifyFormChanged() => refreshTick.value++;
+
+  Map<String, String> get _currentValues => <String, String>{
+        'firstName': firstNameController.text,
+        'lastName': lastNameController.text,
+        'whatsapp': whatsappController.text,
+        'address': addressController.text,
+        'contract': contractNumberController.text,
+        'licenseCompany': licenseCompanyController.text,
+        'city': cityController.text,
+        'type': typeController.text,
+      };
+
+  bool get hasUnsavedChanges {
+    if (!_initialValuesReady) return false;
+    if (selectedFiles.any((File? file) => file != null)) return true;
+    final Map<String, String> current = _currentValues;
+    return current.entries.any(
+      (MapEntry<String, String> entry) =>
+          entry.value.trim() != (_initialValues[entry.key] ?? '').trim(),
+    );
+  }
+
+  void _captureInitialValues() {
+    _initialValues
+      ..clear()
+      ..addAll(_currentValues);
+    _initialValuesReady = true;
+    refreshTick.value++;
   }
 
   Future<void> _bootstrap() async {
     await _prefillFromSession();
     await loadDriverState(showPendingModal: true);
+    _captureInitialValues();
     _statusPollTimer = Timer.periodic(
       const Duration(seconds: 15),
       (_) => refreshStatus(showModalOnPending: false),
@@ -137,8 +190,14 @@ class DriverRegisterController extends GetxController {
     existingFileUrls[3] = driver.idDocumentUrl ?? driver.idProofFrontUrl ?? '';
     existingFileUrls[4] = driver.passportCopyUrl ?? '';
 
-    final String resolvedStatus =
-        _resolveStatus(driver.status, driver.isApproved);
+    profileRequestStatus.value =
+        _normalizeProfileStatus(driver.profileRequestStatus);
+    profileRejectionReason.value = driver.profileRejectionReason ?? '';
+
+    final String resolvedStatus = _resolveStatus(
+      driver.status,
+      driver.isApproved,
+    );
     if (resolvedStatus.isNotEmpty) {
       driverStatus.value = resolvedStatus;
       hasSubmittedRequest.value = true;
@@ -156,6 +215,14 @@ class DriverRegisterController extends GetxController {
     if (cleaned == ApiKeyConstants.rejected) return ApiKeyConstants.rejected;
     if (cleaned == ApiKeyConstants.completed) return ApiKeyConstants.completed;
     return '';
+  }
+
+  String _normalizeProfileStatus(String? status) {
+    final String cleaned = (status ?? '').trim().toLowerCase();
+    if (<String>{'pending', 'approved', 'rejected'}.contains(cleaned)) {
+      return cleaned;
+    }
+    return 'not_submitted';
   }
 
   String _resolveStatus(String? status, bool? isApproved) {
@@ -235,10 +302,19 @@ class DriverRegisterController extends GetxController {
       hasSubmittedRequest.value = true;
       await prefs.setString(ApiKeyConstants.driverStatus, nextStatus);
     }
+    profileRequestStatus.value = _normalizeProfileStatus(
+        '${statusResponse['profileRequestStatus'] ?? 'not_submitted'}');
+    profileRejectionReason.value =
+        '${statusResponse['profileRejectionReason'] ?? ''}'.trim();
     rejectionReason.value =
         '${statusResponse[ApiKeyConstants.rejectionReason] ?? ''}'.trim();
 
-    if (showModalOnPending && (isPending || isRejected || isCompleted)) {
+    if (showModalOnPending &&
+        (isPending ||
+            isRejected ||
+            isCompleted ||
+            isProfilePending ||
+            isProfileRejected)) {
       showStatusModal.value = true;
     }
     _syncRouteWithDriverStatus();
@@ -271,6 +347,7 @@ class DriverRegisterController extends GetxController {
         driverStatus.value = ApiKeyConstants.pending;
         showStatusModal.value = true;
         await loadDriverState();
+        _captureInitialValues();
       } else {
         CommonWidgets.snackBarView(
           title: response?.message ?? 'Failed to send request',
@@ -296,9 +373,11 @@ class DriverRegisterController extends GetxController {
   }
 
   Future<void> submitCompleteProfile() async {
-    if (!isApproved) {
+    if (!isApproved || isProfilePending) {
       CommonWidgets.snackBarView(
-          title: 'Profile is locked until admin approval');
+          title: isProfilePending
+              ? 'Request 2 is already waiting for admin approval'
+              : 'Profile is locked until Request 1 is approved');
       return;
     }
 
@@ -371,9 +450,13 @@ class DriverRegisterController extends GetxController {
       );
 
       if (response?.success == true) {
-        driverStatus.value = ApiKeyConstants.completed;
+        // Uploading documents submits Request 2; it does not approve it.
+        driverStatus.value = ApiKeyConstants.approvedStatus;
+        profileRequestStatus.value = 'pending';
+        profileRejectionReason.value = '';
         showStatusModal.value = true;
         await loadDriverState();
+        _captureInitialValues();
       } else {
         final String message = (response?.message ?? '').trim();
         CommonWidgets.snackBarView(
@@ -401,6 +484,8 @@ class DriverRegisterController extends GetxController {
   }
 
   String get statusTitle {
+    if (isProfilePending) return 'Request 2 Submitted';
+    if (isProfileRejected) return 'Request 2 Needs Changes';
     if (isPending) return 'Registration Submitted';
     if (isRejected) return 'Request Rejected';
     if (isCompleted) return 'Profile Completed';
@@ -409,6 +494,15 @@ class DriverRegisterController extends GetxController {
   }
 
   String get statusMessage {
+    if (isProfilePending) {
+      return 'Your profile and documents were sent for Approval 2. You can access driver services after the admin approves them.';
+    }
+    if (isProfileRejected) {
+      final String reason = profileRejectionReason.value.trim();
+      return reason.isNotEmpty
+          ? 'Request 2 was rejected. Please correct and resubmit your profile. Reason: $reason'
+          : 'Request 2 was rejected. Please correct and resubmit your profile and documents.';
+    }
     if (isPending) {
       return 'Your request has been sent to admin for review. You will be able to complete your profile after approval.';
     }
@@ -420,7 +514,7 @@ class DriverRegisterController extends GetxController {
       return 'Your request was not approved. Please contact support.';
     }
     if (isCompleted) {
-      return 'Profile/documents submitted successfully.';
+      return 'Approval 1 and Approval 2 are complete. Your driver account is active.';
     }
     if (isApproved) {
       return 'Your request is approved. Please complete your profile.';

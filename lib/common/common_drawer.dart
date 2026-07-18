@@ -15,6 +15,13 @@ class CustomDrawer extends StatelessWidget {
   final Map<String, String> userData;
   const CustomDrawer({super.key, required this.userData});
 
+  Future<void> _navigate(BuildContext context, String route) async {
+    Navigator.of(context).pop();
+    if (Get.currentRoute != route) {
+      await Get.toNamed(route);
+    }
+  }
+
   void _showDeleteConfirmationDialog(BuildContext context) {
     showDialog(
       context: context,
@@ -158,18 +165,13 @@ class CustomDrawer extends StatelessWidget {
               //     style: TextStyle(color: Colors.white, fontSize: 24),
               //   ),
               // ),
-              Container(
-                height: 25.px,
-                width: 25.px,
-                alignment: Alignment.centerLeft,
-                child: GestureDetector(
-                  onTap: () {
-                    Get.back();
-                  },
-                  child: CommonWidgets.appIcons(
-                      assetName: IconConstants.icClose,
-                      height: 25.px,
-                      width: 25.px),
+              SizedBox(
+                height: 48,
+                width: 48,
+                child: IconButton(
+                  tooltip: 'Close menu',
+                  onPressed: () => Navigator.of(context).pop(),
+                  icon: const Icon(Icons.close_rounded),
                 ),
               ),
               Row(
@@ -203,6 +205,11 @@ class CustomDrawer extends StatelessWidget {
                 color: Colors.grey,
               ),
               ListTile(
+                selected: Get.currentRoute == Routes.SUPPORT_CHAT,
+                selectedTileColor: primaryColor.withOpacity(0.10),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10.px),
+                ),
                 contentPadding: EdgeInsets.zero,
                 leading: CommonWidgets.appIcons(
                     assetName: IconConstants.icSupport,
@@ -213,12 +220,16 @@ class CustomDrawer extends StatelessWidget {
                   style: MyTextStyle.titleStyle16b,
                 ),
                 onTap: () {
-                  Get.back();
-                  Get.toNamed(Routes.SUPPORT_CHAT);
+                  _navigate(context, Routes.SUPPORT_CHAT);
                 },
               ),
               if (userData[ApiKeyConstants.type] == ApiKeyConstants.driver)
                 ListTile(
+                  selected: Get.currentRoute == Routes.DOCUMENTS,
+                  selectedTileColor: primaryColor.withOpacity(0.10),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10.px),
+                  ),
                   contentPadding: EdgeInsets.zero,
                   leading: Icon(
                     Icons.file_copy_outlined,
@@ -230,8 +241,7 @@ class CustomDrawer extends StatelessWidget {
                     style: MyTextStyle.titleStyle16b,
                   ),
                   onTap: () {
-                    Get.back();
-                    Get.toNamed(Routes.DOCUMENTS);
+                    _navigate(context, Routes.DOCUMENTS);
                   },
                 ),
               const Spacer(),

@@ -4,6 +4,16 @@ import DriverLogs from "../models/Driverlogs.js";
 import Admin from "../models/Admin.js";
 import { sendResponse } from "../helpers/responseHelper.js";
 import { buildPublicAssetUrl } from "../utils/publicAssets.js";
+import { transitionDriverRequest } from "../services/driverRequestTransitionService.js";
+import {
+  AVAILABLE_DRIVER_FIELDS,
+  buildAvailableDriverFilter,
+} from "../utils/availableDrivers.js";
+
+export {
+  AVAILABLE_DRIVER_FIELDS,
+  buildAvailableDriverFilter,
+} from "../utils/availableDrivers.js";
 
 const DRIVER_STATUS = {
   PENDING: "pending",
@@ -11,6 +21,13 @@ const DRIVER_STATUS = {
   REJECTED: "rejected",
   COMPLETED: "completed",
 };
+
+export const canDriverSetOnlineStatus = (driver, requestedOnline) =>
+  requestedOnline !== true ||
+  (driver?.status === DRIVER_STATUS.COMPLETED &&
+    driver?.isApproved === true &&
+    driver?.isRestricted !== true &&
+    driver?.isDeleted !== true);
 
 const splitFullName = (fullName = "") => {
   const trimmed = String(fullName).trim();
@@ -37,29 +54,6 @@ const toBoolean = (value) => {
   if (value.toLowerCase() === "true") return true;
   if (value.toLowerCase() === "false") return false;
   return undefined;
-};
-
-const escapeRegex = (value) => String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-
-export const AVAILABLE_DRIVER_FIELDS =
-  "firstName lastName fullName phone whatsappNumber profileImageUrl city vehicleType lat long isOnline status updatedAt";
-
-export const buildAvailableDriverFilter = (query = {}) => {
-  const filter = {
-    isOnline: true,
-    isApproved: true,
-    isRestricted: false,
-    status: DRIVER_STATUS.COMPLETED,
-  };
-  if (query.city) {
-    filter.city = { $regex: new RegExp(`^${escapeRegex(query.city)}$`, "i") };
-  }
-  if (query.vehicleType) {
-    filter.vehicleType = {
-      $regex: new RegExp(`^${escapeRegex(query.vehicleType)}$`, "i"),
-    };
-  }
-  return filter;
 };
 
 const getFileUrl = (req, file) =>
@@ -110,13 +104,12 @@ const hasRequiredProfileDocs = (driver) => {
 };
 
 const normalizeDriverStatus = (driver) => {
-  const hasDocs = hasRequiredProfileDocs(driver);
-
   if (driver.isApproved) {
-    driver.status =
-      driver.status === DRIVER_STATUS.COMPLETED || hasDocs
-        ? DRIVER_STATUS.COMPLETED
-        : DRIVER_STATUS.APPROVED;
+    // Request 1 approval is independent from the document/profile request.
+    // Never infer legacy "completed" merely because profile documents exist.
+    if (![DRIVER_STATUS.APPROVED, DRIVER_STATUS.COMPLETED].includes(driver.status)) {
+      driver.status = DRIVER_STATUS.APPROVED;
+    }
     syncLegacyFields(driver);
     return;
   }
@@ -131,14 +124,7 @@ const normalizeDriverStatus = (driver) => {
     return;
   }
 
-  const approved = Boolean(driver.isApproved);
-  if (approved && hasDocs) {
-    driver.status = DRIVER_STATUS.COMPLETED;
-  } else if (approved) {
-    driver.status = DRIVER_STATUS.APPROVED;
-  } else {
-    driver.status = DRIVER_STATUS.PENDING;
-  }
+  driver.status = DRIVER_STATUS.PENDING;
   syncLegacyFields(driver);
 };
 
@@ -284,6 +270,17 @@ export const getDriverVerificationStatus = async (req, res) => {
       status: driver.status,
       rejection_reason: driver.rejectionReason ?? "",
       isProfileUnlocked: driver.status === DRIVER_STATUS.APPROVED,
+      profile_request_status: driver.profileRequestStatus || "not_submitted",
+      profileRequestStatus: driver.profileRequestStatus || "not_submitted",
+      profile_rejection_reason: driver.profileRejectionReason || "",
+      profileRejectionReason: driver.profileRejectionReason || "",
+      profile_submitted_at: driver.profileSubmittedAt || null,
+      profileSubmittedAt: driver.profileSubmittedAt || null,
+      profile_approved_at: driver.profileApprovedAt || null,
+      profileApprovedAt: driver.profileApprovedAt || null,
+      isFullyApproved:
+        driver.status === DRIVER_STATUS.COMPLETED &&
+        driver.profileRequestStatus === DRIVER_STATUS.APPROVED,
     });
   } catch (error) {
     return res.status(500).send({
@@ -336,33 +333,46 @@ export const completeDriverProfile = async (req, res) => {
     }
 
     const body = req.body || {};
-    if (body.first_name) driver.firstName = String(body.first_name).trim();
-    if (body.last_name) driver.lastName = String(body.last_name).trim();
 
-    driver.address = String(body.address || "").trim();
-    driver.contractNumber = String(body.contract_number || "").trim();
-    driver.licenseCompany = String(body.license_company || "").trim();
-    driver.city = String(body.city || driver.city || "").trim();
-    driver.vehicleType = String(
-      body.vehicle_type || body.vehicleType || driver.vehicleType || ""
-    ).trim();
-
-    setDriverFiles(driver, req, req.files || {});
-    applyStatusTransition(driver, DRIVER_STATUS.COMPLETED);
-    driver.completedAt = new Date();
-
-    await driver.save();
+    const transitionedDriver = await transitionDriverRequest({
+      requestId: driver._id,
+      newStatus: "pending",
+      requestStage: "profile",
+      actor: {
+        _id: req.user._id,
+        fullName: driver.fullName,
+        email: driver.email,
+        actorType: "driver",
+      },
+      mutateDriver: async (currentDriver) => {
+        if (body.first_name) currentDriver.firstName = String(body.first_name).trim();
+        if (body.last_name) currentDriver.lastName = String(body.last_name).trim();
+        currentDriver.address = String(body.address || "").trim();
+        currentDriver.contractNumber = String(body.contract_number || "").trim();
+        currentDriver.licenseCompany = String(body.license_company || "").trim();
+        currentDriver.city = String(body.city || currentDriver.city || "").trim();
+        currentDriver.vehicleType = String(
+          body.vehicle_type || body.vehicleType || currentDriver.vehicleType || ""
+        ).trim();
+        setDriverFiles(currentDriver, req, req.files || {});
+        currentDriver.fullName = [currentDriver.firstName, currentDriver.lastName]
+          .filter(Boolean)
+          .join(" ")
+          .trim();
+      },
+    });
 
     return res.status(200).send({
       success: true,
-      message: "Driver profile completed successfully",
-      driver,
+      message: "Driver profile submitted for approval successfully",
+      driver: transitionedDriver,
     });
   } catch (error) {
-    return res.status(500).send({
+    const statusCode = Number(error?.statusCode) || 500;
+    return res.status(statusCode).send({
       success: false,
-      message: "Failed to complete profile",
-      error: error.message,
+      message: statusCode === 500 ? "Failed to complete profile" : error.message,
+      ...(error?.code ? { code: error.code } : {}),
     });
   }
 };
@@ -446,7 +456,10 @@ export const updatePersonalDetails = async (req, res) => {
     }
 
     normalizeDriverStatus(driver);
-    if (!requesterIsAdmin && driver.status !== DRIVER_STATUS.APPROVED) {
+    if (
+      !requesterIsAdmin &&
+      ![DRIVER_STATUS.APPROVED, DRIVER_STATUS.COMPLETED].includes(driver.status)
+    ) {
       return res.status(403).send({
         success: false,
         message: "Profile update is locked until admin approval",
@@ -455,6 +468,7 @@ export const updatePersonalDetails = async (req, res) => {
 
     const files = req.files || {};
     const logData = {};
+    let responseDriver = driver;
 
     const allowedFields = [
       "fullName",
@@ -511,26 +525,40 @@ export const updatePersonalDetails = async (req, res) => {
         }
       });
 
-      const driverLog = await DriverLogs.findOneAndUpdate(
-        { driverId: driver._id },
-        { $set: logData },
-        { new: true, upsert: true }
-      );
-      driver.driverLogs = driverLog._id;
-      driver.isUpdate = true;
-      await driver.save();
+      responseDriver = await transitionDriverRequest({
+        requestId: driver._id,
+        newStatus: "pending",
+        requestStage: "profile",
+        actor: {
+          _id: req.user._id,
+          fullName: driver.fullName,
+          email: driver.email,
+          actorType: "driver",
+        },
+        reason: "Driver profile documents updated",
+        mutateDriver: async (currentDriver, { session }) => {
+          const driverLog = await DriverLogs.findOneAndUpdate(
+            { driverId: currentDriver._id },
+            { $set: logData },
+            { new: true, upsert: true, setDefaultsOnInsert: true, session }
+          );
+          currentDriver.driverLogs = driverLog._id;
+          currentDriver.isUpdate = true;
+        },
+      });
     }
 
     return res.status(200).send({
       success: true,
       message: "Personal details updated successfully",
-      driver,
+      driver: responseDriver,
     });
   } catch (error) {
-    return res.status(500).send({
+    const statusCode = Number(error?.statusCode) || 500;
+    return res.status(statusCode).send({
       success: false,
-      message: "Failed to update details",
-      error: error.message,
+      message: statusCode === 500 ? "Failed to update details" : error.message,
+      ...(error?.code ? { code: error.code } : {}),
     });
   }
 };
@@ -564,7 +592,7 @@ export const updateDriverDetails = async (req, res) => {
     ];
     const adminFields = [
       ...selfFields, "contractNumber", "licenseCompany", "isRestricted",
-      "status", "rejectionReason",
+      "rejectionReason",
     ];
     const allowedFields = requesterIsAdmin ? adminFields : selfFields;
     Object.keys(req.body || {}).forEach((key) => {
@@ -573,11 +601,7 @@ export const updateDriverDetails = async (req, res) => {
       }
     });
 
-    if (requesterIsAdmin && req.body?.status && Object.values(DRIVER_STATUS).includes(req.body.status)) {
-      applyStatusTransition(driver, req.body.status, req.body.rejectionReason);
-    } else {
-      syncLegacyFields(driver);
-    }
+    syncLegacyFields(driver);
 
     await driver.save();
     return res.status(200).send({
@@ -817,6 +841,19 @@ export const updateOnlineStatus = async (req, res) => {
       });
     }
 
+    // Query the raw legacy shape before Mongoose applies schema defaults to
+    // fields that did not exist in pre-workflow driver records.
+    const isLegacyApprovedDriver = Boolean(
+      await Driver.exists({
+        _id: req.user._id,
+        isApproved: true,
+        isRestricted: false,
+        isDeleted: { $ne: true },
+        status: null,
+        profileRequestStatus: null,
+      })
+    );
+
     const driver = await Driver.findById(req.user._id);
     if (!driver) {
       return res.status(404).send({
@@ -825,11 +862,19 @@ export const updateOnlineStatus = async (req, res) => {
       });
     }
 
-    normalizeDriverStatus(driver);
-    if (driver.status !== DRIVER_STATUS.COMPLETED) {
+    if (isLegacyApprovedDriver) {
+      // Migrate this driver lazily so saving the online flag cannot persist a
+      // schema default of "pending" and make the account undiscoverable again.
+      driver.status = DRIVER_STATUS.COMPLETED;
+      driver.profileRequestStatus = DRIVER_STATUS.APPROVED;
+      driver.completedAt ||= driver.approvedAt || driver.createdAt || new Date();
+    } else {
+      normalizeDriverStatus(driver);
+    }
+    if (!canDriverSetOnlineStatus(driver, isOnline)) {
       return res.status(403).send({
         success: false,
-        message: "Only completed drivers can go online",
+        message: "Only completed, active drivers can go online",
       });
     }
 
@@ -924,18 +969,26 @@ export const getAllOnlineDrivers = async (req, res) => {
 export const toggleDriverApproval = async (req, res) => {
   try {
     const { driverId } = req.params;
-    const driver = await Driver.findById(driverId);
-    if (!driver) {
+    const current = await Driver.findById(driverId).select("status isApproved").lean();
+    if (!current) {
       return res.status(404).json({ message: "Driver not found" });
     }
 
-    normalizeDriverStatus(driver);
-    if (driver.isApproved) {
-      applyStatusTransition(driver, DRIVER_STATUS.PENDING);
-    } else {
-      applyStatusTransition(driver, DRIVER_STATUS.APPROVED);
-    }
-    await driver.save();
+    const currentStatus = current.status || (current.isApproved ? "approved" : "pending");
+    const newStatus = [DRIVER_STATUS.APPROVED, DRIVER_STATUS.COMPLETED].includes(currentStatus)
+      ? DRIVER_STATUS.PENDING
+      : DRIVER_STATUS.APPROVED;
+    const driver = await transitionDriverRequest({
+      requestId: driverId,
+      newStatus,
+      actor: {
+        _id: req.admin?._id || req.user?._id,
+        fullName: req.admin?.fullName || "",
+        email: req.admin?.email || "",
+        actorType: "admin",
+      },
+      reason: "Legacy approval toggle",
+    });
 
     return res.status(200).json({
       success: true,
@@ -943,7 +996,10 @@ export const toggleDriverApproval = async (req, res) => {
       driver,
     });
   } catch (error) {
-    return res.status(500).json({ message: "Server error" });
+    return res.status(error.statusCode || 500).json({
+      success: false,
+      message: error.statusCode ? error.message : "Server error",
+    });
   }
 };
 
@@ -986,7 +1042,19 @@ export const deleteDriver = async (req, res) => {
       });
     }
 
-    const driver = await Driver.findByIdAndDelete(driverId);
+    const driver = await Driver.findByIdAndUpdate(
+      driverId,
+      {
+        $set: {
+          isDeleted: true,
+          deletedAt: new Date(),
+          deletedBy: req.user?._id,
+          isOnline: false,
+          isRestricted: true,
+        },
+      },
+      { new: true, runValidators: true }
+    );
     if (!driver) {
       return res.status(404).json({
         success: false,
@@ -996,7 +1064,7 @@ export const deleteDriver = async (req, res) => {
 
     return res.status(200).json({
       success: true,
-      message: "Driver deleted successfully",
+      message: "Driver account deactivated successfully; request history was preserved",
       driver,
     });
   } catch (error) {

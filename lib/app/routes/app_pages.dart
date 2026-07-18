@@ -9,6 +9,8 @@ import '../modules/driver_register/views/driver_complete_profile_view.dart';
 import '../modules/driver_register/views/driver_register_view.dart';
 import '../modules/login/bindings/login_binding.dart';
 import '../modules/login/views/login_view.dart';
+import '../modules/notification/bindings/notification_binding.dart';
+import '../modules/notification/views/notification_view.dart';
 import '../modules/otp/bindings/otp_binding.dart';
 import '../modules/otp/views/otp_view.dart';
 import '../modules/splash/bindings/splash_binding.dart';
@@ -86,6 +88,11 @@ class AppPages {
       name: _Paths.SUPPORT_CHAT,
       page: () => const SupportChatView(),
       binding: SupportChatBinding(),
+    ),
+    GetPage(
+      name: _Paths.NOTIFICATIONS,
+      page: () => const NotificationView(),
+      binding: NotificationBinding(),
     ),
     GetPage(
       name: _Paths.DOCUMENTS,

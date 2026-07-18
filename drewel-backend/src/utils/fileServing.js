@@ -11,11 +11,18 @@ const SAFE_CONTENT_TYPES = new Map([
 const getSafeContentType = (fileName) =>
   SAFE_CONTENT_TYPES.get(path.extname(fileName).toLowerCase());
 
-const setContentHeaders = (res, fileName, contentType) => {
+const setContentHeaders = (
+  res,
+  fileName,
+  contentType,
+  { disposition = "inline", cacheControl } = {}
+) => {
   const headerFileName = fileName.replace(/[^a-zA-Z0-9._-]/g, "_");
-  res.setHeader("Content-Disposition", `inline; filename="${headerFileName}"`);
+  const safeDisposition = disposition === "attachment" ? "attachment" : "inline";
+  res.setHeader("Content-Disposition", `${safeDisposition}; filename="${headerFileName}"`);
   res.setHeader("X-Content-Type-Options", "nosniff");
   res.setHeader("Content-Type", contentType);
+  if (cacheControl) res.setHeader("Cache-Control", cacheControl);
 };
 
 export const serveUploadedFile = async ({
@@ -23,6 +30,8 @@ export const serveUploadedFile = async ({
   fileName,
   localPaths = [],
   s3Prefixes = [],
+  disposition = "inline",
+  cacheControl,
 }) => {
   const safeFileName = path.basename(fileName || "");
   if (!safeFileName) {
@@ -38,7 +47,7 @@ export const serveUploadedFile = async ({
   if (isS3StorageEnabled()) {
     const s3File = await getS3ObjectByFileName(s3Prefixes, safeFileName);
     if (s3File?.object?.Body) {
-      setContentHeaders(res, safeFileName, contentType);
+      setContentHeaders(res, safeFileName, contentType, { disposition, cacheControl });
       s3File.object.Body.pipe(res);
       return;
     }
@@ -50,6 +59,6 @@ export const serveUploadedFile = async ({
     return;
   }
 
-  setContentHeaders(res, safeFileName, contentType);
+  setContentHeaders(res, safeFileName, contentType, { disposition, cacheControl });
   res.sendFile(fileToServe);
 };

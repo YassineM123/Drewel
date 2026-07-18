@@ -45,7 +45,9 @@ class OtpController extends GetxController {
 
   String _resolveDriverStatus(User? user) {
     final String status = _normalizeDriverStatus(user?.status);
-    if (status == ApiKeyConstants.completed) return ApiKeyConstants.completed;
+    if (status == ApiKeyConstants.completed) {
+      return ApiKeyConstants.completed;
+    }
     if (user?.isApproved == true) return ApiKeyConstants.approvedStatus;
     return status;
   }

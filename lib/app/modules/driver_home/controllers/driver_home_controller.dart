@@ -27,7 +27,7 @@ import '../../../routes/app_pages.dart';
 
 class DriverHomeController extends GetxController with WidgetsBindingObserver {
   final GlobalKey<ScaffoldState> scaffoldKey = GlobalKey<ScaffoldState>();
-  TextEditingController locationController=TextEditingController();
+  TextEditingController locationController = TextEditingController();
   FocusNode locationFocusNode = FocusNode();
   final lat = 23.4241.obs;
   final lon = 53.8478.obs;
@@ -35,12 +35,13 @@ class DriverHomeController extends GetxController with WidgetsBindingObserver {
   GoogleMapController? xController;
 
   final count = 0.obs;
-  BitmapDescriptor customMarker=BitmapDescriptor.defaultMarker;
+  BitmapDescriptor customMarker = BitmapDescriptor.defaultMarker;
+
   /// Google Places autocomplete suggestions
   final RxList<Prediction> placeSuggestions = <Prediction>[].obs;
   Timer? _placesDebounce;
   StreamSubscription<Position>? _positionStreamSubscription;
-  
+
   // Socket service for real-time location updates
   final SocketService socketService = SocketService();
   Timer? _locationUpdateTimer;
@@ -48,23 +49,27 @@ class DriverHomeController extends GetxController with WidgetsBindingObserver {
   String? _driverName;
   String? _vehicleType;
   String? _city;
-  static const int _locationUpdateIntervalSeconds = 10; // Update every 10 seconds
+  static const int _locationUpdateIntervalSeconds =
+      10; // Update every 10 seconds
   DateTime? _lastDriverLocationApiUpdateAt;
   bool _isUpdatingDriverLocation = false;
   bool _hasDriverLocation = false;
 
   bool get _isDriverOnline => !isGoOnline.value;
 
-  Future<BitmapDescriptor> getResizedMarker(String assetPath, {int width = 80}) async {
+  Future<BitmapDescriptor> getResizedMarker(String assetPath,
+      {int width = 80}) async {
     final ByteData data = await rootBundle.load(assetPath);
     final codec = await ui.instantiateImageCodec(
       data.buffer.asUint8List(),
       targetWidth: width, // adjust width for desired size
     );
     final frameInfo = await codec.getNextFrame();
-    final resizedImage = await frameInfo.image.toByteData(format: ui.ImageByteFormat.png);
+    final resizedImage =
+        await frameInfo.image.toByteData(format: ui.ImageByteFormat.png);
     return BitmapDescriptor.fromBytes(resizedImage!.buffer.asUint8List());
   }
+
   void loadCustomMarker() async {
     if (Platform.isIOS) {
       customMarker = await getResizedMarker(
@@ -79,9 +84,10 @@ class DriverHomeController extends GetxController with WidgetsBindingObserver {
     }
     increment(); // Trigger a rebuild
   }
-  final isGoOnline=true.obs;
-  final showLoading=false.obs;
-  final RxMap<String,String> userData = <String,String>{}.obs;
+
+  final isGoOnline = true.obs;
+  final showLoading = false.obs;
+  final RxMap<String, String> userData = <String, String>{}.obs;
   @override
   void onInit() {
     super.onInit();
@@ -92,7 +98,6 @@ class DriverHomeController extends GetxController with WidgetsBindingObserver {
     _initSocket();
   }
 
-
   @override
   void onClose() {
     WidgetsBinding.instance.removeObserver(this);
@@ -102,11 +107,12 @@ class DriverHomeController extends GetxController with WidgetsBindingObserver {
     socketService.disconnect();
     super.onClose();
   }
-  
+
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     super.didChangeAppLifecycleState(state);
-    if (state == AppLifecycleState.paused || state == AppLifecycleState.detached) {
+    if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.detached) {
       // App is in background or closing - stop location updates
       _stopLocationUpdates();
       _stopRealtimeLocationTracking();
@@ -119,57 +125,55 @@ class DriverHomeController extends GetxController with WidgetsBindingObserver {
       }
     }
   }
-  
+
   /// Initialize socket connection
   Future<void> _initSocket() async {
     SharedPreferences pref = await SharedPreferences.getInstance();
     String token = pref.getString(ApiKeyConstants.token) ?? '';
     _driverId = pref.getString(ApiKeyConstants.userId) ?? '';
-    
+
     if (token.isNotEmpty) {
+      socketService.onLocationTrackingReady(() {
+        print('Driver location tracking authenticated and ready');
+      });
       socketService.connect(ApiUrlConstants.socketUrl, token);
       socketService.onConnect(() {
-        print('Driver location socket ready');
-        if (_isDriverOnline) {
-          _emitCurrentLocation();
-        }
+        print('Driver location socket connected');
       });
       print('Socket connected for driver location updates');
     }
   }
-  
+
   /// Start periodic location updates via socket
   void _startLocationUpdates() {
     _stopLocationUpdates(); // Stop any existing timer
-    
+
     // Emit location immediately
     _emitCurrentLocation();
-    
+
     // Then emit every 10 seconds
     _locationUpdateTimer = Timer.periodic(
       const Duration(seconds: _locationUpdateIntervalSeconds),
       (_) => _emitCurrentLocation(),
     );
-    
-    print('Started location updates - emitting every $_locationUpdateIntervalSeconds seconds');
+
+    print(
+        'Started location updates - emitting every $_locationUpdateIntervalSeconds seconds');
   }
-  
+
   /// Stop periodic location updates
   void _stopLocationUpdates() {
     _locationUpdateTimer?.cancel();
     _locationUpdateTimer = null;
     print('Stopped location updates');
   }
-  
+
   /// Emit current location to socket
   void _emitCurrentLocation() {
     if (!_hasDriverLocation) return;
     if (_driverId == null || _driverId!.isEmpty) return;
-    if (!socketService.isConnected) {
-      print('Socket not connected, skipping location emit');
-      return;
-    }
-    
+    // SocketService retains the latest fix while disconnected/authenticating
+    // and flushes it as soon as location tracking is ready.
     socketService.emitDriverLocationUpdate({
       'driverId': _driverId,
       'lat': lat.value,
@@ -242,6 +246,12 @@ class DriverHomeController extends GetxController with WidgetsBindingObserver {
     }
 
     if (hasPositionChanged) {
+      // Push an accepted GPS movement immediately. The periodic timer remains
+      // as a heartbeat, while SocketService queues the newest fix until the
+      // authenticated realtime channel is ready.
+      if (_isDriverOnline) {
+        _emitCurrentLocation();
+      }
       increment();
     }
   }
@@ -279,8 +289,7 @@ class DriverHomeController extends GetxController with WidgetsBindingObserver {
 
     _isUpdatingDriverLocation = true;
     try {
-      final bool updated =
-          await callingUpdateDriverLocation(showError: false);
+      final bool updated = await callingUpdateDriverLocation(showError: false);
       if (updated) {
         _lastDriverLocationApiUpdateAt = now;
       }
@@ -340,11 +349,12 @@ class DriverHomeController extends GetxController with WidgetsBindingObserver {
     increment();
   }
 
-  void clickOnMenu(){
-    if(userData.isNotEmpty){
+  void clickOnMenu() {
+    if (userData.isNotEmpty) {
       scaffoldKey.currentState?.openEndDrawer();
-    }else{
-      CommonWidgets.showMyToastMessage('Driver data is loading please wait ....');
+    } else {
+      CommonWidgets.showMyToastMessage(
+          'Driver data is loading please wait ....');
     }
   }
 
@@ -389,27 +399,32 @@ class DriverHomeController extends GetxController with WidgetsBindingObserver {
                 mainAxisAlignment: MainAxisAlignment.center,
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  Icon(Icons.location_on,size: 100.px,color: primaryColor,),
+                  Icon(
+                    Icons.location_on,
+                    size: 100.px,
+                    color: primaryColor,
+                  ),
                   SizedBox(
                     height: 20.px,
                   ),
                   Text(
-                    StringConstants.enableLocation, style: MyTextStyle.titleStyle20bb,),
+                    StringConstants.enableLocation,
+                    style: MyTextStyle.titleStyle20bb,
+                  ),
                   SizedBox(
                     height: 10.px,
                   ),
                   Text(
-                    StringConstants
-                        .toUseThisServicesWeNeedPermissionToAccess,
+                    StringConstants.toUseThisServicesWeNeedPermissionToAccess,
                     style: MyTextStyle.titleStyle12b,
                     textAlign: TextAlign.center,
                   ),
                   CommonWidgets.commonElevatedButton(
-                    context: context,
+                      context: context,
                       onPressed: () async {
                         Get.back();
                         LocationPermission permission =
-                        await Geolocator.requestPermission();
+                            await Geolocator.requestPermission();
                         if (permission == LocationPermission.denied) {
                           print('Permission Denied.....');
                           showPermissionAlert();
@@ -426,8 +441,10 @@ class DriverHomeController extends GetxController with WidgetsBindingObserver {
                   GestureDetector(
                     onTap: () {
                       Get.back();
-                      CommonWidgets.snackBarView(title:
-                      'Without location permission you can not use app...',success: false);
+                      CommonWidgets.snackBarView(
+                          title:
+                              'Without location permission you can not use app...',
+                          success: false);
                       showPermissionAlert();
                     },
                     child: Container(
@@ -438,7 +455,9 @@ class DriverHomeController extends GetxController with WidgetsBindingObserver {
                           borderRadius: BorderRadius.circular(15.px),
                           color: primaryColor.withOpacity(0.8)),
                       child: Text(
-                        StringConstants.cancel, style: MyTextStyle.titleStyle16bw,),
+                        StringConstants.cancel,
+                        style: MyTextStyle.titleStyle16bw,
+                      ),
                     ),
                   ),
                 ],
@@ -447,7 +466,6 @@ class DriverHomeController extends GetxController with WidgetsBindingObserver {
           );
         });
   }
-
 
   Future<void> clickOnLocation(Prediction prediction) async {
     locationController.text = prediction.description ?? "";
@@ -498,104 +516,113 @@ class DriverHomeController extends GetxController with WidgetsBindingObserver {
     }
   }
 
-
   Future<bool> callingUpdateDriverLocation({bool showError = true}) async {
     try {
-        Map<String, dynamic> bodyParams = {
-          ApiKeyConstants.lat:lat.value,
-          ApiKeyConstants.long:lon.value,
-        };
-        SimpleResponseModel? simpleResponseModel =
-        await ApiMethods.driverUpdateLocationApi(bodyParams: bodyParams);
-        if (simpleResponseModel != null && simpleResponseModel.success != null &&
-            simpleResponseModel.success! ) {
-          print('update location successfully completed....');
-          return true;
-          } else {
-          if (showError) {
-            CommonWidgets.snackBarView(title: simpleResponseModel?.message??'Current location Failed ...');
-          }
-        }
-      } catch (e) {
+      Map<String, dynamic> bodyParams = {
+        ApiKeyConstants.lat: lat.value,
+        ApiKeyConstants.long: lon.value,
+      };
+      SimpleResponseModel? simpleResponseModel =
+          await ApiMethods.driverUpdateLocationApi(bodyParams: bodyParams);
+      if (simpleResponseModel != null &&
+          simpleResponseModel.success != null &&
+          simpleResponseModel.success!) {
+        print('update location successfully completed....');
+        return true;
+      } else {
         if (showError) {
-          CommonWidgets.snackBarView(title: 'Somethings wrong...');
+          CommonWidgets.snackBarView(
+              title: simpleResponseModel?.message ??
+                  'Current location Failed ...');
         }
       }
-    return false;
-  }
-  Future<void> callingUpdateDriverOnlineStatus() async {
-    try {
-        Map<String, dynamic> bodyParams = {
-          ApiKeyConstants.isOnline:isGoOnline.value,
-        };
-        showLoading.value=true;
-        SimpleResponseModel? simpleResponseModel =
-        await ApiMethods.driverUpdateOnlineStatusApi(bodyParams: bodyParams);
-        if (simpleResponseModel != null && simpleResponseModel.success != null &&
-            simpleResponseModel.success! ) {
-          print('update online status successfully completed....');
-          isGoOnline.value=!isGoOnline.value;
-          
-          // Start/Stop socket location updates based on online status
-          if (_isDriverOnline) {
-            // Driver is now online - start emitting location
-            _startLocationUpdates();
-            _syncDriverLocationToServer(force: true);
-          } else {
-            // Driver is now offline - stop emitting location
-            _stopLocationUpdates();
-          }
-          } else {
-          CommonWidgets.snackBarView(title: simpleResponseModel?.message??'Current location Failed ...');
-        }
-      } catch (e) {
+    } catch (e) {
+      if (showError) {
         CommonWidgets.snackBarView(title: 'Somethings wrong...');
       }
-    showLoading.value=false;
-
+    }
+    return false;
   }
+
+  Future<void> callingUpdateDriverOnlineStatus() async {
+    try {
+      Map<String, dynamic> bodyParams = {
+        ApiKeyConstants.isOnline: isGoOnline.value,
+      };
+      showLoading.value = true;
+      SimpleResponseModel? simpleResponseModel =
+          await ApiMethods.driverUpdateOnlineStatusApi(bodyParams: bodyParams);
+      if (simpleResponseModel != null &&
+          simpleResponseModel.success != null &&
+          simpleResponseModel.success!) {
+        print('update online status successfully completed....');
+        isGoOnline.value = !isGoOnline.value;
+
+        // Start/Stop socket location updates based on online status
+        if (_isDriverOnline) {
+          // Driver is now online - start emitting location
+          _startLocationUpdates();
+          _syncDriverLocationToServer(force: true);
+        } else {
+          // Driver is now offline - stop emitting location
+          _stopLocationUpdates();
+        }
+      } else {
+        CommonWidgets.snackBarView(
+            title:
+                simpleResponseModel?.message ?? 'Current location Failed ...');
+      }
+    } catch (e) {
+      CommonWidgets.snackBarView(title: 'Somethings wrong...');
+    }
+    showLoading.value = false;
+  }
+
   Future<void> callingGetDriverDetails() async {
     print('start driver details.......');
     try {
-        SharedPreferences pref=await SharedPreferences.getInstance();
-       String driverId=pref.getString(ApiKeyConstants.userId)??'';
-        AddDriverDetailModel? loginModel =
-        await ApiMethods.getDriverDetailsApi(driverId: driverId);
-        if (loginModel != null && loginModel.success != null &&
-            loginModel.success! && loginModel.driver!=null ) {
-          print('get driver details successfully completed....');
-          userData.value = {
-            ApiKeyConstants.phone:loginModel.driver!.phone??'',
-            ApiKeyConstants.countryCode:loginModel.driver!.countryCode??'',
-            ApiKeyConstants.profileImage:loginModel.driver!.profileImageUrl??'',
-            ApiKeyConstants.fullName:loginModel.driver!.fullName??'',
-            ApiKeyConstants.type:ApiKeyConstants.driver,
-          };
-          
-          // Store driver info for socket location updates
-          _driverId = driverId;
-          _driverName = loginModel.driver!.fullName ?? '';
-          _vehicleType = loginModel.driver!.vehicleType ?? '';
-          _city = loginModel.driver!.city ?? '';
-          
-           if(loginModel.driver!.isOnline??false){
-             isGoOnline.value=false;
-             // Driver is online - start location updates
-             _startLocationUpdates();
-             _syncDriverLocationToServer(force: true);
-           }else{
-             isGoOnline.value=true;
-           }
-           if(!(loginModel.driver!.isApproved??false)){
-             pref.clear();
-             Get.offNamedUntil(Routes.SPLASH, (routes)=>false);
-           }
-          } else {
-          CommonWidgets.snackBarView(title: loginModel?.message??'Get driver data Failed ...');
-        }
-      } catch (e) {
-        CommonWidgets.snackBarView(title: 'Somethings wrong...');
-      }
+      SharedPreferences pref = await SharedPreferences.getInstance();
+      String driverId = pref.getString(ApiKeyConstants.userId) ?? '';
+      AddDriverDetailModel? loginModel =
+          await ApiMethods.getDriverDetailsApi(driverId: driverId);
+      if (loginModel != null &&
+          loginModel.success != null &&
+          loginModel.success! &&
+          loginModel.driver != null) {
+        print('get driver details successfully completed....');
+        userData.value = {
+          ApiKeyConstants.phone: loginModel.driver!.phone ?? '',
+          ApiKeyConstants.countryCode: loginModel.driver!.countryCode ?? '',
+          ApiKeyConstants.profileImage:
+              loginModel.driver!.profileImageUrl ?? '',
+          ApiKeyConstants.fullName: loginModel.driver!.fullName ?? '',
+          ApiKeyConstants.type: ApiKeyConstants.driver,
+        };
 
+        // Store driver info for socket location updates
+        _driverId = driverId;
+        _driverName = loginModel.driver!.fullName ?? '';
+        _vehicleType = loginModel.driver!.vehicleType ?? '';
+        _city = loginModel.driver!.city ?? '';
+
+        if (loginModel.driver!.isOnline ?? false) {
+          isGoOnline.value = false;
+          // Driver is online - start location updates
+          _startLocationUpdates();
+          _syncDriverLocationToServer(force: true);
+        } else {
+          isGoOnline.value = true;
+        }
+        if (!(loginModel.driver!.isApproved ?? false)) {
+          pref.clear();
+          Get.offNamedUntil(Routes.SPLASH, (routes) => false);
+        }
+      } else {
+        CommonWidgets.snackBarView(
+            title: loginModel?.message ?? 'Get driver data Failed ...');
+      }
+    } catch (e) {
+      CommonWidgets.snackBarView(title: 'Somethings wrong...');
+    }
   }
 }

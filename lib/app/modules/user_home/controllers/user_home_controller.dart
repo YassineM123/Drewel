@@ -58,6 +58,7 @@ class UserHomeController extends GetxController
   final lon = 53.8478.obs;
   LatLng mapPosition = const LatLng(23.4241, 53.8478);
   GoogleMapController? xController;
+  bool _isMapReady = false;
 
   final count = 0.obs;
   int selectIndex = -1;
@@ -74,6 +75,8 @@ class UserHomeController extends GetxController
   String? _currentCity;
   bool _isRefreshingDriverList = false;
   bool _isControllerClosed = false;
+  bool _areViewResourcesDisposed = false;
+  bool get _canUpdateView => !_isControllerClosed && !_areViewResourcesDisposed;
   static const int _driverPollingIntervalSeconds = 5;
   static const int _maxDriverPollingIntervalSeconds = 60;
   int _consecutiveDriverRefreshFailures = 0;
@@ -82,6 +85,10 @@ class UserHomeController extends GetxController
   final isDriversLoading = true.obs;
   final isDriverServiceUnavailable = false.obs;
   final driverServiceMessage = ''.obs;
+  final isUsingRegionalDriverFallback = false.obs;
+  final regionalDriverMessage = ''.obs;
+  bool _pendingRegionalDriverFit = false;
+  String? _fittedRegionalDriverId;
 
   // User location state
   final isUserLocationLoaded = false.obs;
@@ -195,6 +202,7 @@ class UserHomeController extends GetxController
         tintColor: primaryColor,
       );
     }
+    if (!_canUpdateView) return;
     increment(); // Trigger a rebuild
   }
 
@@ -221,17 +229,48 @@ class UserHomeController extends GetxController
 
   /// Go to user's current location on map
   void goToUserLocation() {
-    if (isUserLocationLoaded.value && xController != null) {
-      xController!.animateCamera(
+    if (isUserLocationLoaded.value) {
+      unawaited(_animateCamera(
         CameraUpdate.newCameraPosition(
           CameraPosition(
             target: userLocation,
             zoom: 14,
           ),
         ),
-      );
+      ));
     }
     increment();
+  }
+
+  Future<void> onMapCreated(GoogleMapController mapController) async {
+    _isMapReady = false;
+    xController = mapController;
+    currentVisibleBounds = null;
+
+    // On Flutter web the Dart controller can be delivered before the platform
+    // view is registered in google_maps_flutter_web. Waiting for the frame that
+    // built the view prevents calls against an unregistered map id.
+    await WidgetsBinding.instance.endOfFrame;
+    if (!_canUpdateView || xController != mapController) return;
+
+    _isMapReady = true;
+    await onCameraIdle();
+    if (_pendingRegionalDriverFit) {
+      _fitRegionalDriverCoverage();
+    }
+  }
+
+  Future<void> _animateCamera(CameraUpdate update) async {
+    final GoogleMapController? mapController = xController;
+    if (!_isMapReady || !_canUpdateView || mapController == null) return;
+
+    try {
+      await mapController.animateCamera(update);
+    } catch (error) {
+      // The web platform view may have been removed while an async action was
+      // queued. A future onMapCreated callback will register the new map.
+      debugPrint('Skipped camera update for an unavailable map: $error');
+    }
   }
 
   /// Set selected location (from search or marker drag)
@@ -271,6 +310,7 @@ class UserHomeController extends GetxController
       print('Reverse geocoding: $url');
 
       final response = await http.get(Uri.parse(url));
+      if (!_canUpdateView) return;
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
@@ -337,6 +377,109 @@ class UserHomeController extends GetxController
     return degrees * (math.pi / 180);
   }
 
+  LatLng get _selectedCityCenter {
+    final List<Map<String, dynamic>> cities = LocalData().cityLatLongList;
+    final int requestedIndex = int.tryParse(
+          parameter[ApiKeyConstants.index] ?? '0',
+        ) ??
+        0;
+    final int safeIndex = requestedIndex.clamp(0, cities.length - 1);
+    return LatLng(
+      (cities[safeIndex]['lat'] as num).toDouble(),
+      (cities[safeIndex]['lon'] as num).toDouble(),
+    );
+  }
+
+  LatLng? _driverPosition(Drivers driver) {
+    final double? latitude = double.tryParse(driver.lat?.toString() ?? '');
+    final double? longitude = double.tryParse(driver.long?.toString() ?? '');
+    if (latitude == null ||
+        longitude == null ||
+        !latitude.isFinite ||
+        !longitude.isFinite ||
+        latitude < -90 ||
+        latitude > 90 ||
+        longitude < -180 ||
+        longitude > 180 ||
+        (latitude == 0 && longitude == 0)) {
+      return null;
+    }
+    return LatLng(latitude, longitude);
+  }
+
+  void _prepareVehicleDiscoveryResults(List<Drivers> drivers) {
+    final LatLng origin = _selectedCityCenter;
+    final List<Drivers> validDrivers = drivers
+        .where((Drivers driver) => _driverPosition(driver) != null)
+        .toList()
+      ..sort((Drivers a, Drivers b) {
+        final LatLng aPosition = _driverPosition(a)!;
+        final LatLng bPosition = _driverPosition(b)!;
+        final double aDistance = calculateDistance(
+          origin.latitude,
+          origin.longitude,
+          aPosition.latitude,
+          aPosition.longitude,
+        );
+        final double bDistance = calculateDistance(
+          origin.latitude,
+          origin.longitude,
+          bPosition.latitude,
+          bPosition.longitude,
+        );
+        return aDistance.compareTo(bDistance);
+      });
+
+    allDriversList = validDrivers;
+    if (validDrivers.isEmpty) {
+      isUsingRegionalDriverFallback.value = false;
+      regionalDriverMessage.value = '';
+      return;
+    }
+
+    final Drivers nearestDriver = validDrivers.first;
+    final LatLng nearestPosition = _driverPosition(nearestDriver)!;
+    final double nearestDistance = calculateDistance(
+      origin.latitude,
+      origin.longitude,
+      nearestPosition.latitude,
+      nearestPosition.longitude,
+    );
+    final String requestedCity =
+        (parameter[ApiKeyConstants.city] ?? '').trim().toLowerCase();
+    final String driverCity = (nearestDriver.city ?? '').trim().toLowerCase();
+    isUsingRegionalDriverFallback.value =
+        requestedCity.isNotEmpty && driverCity != requestedCity;
+    regionalDriverMessage.value = isUsingRegionalDriverFallback.value
+        ? 'No ${selectedVehicleType.isEmpty ? 'matching driver' : selectedVehicleType} online in ${parameter[ApiKeyConstants.city] ?? 'this city'}. '
+            'Showing the nearest available driver (${nearestDistance.round()} km away).'
+        : '';
+
+    if (_fittedRegionalDriverId == null) {
+      visibleDriversList = List<Drivers>.from(validDrivers);
+      driversList = List<Drivers>.from(validDrivers);
+      _syncSelectedDriverSelection();
+      updateDriverMarkers();
+      _syncDriverLoaderAnimation();
+      syncBottomSheetSize();
+      _pendingRegionalDriverFit = true;
+      _fitRegionalDriverCoverage();
+    }
+  }
+
+  void _fitRegionalDriverCoverage() {
+    if (!_pendingRegionalDriverFit || allDriversList.isEmpty) return;
+    if (!_isMapReady || xController == null) return;
+
+    final Drivers nearestDriver = allDriversList.first;
+    final LatLng? nearestPosition = _driverPosition(nearestDriver);
+    if (nearestPosition == null) return;
+
+    _pendingRegionalDriverFit = false;
+    _fittedRegionalDriverId = nearestDriver.sId ?? 'nearest-driver';
+    fitCameraToShowRoute(_selectedCityCenter, nearestPosition);
+  }
+
   void _resetSelectedDriver() {
     selectIndex = -1;
     selectedDriverId = null;
@@ -395,6 +538,7 @@ class UserHomeController extends GetxController
   }
 
   void _syncDriverLoaderAnimation() {
+    if (!_canUpdateView) return;
     if (driversList.isEmpty) {
       if (!animationController.isAnimating) {
         animationController.forward(from: 0.0);
@@ -447,6 +591,14 @@ class UserHomeController extends GetxController
           driverLng >= currentVisibleBounds!.southwest.longitude &&
           driverLng <= currentVisibleBounds!.northeast.longitude;
     }).toList();
+
+    // Keep the nearest same-vehicle candidate actionable while the camera is
+    // expanding beyond the originally selected city.
+    if (visibleDriversList.isEmpty &&
+        isUsingRegionalDriverFallback.value &&
+        allDriversList.isNotEmpty) {
+      visibleDriversList = <Drivers>[allDriversList.first];
+    }
 
     // Sort by distance - from selected location if set, else user GPS, else map center
     LatLng sortFromPoint =
@@ -529,7 +681,11 @@ class UserHomeController extends GetxController
       if (driver.lat != null && driver.long != null) {
         markers.add(
           Marker(
-            markerId: MarkerId('driver_$i'),
+            // Keep map identity tied to the driver rather than the current
+            // sorted-list index, which changes as live GPS positions move.
+            markerId: MarkerId(
+              'driver_${(driver.sId ?? '').trim().isNotEmpty ? driver.sId!.trim() : (driver.phone ?? driver.fullName ?? 'unknown').trim()}',
+            ),
             icon: selectIndex == i ? selectedDriverMarker : driverMarker,
             position: LatLng(
               double.tryParse(driver.lat.toString()) ?? 0,
@@ -557,10 +713,19 @@ class UserHomeController extends GetxController
 
   /// Called when camera movement is idle (stopped moving)
   Future<void> onCameraIdle() async {
-    if (xController == null) return;
+    final GoogleMapController? mapController = xController;
+    if (!_isMapReady || !_canUpdateView || mapController == null) return;
 
-    // Get visible region bounds
-    currentVisibleBounds = await xController!.getVisibleRegion();
+    try {
+      final LatLngBounds visibleBounds = await mapController.getVisibleRegion();
+      if (!_isMapReady || !_canUpdateView || xController != mapController) {
+        return;
+      }
+      currentVisibleBounds = visibleBounds;
+    } catch (error) {
+      debugPrint('Skipped bounds update for an unavailable map: $error');
+      return;
+    }
 
     print(
         'Map bounds updated: SW(${currentVisibleBounds!.southwest.latitude}, ${currentVisibleBounds!.southwest.longitude}) - NE(${currentVisibleBounds!.northeast.latitude}, ${currentVisibleBounds!.northeast.longitude})');
@@ -612,14 +777,27 @@ class UserHomeController extends GetxController
   @override
   void onClose() {
     _isControllerClosed = true;
+    _isMapReady = false;
+    xController = null;
+    currentVisibleBounds = null;
     WidgetsBinding.instance.removeObserver(this);
     _placesDebounce?.cancel();
-    locationController.dispose();
-    locationFocusNode.dispose();
-    animationController.dispose();
+    if (!_areViewResourcesDisposed) {
+      animationController.stop();
+    }
     _stopDriverPolling();
     _disconnectSocket();
     super.onClose();
+  }
+
+  /// UI-owned resources must be released when the route's widget tree is
+  /// actually unmounted, not when GetX starts removing the route controller.
+  void disposeViewResources() {
+    if (_areViewResourcesDisposed) return;
+    _areViewResourcesDisposed = true;
+    locationController.dispose();
+    locationFocusNode.dispose();
+    animationController.dispose();
   }
 
   @override
@@ -646,7 +824,7 @@ class UserHomeController extends GetxController
   }
 
   void _startDriverPolling() {
-    if (_isControllerClosed) return;
+    if (!_canUpdateView) return;
     _stopDriverPolling();
     final int multiplier = 1 << math.min(_consecutiveDriverRefreshFailures, 4);
     final int delaySeconds = math.min(
@@ -654,9 +832,9 @@ class UserHomeController extends GetxController
       _maxDriverPollingIntervalSeconds,
     );
     _driverPollingTimer = Timer(Duration(seconds: delaySeconds), () async {
-      if (_isControllerClosed) return;
+      if (!_canUpdateView) return;
       await callingGetAllDriverListApi(showLoader: false, showError: false);
-      if (_isControllerClosed) return;
+      if (!_canUpdateView) return;
       _startDriverPolling();
     });
   }
@@ -675,31 +853,37 @@ class UserHomeController extends GetxController
       print('Joined city room: $_currentCity');
     }
     emitUserLocation();
-    callingGetAllDriverListApi(showLoader: false, showError: false);
   }
 
   /// Initialize socket connection and listen for driver updates
   Future<void> _initSocket() async {
     SharedPreferences pref = await SharedPreferences.getInstance();
+    if (!_canUpdateView) return;
     String token = pref.getString(ApiKeyConstants.token) ?? '';
     _currentCity = parameter[ApiKeyConstants.city] ?? '';
 
     if (token.isNotEmpty) {
-      socketService.connect(ApiUrlConstants.socketUrl, token);
-      socketService.onConnect(() {
-        print('User location socket ready');
-        _joinRealtimeTrackingRoom();
-      });
-
-      // Listen for nearby driver updates
+      // Register listeners before opening the connection so an immediate
+      // authenticated INITIAL payload cannot be missed.
       socketService.onDriversNearby((data) {
+        if (!_canUpdateView) return;
         print('Received drivers-nearby: $data');
         _handleDriversNearbyUpdate(data);
       });
-
-      if (socketService.isConnected) {
+      socketService.onLocationTrackingReady(() {
+        if (!_canUpdateView) return;
+        print('User location tracking authenticated and ready');
+        isDriverServiceUnavailable.value = false;
+        driverServiceMessage.value = '';
+        isDriversLoading.value = false;
+        increment();
         _joinRealtimeTrackingRoom();
-      }
+      });
+      socketService.connect(ApiUrlConstants.socketUrl, token);
+      socketService.onConnect(() {
+        if (!_canUpdateView) return;
+        print('User location socket connected');
+      });
     }
   }
 
@@ -811,7 +995,7 @@ class UserHomeController extends GetxController
 
   /// Handle incoming driver location updates from socket
   void _handleDriversNearbyUpdate(dynamic data) {
-    if (data == null || _isControllerClosed) return;
+    if (data == null || !_canUpdateView) return;
 
     try {
       final Map<String, dynamic>? payload = _asStringMap(data);
@@ -825,15 +1009,42 @@ class UserHomeController extends GetxController
           }
         }
 
-        allDriversList = initialDrivers;
+        _prepareVehicleDiscoveryResults(initialDrivers);
         _consecutiveDriverRefreshFailures = 0;
         isDriverServiceUnavailable.value = false;
         driverServiceMessage.value = '';
         isDriversLoading.value = false;
+        if (_pendingRegionalDriverFit) {
+          visibleDriversList = List<Drivers>.from(allDriversList);
+          driversList = List<Drivers>.from(allDriversList);
+          _syncSelectedDriverSelection();
+          updateDriverMarkers();
+          _fitRegionalDriverCoverage();
+        } else if (currentVisibleBounds != null) {
+          filterDriversByVisibleBounds();
+        } else {
+          visibleDriversList = List<Drivers>.from(allDriversList);
+          driversList = List<Drivers>.from(allDriversList);
+          updateDriverMarkers();
+          _syncDriverLoaderAnimation();
+          syncBottomSheetSize();
+          increment();
+        }
+        return;
+      }
+
+      if (type == 'REMOVE') {
+        final String? driverId =
+            payload == null ? null : _extractDriverId(payload);
+        if (driverId == null) return;
+
+        allDriversList.removeWhere((Drivers driver) => driver.sId == driverId);
         if (currentVisibleBounds != null) {
           filterDriversByVisibleBounds();
         } else {
-          driversList = List<Drivers>.from(initialDrivers);
+          visibleDriversList = List<Drivers>.from(allDriversList);
+          driversList = List<Drivers>.from(allDriversList);
+          _syncSelectedDriverSelection();
           updateDriverMarkers();
           _syncDriverLoaderAnimation();
           syncBottomSheetSize();
@@ -884,7 +1095,10 @@ class UserHomeController extends GetxController
     }
   }
 
-  void increment() => count.value++;
+  void increment() {
+    if (!_canUpdateView) return;
+    count.value++;
+  }
 
   /// Handle text changes in the location field with debounce
   void onLocationTextChanged(String value) {
@@ -910,6 +1124,7 @@ class UserHomeController extends GetxController
           '&components=country:ae');
 
       final response = await http.get(uri);
+      if (!_canUpdateView) return;
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         if (data['status'] == 'OK') {
@@ -923,6 +1138,7 @@ class UserHomeController extends GetxController
         placeSuggestions.clear();
       }
     } catch (_) {
+      if (!_canUpdateView) return;
       placeSuggestions.clear();
     }
     increment();
@@ -1136,8 +1352,6 @@ class UserHomeController extends GetxController
 
   /// Fit camera to show both user and driver locations
   void fitCameraToShowRoute(LatLng point1, LatLng point2) {
-    if (xController == null) return;
-
     LatLngBounds bounds = LatLngBounds(
       southwest: LatLng(
         math.min(point1.latitude, point2.latitude) - 0.01,
@@ -1149,9 +1363,9 @@ class UserHomeController extends GetxController
       ),
     );
 
-    xController!.animateCamera(
+    unawaited(_animateCamera(
       CameraUpdate.newLatLngBounds(bounds, 80), // 80px padding
-    );
+    ));
   }
 
   /// Clear the selection
@@ -1206,6 +1420,7 @@ class UserHomeController extends GetxController
 
   Future<void> checkPermission() async {
     bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+    if (!_canUpdateView) return;
     if (!serviceEnabled) {
       showPermissionAlert();
     } else {
@@ -1215,6 +1430,7 @@ class UserHomeController extends GetxController
 
   Future<void> getCurrentLocation() async {
     LocationPermission permission = await Geolocator.requestPermission();
+    if (!_canUpdateView) return;
     if (permission == LocationPermission.denied) {
       print('Permission Denied.....');
       showPermissionAlert();
@@ -1224,6 +1440,7 @@ class UserHomeController extends GetxController
         Position currentPosition = await Geolocator.getCurrentPosition(
           desiredAccuracy: LocationAccuracy.high,
         );
+        if (!_canUpdateView) return;
 
         userLat.value = currentPosition.latitude;
         userLng.value = currentPosition.longitude;
@@ -1359,6 +1576,7 @@ class UserHomeController extends GetxController
           "https://maps.googleapis.com/maps/api/place/details/json?place_id=$placeId&key=${ApiKeyConstants.googleMapKey}";
 
       final response = await http.get(Uri.parse(url));
+      if (!_canUpdateView) return;
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
@@ -1382,7 +1600,7 @@ class UserHomeController extends GetxController
           updateDriverMarkers();
           filterDriversByVisibleBounds();
 
-          xController!.animateCamera(
+          await _animateCamera(
             CameraUpdate.newCameraPosition(
               CameraPosition(
                 target: mapPosition,
@@ -1390,6 +1608,7 @@ class UserHomeController extends GetxController
               ),
             ),
           );
+          if (!_canUpdateView) return;
 
           increment();
         } else {
@@ -1406,9 +1625,11 @@ class UserHomeController extends GetxController
   Future<void> callingGetUserDetails() async {
     try {
       SharedPreferences pref = await SharedPreferences.getInstance();
+      if (!_canUpdateView) return;
       String userId = pref.getString(ApiKeyConstants.userId) ?? '';
       LoginModel? loginModel =
           await ApiMethods.getUserDetailsApi(userId: userId);
+      if (!_canUpdateView) return;
       if (loginModel != null &&
           loginModel.success != null &&
           loginModel.success! &&
@@ -1425,6 +1646,7 @@ class UserHomeController extends GetxController
             title: loginModel?.message ?? 'Get user data Failed ...');
       }
     } catch (e) {
+      if (!_canUpdateView) return;
       CommonWidgets.snackBarView(title: 'Somethings wrong...');
     }
     increment();
@@ -1451,48 +1673,68 @@ class UserHomeController extends GetxController
 
     try {
       DriverListModel? driverListModel = await ApiMethods.getAllDriverListApi(
-        city: parameter[ApiKeyConstants.city] ?? '',
+        // Profile city is not a reliable map location. Discover eligible
+        // drivers by vehicle and use their live coordinates for map coverage.
+        city: '',
         vType: parameter[ApiKeyConstants.vehicleType] ?? '',
         checkResponse: (int status) => responseStatus = status,
       );
-      if (_isControllerClosed) return;
+      if (!_canUpdateView) return;
       if (driverListModel != null &&
           driverListModel.success != null &&
           driverListModel.success! &&
           driverListModel.drivers != null) {
-        // Store all drivers in master list
-        allDriversList = driverListModel.drivers!;
+        _prepareVehicleDiscoveryResults(driverListModel.drivers!);
         _consecutiveDriverRefreshFailures = 0;
         isDriverServiceUnavailable.value = false;
         driverServiceMessage.value = '';
 
         print('Total drivers from API: ${allDriversList.length}');
 
-        if (xController != null) {
-          await Future.delayed(const Duration(milliseconds: 500));
-          await onCameraIdle();
+        if (_pendingRegionalDriverFit) {
+          // Keep the nearest candidate visible while the camera expands from
+          // the selected city to the driver's actual coordinates.
+          visibleDriversList = List<Drivers>.from(allDriversList);
+          driversList = List<Drivers>.from(allDriversList);
+          _syncSelectedDriverSelection();
+          updateDriverMarkers();
+          _fitRegionalDriverCoverage();
+        } else if (currentVisibleBounds != null) {
+          filterDriversByVisibleBounds();
         } else {
           // Initial filter will happen when map is created and bounds are available
-          driversList = allDriversList;
+          visibleDriversList = List<Drivers>.from(allDriversList);
+          driversList = List<Drivers>.from(allDriversList);
           _syncSelectedDriverSelection();
           updateDriverMarkers();
           _syncDriverLoaderAnimation();
         }
       } else {
         _consecutiveDriverRefreshFailures++;
-        isDriverServiceUnavailable.value = true;
-        driverServiceMessage.value = responseStatus == 401
-            ? 'Your session expired. Please sign in again.'
-            : 'Driver service is temporarily unavailable.';
+        if (responseStatus == 401) {
+          isDriverServiceUnavailable.value = true;
+          driverServiceMessage.value =
+              'Your session expired. Please sign in again.';
+        } else if (responseStatus == 404) {
+          isDriverServiceUnavailable.value = true;
+          driverServiceMessage.value =
+              'Driver service is temporarily unavailable.';
+        } else if (!socketService.isConnected) {
+          isDriverServiceUnavailable.value = true;
+          driverServiceMessage.value =
+              'Driver service is temporarily unavailable.';
+        }
       }
     } catch (e) {
       _consecutiveDriverRefreshFailures++;
-      isDriverServiceUnavailable.value = true;
-      driverServiceMessage.value = 'Unable to load drivers. Please retry.';
+      if (!socketService.isConnected) {
+        isDriverServiceUnavailable.value = true;
+        driverServiceMessage.value = 'Unable to load drivers. Please retry.';
+      }
       print("Error: -----${e.toString()}");
     } finally {
       _isRefreshingDriverList = false;
-      if (!_isControllerClosed) {
+      if (_canUpdateView) {
         isDriversLoading.value = false;
         syncBottomSheetSize();
         _syncDriverLoaderAnimation();
