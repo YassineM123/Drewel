@@ -14,7 +14,6 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:google_places_flutter/model/prediction.dart';
 import 'package:responsive_sizer/responsive_sizer.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:url_launcher/url_launcher.dart';
 import 'dart:ui' as ui;
 import 'dart:io';
 import '../../../../common/colors.dart';
@@ -25,6 +24,7 @@ import '../../../data/apis/api_methods/api_methods.dart';
 import '../../../data/constants/icons_constant.dart';
 import '../../../data/constants/string_constants.dart';
 import '../../../data/apis/api_constants/api_url_constants.dart';
+import '../../communication/controllers/call_state_controller.dart';
 
 class UserHomeController extends GetxController
     with GetSingleTickerProviderStateMixin, WidgetsBindingObserver {
@@ -684,7 +684,7 @@ class UserHomeController extends GetxController
             // Keep map identity tied to the driver rather than the current
             // sorted-list index, which changes as live GPS positions move.
             markerId: MarkerId(
-              'driver_${(driver.sId ?? '').trim().isNotEmpty ? driver.sId!.trim() : (driver.phone ?? driver.fullName ?? 'unknown').trim()}',
+              'driver_${(driver.sId ?? '').trim().isNotEmpty ? driver.sId!.trim() : (driver.fullName ?? 'unknown').trim()}',
             ),
             icon: selectIndex == i ? selectedDriverMarker : driverMarker,
             position: LatLng(
@@ -737,6 +737,7 @@ class UserHomeController extends GetxController
   @override
   void onInit() {
     super.onInit();
+    Get.find<CallStateController>().refreshActiveRide();
     WidgetsBinding.instance.addObserver(this);
     animationController = AnimationController(
       vsync: this,
@@ -1380,41 +1381,6 @@ class UserHomeController extends GetxController
       scaffoldKey.currentState?.openEndDrawer();
     } else {
       CommonWidgets.showMyToastMessage('User data is loading please wait ....');
-    }
-  }
-
-  /// Launch WhatsApp with driver's number
-  Future<void> openWhatsApp(Drivers driver) async {
-    // Use whatsappNumber if available, otherwise fallback to phone
-    String? phoneNumber = driver.whatsappNumber ??
-        (driver.countryCode != null && driver.phone != null
-            ? '${driver.countryCode}${driver.phone}'
-            : driver.phone);
-
-    if (phoneNumber == null || phoneNumber.isEmpty) {
-      CommonWidgets.snackBarView(title: 'WhatsApp number not available');
-      return;
-    }
-
-    // Remove any spaces, dashes, or special characters from phone number
-    phoneNumber = phoneNumber.replaceAll(RegExp(r'[\s\-\(\)]'), '');
-
-    // Remove leading + if present for WhatsApp URL
-    if (phoneNumber.startsWith('+')) {
-      phoneNumber = phoneNumber.substring(1);
-    }
-
-    final whatsappUrl = Uri.parse('https://wa.me/$phoneNumber');
-
-    try {
-      if (await canLaunchUrl(whatsappUrl)) {
-        await launchUrl(whatsappUrl, mode: LaunchMode.externalApplication);
-      } else {
-        CommonWidgets.snackBarView(title: 'Could not open WhatsApp');
-      }
-    } catch (e) {
-      print('Error launching WhatsApp: $e');
-      CommonWidgets.snackBarView(title: 'Error opening WhatsApp');
     }
   }
 

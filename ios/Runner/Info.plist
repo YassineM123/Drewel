@@ -32,6 +32,8 @@
 	<string>Drewel uses the camera to capture profile photos and required driver documents.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Drewel uses your photo library to select profile photos and required driver documents.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Drewel uses your microphone so you can speak securely with your assigned driver or passenger during an active ride.</string>
 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
 	<string>This app requires your location at all times to function properly.</string>
 	<key>NSLocationAlwaysUsageDescription</key>
@@ -61,10 +63,9 @@
 	<true/>
 	<key>GMSApiKey</key>
 	<string>$(GOOGLE_MAPS_API_KEY)</string>
-	<key>LSApplicationQueriesSchemes</key>
+	<key>UIBackgroundModes</key>
 	<array>
-		<string>whatsapp</string>
-		<string>https</string>
+		<string>audio</string>
 	</array>
 </dict>
 </plist>

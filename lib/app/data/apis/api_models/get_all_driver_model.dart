@@ -29,12 +29,8 @@ class DriverListModel {
 
 class Drivers {
   String? sId;
-  String? countryCode;
-  String? phone;
-  String? whatsappNumber;
   bool? isVerified;
   int? iV;
-  String? otpCode;
   String? address;
   String? fullName;
   String? carLicenseUrl;
@@ -55,38 +51,30 @@ class Drivers {
 
   Drivers(
       {this.sId,
-        this.countryCode,
-        this.phone,
-        this.whatsappNumber,
-        this.isVerified,
-        this.iV,
-        this.otpCode,
-        this.address,
-        this.fullName,
-        this.carLicenseUrl,
-        this.drivingLicenseUrl,
-        this.idProofUrl,
-        this.licenseCompany,
-        this.passportCopyUrl,
-        this.updatedAt,
-        this.profileImageUrl,
-        this.city,
-        this.isOnline,
-        this.latitude,
-        this.longitude,
-        this.vehicleType,
-        this.lat,
-        this.long,
-        this.createdAt});
+      this.isVerified,
+      this.iV,
+      this.address,
+      this.fullName,
+      this.carLicenseUrl,
+      this.drivingLicenseUrl,
+      this.idProofUrl,
+      this.licenseCompany,
+      this.passportCopyUrl,
+      this.updatedAt,
+      this.profileImageUrl,
+      this.city,
+      this.isOnline,
+      this.latitude,
+      this.longitude,
+      this.vehicleType,
+      this.lat,
+      this.long,
+      this.createdAt});
 
   Drivers.fromJson(Map<String, dynamic> json) {
     sId = json['_id'];
-    countryCode = json['countryCode'];
-    phone = json['phone'];
-    whatsappNumber = json['whatsappNumber'];
     isVerified = json['isVerified'];
     iV = json['__v'];
-    otpCode = json['otpCode'];
     address = json['address'];
     fullName = json['fullName'];
     carLicenseUrl = json['carLicenseUrl'];
@@ -109,12 +97,8 @@ class Drivers {
   Map<String, dynamic> toJson() {
     final Map<String, dynamic> data = <String, dynamic>{};
     data['_id'] = sId;
-    data['countryCode'] = countryCode;
-    data['phone'] = phone;
-    data['whatsappNumber'] = whatsappNumber;
     data['isVerified'] = isVerified;
     data['__v'] = iV;
-    data['otpCode'] = otpCode;
     data['address'] = address;
     data['fullName'] = fullName;
     data['carLicenseUrl'] = carLicenseUrl;

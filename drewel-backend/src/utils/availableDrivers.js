@@ -1,5 +1,5 @@
 export const AVAILABLE_DRIVER_FIELDS =
-  "firstName lastName fullName phone whatsappNumber profileImageUrl city vehicleType lat long isOnline status updatedAt";
+  "firstName lastName fullName profileImageUrl city vehicleType lat long isOnline status updatedAt";
 
 const escapeRegex = (value) =>
   String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");

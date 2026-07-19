@@ -21,6 +21,7 @@ import {
 import { isAdmin, requireSignIn } from '../middlewares/authMiddleware.js';
 import { dashBoardData } from '../controllers/userController.js';
 import { sendOTPusingWhatsapp, verifyOTPWhatsapp } from '../controllers/authController.js';
+import { listAdminCalls } from '../controllers/callController.js';
 
 
 const router = express.Router();
@@ -45,6 +46,7 @@ router.put('/requests/:id/profile/approve', requireSignIn, isAdmin, approveAdmin
 router.put('/requests/:id/profile/reject', requireSignIn, isAdmin, rejectAdminProfileRequest);
 router.put('/requests/:id/profile/reopen', requireSignIn, isAdmin, reopenAdminProfileRequest);
 router.get('/requests/:id/history', requireSignIn, isAdmin, getAdminRequestHistory);
+router.get('/calls', requireSignIn, isAdmin, listAdminCalls);
 // Compatibility contract for the current admin build. All status writes now
 // pass through the same validated, auditable transition service.
 router.put('/driver/:id/status', requireSignIn, isAdmin, updateAdminRequestStatus);

@@ -21,6 +21,7 @@ import PendingRequests from "./pages/PendingRequests";
 import ApprovedRequests from "./pages/ApprovedRequests";
 import RejectedRequests from "./pages/RejectedRequests";
 import AllRequests from "./pages/AllRequests";
+import Calls from "./pages/Calls";
 
 function App() {
   return (
@@ -49,6 +50,7 @@ function App() {
               <Route path="/account-settings" element={<AccountSettings />} />
               <Route path="/notification" element={<PushNotification />} />
               <Route path="/chat" element={<ChatWrapper />} />
+              <Route path="/calls" element={<Calls />} />
             </Route>
           </Routes>
         </Router>

@@ -143,7 +143,10 @@ test("available-driver projection excludes OTP and private documents", () => {
   ]) {
     assert.equal(fields.has(privateField), false);
   }
-  for (const mobileField of ["fullName", "phone", "lat", "long", "vehicleType"]) {
+  for (const personalField of ["phone", "countryCode", "whatsappNumber"]) {
+    assert.equal(fields.has(personalField), false);
+  }
+  for (const mobileField of ["fullName", "lat", "long", "vehicleType"]) {
     assert.equal(fields.has(mobileField), true);
   }
 });

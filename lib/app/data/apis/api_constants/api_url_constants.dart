@@ -25,8 +25,7 @@ class ApiUrlConstants {
 
   static String get baseUrl => _withTrailingSlash(_configuredApiBaseUrl);
   static String get socketUrl => _withoutTrailingSlash(_configuredSocketUrl);
-  static String get baseUrlForGetMethodParams =>
-      Uri.parse(baseUrl).authority;
+  static String get baseUrlForGetMethodParams => Uri.parse(baseUrl).authority;
 
   static String get endPointOfLogin => '${baseUrl}users/login';
   static String get endPointOfOtpVerify => '${baseUrl}users/verify-otp';
@@ -48,12 +47,15 @@ class ApiUrlConstants {
       '${baseUrl}driver/update-online-status';
   static String get endPointOfDriverDetails =>
       '${baseUrl}driver/get-driver-details';
-  static String get endPointOfUserDetails =>
-      '${baseUrl}users/get-user-details';
+  static String get endPointOfUserDetails => '${baseUrl}users/get-user-details';
   static String get endPointOfAllDrivers => '${baseUrl}driver/all-drivers';
-  static String get endPointOfAvailableDrivers =>
-      '${baseUrl}driver/available';
+  static String get endPointOfAvailableDrivers => '${baseUrl}driver/available';
   static String get endPointOfGetBanner => '${baseUrl}banner/get-all';
+
+  static String get endPointOfActiveRide => '${baseUrl}rides/active';
+  static String calls(String suffix) => '${baseUrl}calls$suffix';
+  static String rideMessages(String rideId) =>
+      '${baseUrl}rides/$rideId/messages';
 
   // Delete account endpoints
   static String get endPointOfDeleteUser => '${baseUrl}users';

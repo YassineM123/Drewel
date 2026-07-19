@@ -24,6 +24,7 @@ import '../../../data/constants/icons_constant.dart';
 import '../../../data/constants/string_constants.dart';
 import '../../../data/apis/api_constants/api_url_constants.dart';
 import '../../../routes/app_pages.dart';
+import '../../communication/controllers/call_state_controller.dart';
 
 class DriverHomeController extends GetxController with WidgetsBindingObserver {
   final GlobalKey<ScaffoldState> scaffoldKey = GlobalKey<ScaffoldState>();
@@ -91,6 +92,7 @@ class DriverHomeController extends GetxController with WidgetsBindingObserver {
   @override
   void onInit() {
     super.onInit();
+    Get.find<CallStateController>().refreshActiveRide();
     WidgetsBinding.instance.addObserver(this);
     loadCustomMarker();
     checkPermission();

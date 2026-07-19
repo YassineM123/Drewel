@@ -25,6 +25,11 @@ import '../modules/user_register/bindings/user_register_binding.dart';
 import '../modules/user_register/views/user_register_view.dart';
 import '../modules/user_type/bindings/user_type_binding.dart';
 import '../modules/user_type/views/user_type_view.dart';
+import '../modules/communication/controllers/call_state_controller.dart';
+import '../modules/communication/views/active_call_screen.dart';
+import '../modules/communication/views/incoming_call_screen.dart';
+import '../modules/communication/views/outgoing_call_screen.dart';
+import '../modules/communication/views/ride_chat_screen.dart';
 
 part 'app_routes.dart';
 
@@ -98,6 +103,26 @@ class AppPages {
       name: _Paths.DOCUMENTS,
       page: () => const DocumentsView(),
       binding: DocumentsBinding(),
+    ),
+    GetPage(
+      name: _Paths.INCOMING_CALL,
+      page: () => const IncomingCallScreen(),
+      binding: CommunicationBinding(),
+    ),
+    GetPage(
+      name: _Paths.OUTGOING_CALL,
+      page: () => const OutgoingCallScreen(),
+      binding: CommunicationBinding(),
+    ),
+    GetPage(
+      name: _Paths.ACTIVE_CALL,
+      page: () => const ActiveCallScreen(),
+      binding: CommunicationBinding(),
+    ),
+    GetPage(
+      name: _Paths.RIDE_CHAT,
+      page: () => const RideChatScreen(),
+      binding: CommunicationBinding(),
     ),
   ];
 }

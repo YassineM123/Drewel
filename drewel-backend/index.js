@@ -13,12 +13,15 @@ import groupRoutes from "./src/routes/groupRoutes.js";
 import driverRoutes from "./src/routes/driverRoutes.js";
 import adminRoute from "./src/routes/adminRoute.js";
 import bannerRoute from "./src/routes/bannerRoute.js";
+import callRoutes from "./src/routes/callRoutes.js";
+import rideRoutes from "./src/routes/rideRoutes.js";
 import { app, server } from "./src/socket/index.js";
 import { isOriginAllowed } from "./src/utils/allowedOrigins.js";
 import {
   normalizeAssetResponses,
   validatePublicAssetConfig,
 } from "./src/utils/publicAssets.js";
+import { startCallExpiryWatchdog } from "./src/jobs/callExpiryJob.js";
 
 loadEnv();
 validatePublicAssetConfig();
@@ -95,6 +98,8 @@ app.use("/api/group", groupRoutes);
 app.use("/api/driver", driverRoutes);
 app.use("/api/admin", adminRoute);
 app.use("/api/banner", bannerRoute);
+app.use("/api/calls", callRoutes);
+app.use("/api/rides", rideRoutes);
 
 app.get("/api/health", async (req, res) => {
   return res.status(200).json({ success: true, message: "Backend API is running" });
@@ -120,6 +125,7 @@ connectDB()
   .then(async () => {
     await bootstrapLocalAdmin();
     server.listen(PORT, HOST, () => {
+      startCallExpiryWatchdog();
       console.log("server running at " + HOST + ":" + PORT);
     });
   })

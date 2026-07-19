@@ -16,6 +16,10 @@ abstract class Routes {
   static const SUPPORT_CHAT = _Paths.SUPPORT_CHAT;
   static const NOTIFICATIONS = _Paths.NOTIFICATIONS;
   static const DOCUMENTS = _Paths.DOCUMENTS;
+  static const INCOMING_CALL = _Paths.INCOMING_CALL;
+  static const OUTGOING_CALL = _Paths.OUTGOING_CALL;
+  static const ACTIVE_CALL = _Paths.ACTIVE_CALL;
+  static const RIDE_CHAT = _Paths.RIDE_CHAT;
 }
 
 abstract class _Paths {
@@ -33,4 +37,8 @@ abstract class _Paths {
   static const SUPPORT_CHAT = '/support-chat';
   static const NOTIFICATIONS = '/notifications';
   static const DOCUMENTS = '/documents';
+  static const INCOMING_CALL = '/communication/call/incoming';
+  static const OUTGOING_CALL = '/communication/call/outgoing';
+  static const ACTIVE_CALL = '/communication/call/active';
+  static const RIDE_CHAT = '/communication/messages';
 }

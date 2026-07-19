@@ -225,6 +225,12 @@ const Headers = ({ setIsSideBarOpen }) => {
               <span className="app-menu__label">Chat</span>
             </NavLink>
           </li>
+          <li>
+            <NavLink className="app-menu__item" to="/calls">
+              <i className="app-menu__icon mx-3 fa fa-phone" aria-hidden="true"></i>
+              <span className="app-menu__label">Secure Calls</span>
+            </NavLink>
+          </li>
           {/* <li>
             <NavLink className="app-menu__item" to="/clubs">
               <i

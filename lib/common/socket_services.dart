@@ -88,7 +88,6 @@ class SocketService {
   void on(String event, Function(dynamic) callback) {
     if (_socket != null) {
       _socket!.on(event, (data) {
-        print('Data:----->${data.toString()}');
         callback(data);
       });
     }

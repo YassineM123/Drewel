@@ -14,6 +14,8 @@ import '../../../../common/colors.dart';
 import '../../../../common/common_widgets.dart';
 import '../../../../common/text_styles.dart';
 import '../controllers/driver_home_controller.dart';
+import '../../communication/widgets/secure_communication_panel.dart';
+import '../../communication/widgets/driver_ride_requests_panel.dart';
 
 class DriverHomeView extends GetView<DriverHomeController> {
   const DriverHomeView({super.key});
@@ -39,6 +41,13 @@ class DriverHomeView extends GetView<DriverHomeController> {
               userData: controller.userData,
             ),
             backgroundColor: primaryColor,
+            bottomNavigationBar: const Column(
+              mainAxisSize: MainAxisSize.min,
+              children: <Widget>[
+                DriverRideRequestsPanel(),
+                SecureCommunicationPanel(),
+              ],
+            ),
             floatingActionButtonLocation:
                 FloatingActionButtonLocation.centerDocked,
             floatingActionButton: CommonWidgets.commonElevatedButton(
@@ -336,10 +345,6 @@ class DriverHomeView extends GetView<DriverHomeController> {
                     ),
                   ),
                 ),
-                CommonWidgets.appIcons(
-                    assetName: IconConstants.icWhatsApp,
-                    height: 40.px,
-                    width: 40.px),
               ],
             ),
           );

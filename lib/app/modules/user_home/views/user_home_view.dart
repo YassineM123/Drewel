@@ -18,6 +18,8 @@ import '../../../data/constants/icons_constant.dart';
 import '../../../data/constants/string_constants.dart';
 import '../../../routes/app_pages.dart';
 import '../controllers/user_home_controller.dart';
+import '../../communication/widgets/secure_communication_panel.dart';
+import '../../communication/controllers/call_state_controller.dart';
 
 class UserHomeView extends StatefulWidget {
   const UserHomeView({super.key});
@@ -115,6 +117,7 @@ class _UserHomeViewState extends State<UserHomeView> {
             ),
             resizeToAvoidBottomInset: false,
             backgroundColor: primaryColor,
+            bottomNavigationBar: const SecureCommunicationPanel(),
             body: Column(
               mainAxisAlignment: MainAxisAlignment.end,
               crossAxisAlignment: CrossAxisAlignment.center,
@@ -767,29 +770,28 @@ class _UserHomeViewState extends State<UserHomeView> {
                     ],
                   ),
                 ),
-                GestureDetector(
-                  onTap: () {
-                    controller.openWhatsApp(item);
-                  },
-                  child: Container(
-                    padding: EdgeInsets.all(10.px),
-                    decoration: BoxDecoration(
-                      color: Colors.green.withOpacity(0.10),
-                      borderRadius: BorderRadius.circular(16.px),
-                    ),
-                    child: CommonWidgets.appIcons(
-                      assetName: IconConstants.icWhatsApp,
-                      height: 38.px,
-                      width: 38.px,
-                    ),
-                  ),
-                ),
               ],
             ),
+            _requestRideButton(item),
           ],
         ),
       ),
     );
+  }
+
+  Widget _requestRideButton(Drivers driver) {
+    final CallStateController communication = Get.find<CallStateController>();
+    return Obx(() => SizedBox(
+          height: 48,
+          child: OutlinedButton(
+            onPressed: communication.isBusy.value ||
+                    communication.activeRide.value != null ||
+                    communication.pendingRide.value != null
+                ? null
+                : () => communication.requestRide(driver.sId ?? ''),
+            child: const Text('Request ride'),
+          ),
+        ));
   }
 
   Widget _buildDriverCard(BuildContext context, Drivers item, int index) {
@@ -902,24 +904,8 @@ class _UserHomeViewState extends State<UserHomeView> {
                         );
                       },
                     ),
+                  _requestRideButton(item),
                 ],
-              ),
-            ),
-            GestureDetector(
-              onTap: () {
-                controller.openWhatsApp(item);
-              },
-              child: Container(
-                padding: EdgeInsets.all(8.px),
-                decoration: BoxDecoration(
-                  color: Colors.green.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(10.px),
-                ),
-                child: CommonWidgets.appIcons(
-                  assetName: IconConstants.icWhatsApp,
-                  height: 35.px,
-                  width: 35.px,
-                ),
               ),
             ),
           ],
