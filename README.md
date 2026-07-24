@@ -1,71 +1,51 @@
 # Drewel
 
-Drewel is a Flutter-based application with a companion admin panel and Node.js backend.
+A comprehensive CSS-focused project featuring reusable UI components and styling utilities for modern web applications.
 
-## Repository Layout
+## Features
 
-- `lib/` - Flutter app source code
-- `android/`, `ios/`, `web/`, `windows/`, `linux/`, `macos/` - platform targets
-- `drewel-admin-panel/` - Vite-based admin dashboard
-- `drewel-backend/` - Express/MongoDB backend and utility scripts
-- `assets/` - shared images, icons, and fonts
+- 🎨 Reusable CSS Components
+- 📐 Responsive Design Patterns
+- 🔧 Utility Classes
+- 📱 Mobile-First Approach
+- ⚡ Optimized Performance
 
-## Requirements
+## What's Included
 
-- Flutter SDK
-- Node.js and npm
-- A connected device, emulator, or browser for Flutter run targets
+- Component library with common UI patterns
+- Responsive grid system
+- Typography system
+- Color palette utilities
+- Animation utilities
+- Layout components
 
-## Flutter App
-
-From the repository root:
-
-```bash
-flutter pub get
-flutter run
-```
-
-To build a release artifact, use the standard Flutter build command for your target platform, for example:
+## Installation
 
 ```bash
-flutter build apk
+npm install drewel
 ```
 
-## Admin Panel
+## Usage
 
-From `drewel-admin-panel/`:
+```html
+<link rel="stylesheet" href="path/to/drewel.css">
 
-```bash
-npm install
-npm run dev
+<!-- Use components -->
+<div class="container">
+  <button class="btn btn-primary">Click Me</button>
+</div>
 ```
 
-Available scripts:
+## Tech Stack
 
-- `npm run build`
-- `npm run lint`
-- `npm run preview`
+- Pure CSS
+- No Dependencies
+- Fully Customizable
 
-## Backend
+## Getting Started
 
-From `drewel-backend/`:
+Check the documentation for detailed usage examples and component patterns.
 
-```bash
-npm install
-npm run start
-```
+## License
 
-Available scripts include:
-
-- `npm run test`
-- `npm run start:prod`
-- `npm run backfill:driver-status`
-- `npm run repair:admin-role`
-- `npm run audit:image-assets`
-- `npm run whatsapp:diagnose`
-- `npm run whatsapp:otp-example`
-
-## Notes
-
-- The app title is set to `Drewel` in `lib/main.dart`.
-- If you add environment variables or deployment steps, document them here so the setup stays current.
+MIT License - Feel free to use and modify.
