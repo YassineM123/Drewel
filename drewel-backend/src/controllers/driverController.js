@@ -5,6 +5,7 @@ import Admin from "../models/Admin.js";
 import { sendResponse } from "../helpers/responseHelper.js";
 import { buildPublicAssetUrl } from "../utils/publicAssets.js";
 import { transitionDriverRequest } from "../services/driverRequestTransitionService.js";
+import { PROFILE_PROPOSAL_FIELDS } from "../utils/adminRequestDetails.js";
 import {
   AVAILABLE_DRIVER_FIELDS,
   buildAvailableDriverFilter,
@@ -58,6 +59,28 @@ const toBoolean = (value) => {
 
 const getFileUrl = (req, file) =>
   buildPublicAssetUrl(req, "/api/users/get-image/", file?.filename);
+
+export const buildProfileProposalSnapshot = (
+  driver,
+  body = {},
+  fileValues = {},
+) => {
+  const snapshot = { driverId: driver?._id };
+  for (const field of PROFILE_PROPOSAL_FIELDS) {
+    if (driver?.[field] !== undefined) snapshot[field] = driver[field];
+  }
+  for (const [field, value] of Object.entries(body)) {
+    if (PROFILE_PROPOSAL_FIELDS.includes(field) && value !== undefined) {
+      snapshot[field] = value;
+    }
+  }
+  for (const [field, value] of Object.entries(fileValues)) {
+    if (PROFILE_PROPOSAL_FIELDS.includes(field) && value) {
+      snapshot[field] = value;
+    }
+  }
+  return snapshot;
+};
 
 const isAdminUser = async (userId) => {
   if (!userId) return false;
@@ -462,7 +485,23 @@ export const updatePersonalDetails = async (req, res) => {
     ) {
       return res.status(403).send({
         success: false,
-        message: "Profile update is locked until admin approval",
+        message:
+          driver.status === DRIVER_STATUS.REJECTED
+            ? "Request 1 was rejected. Ask an administrator to reopen it before updating your profile."
+            : "Request 1 must be approved by an administrator before you can submit profile documents.",
+        code: "BASIC_REQUEST_NOT_APPROVED",
+      });
+    }
+
+    if (
+      !requesterIsAdmin &&
+      driver.profileRequestStatus === DRIVER_STATUS.PENDING
+    ) {
+      return res.status(409).send({
+        success: false,
+        message:
+          "Your profile and documents are already waiting for admin approval.",
+        code: "PROFILE_REQUEST_PENDING",
       });
     }
 
@@ -525,6 +564,14 @@ export const updatePersonalDetails = async (req, res) => {
         }
       });
 
+      // A proposal is a complete snapshot of the currently approved profile
+      // plus this request's changes. This prevents schema defaults or stale
+      // values from erasing unchanged documents when an admin approves it.
+      const proposalSnapshot = buildProfileProposalSnapshot(
+        driver,
+        logData,
+      );
+
       responseDriver = await transitionDriverRequest({
         requestId: driver._id,
         newStatus: "pending",
@@ -539,7 +586,7 @@ export const updatePersonalDetails = async (req, res) => {
         mutateDriver: async (currentDriver, { session }) => {
           const driverLog = await DriverLogs.findOneAndUpdate(
             { driverId: currentDriver._id },
-            { $set: logData },
+            { $set: proposalSnapshot },
             { new: true, upsert: true, setDefaultsOnInsert: true, session }
           );
           currentDriver.driverLogs = driverLog._id;

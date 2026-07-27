@@ -22,6 +22,8 @@ import {
   getDocumentStorageValue,
   getSafeStoredDocumentFileName,
   mergeDriverWithLegacyLogs,
+  overlayProfileProposal,
+  promoteProfileProposal,
 } from "../src/utils/adminRequestDetails.js";
 
 const routeLayer = (path, method) =>
@@ -240,6 +242,43 @@ test("request details merge current driver data with newest non-empty legacy val
   assert.equal(merged.idDocumentUrl, "new-id.pdf");
   assert.equal(merged.passportCopyUrl, "passport.pdf");
   assert.equal(merged.otpCode, undefined);
+});
+
+test("pending profile proposals override review values without copying unsafe fields", () => {
+  const review = overlayProfileProposal(
+    { city: "Dubai", vehicleType: "Sedan", carLicenseFrontUrl: "current.jpg" },
+    {
+      city: "Sharjah",
+      vehicleType: "Small Pickup",
+      carLicenseFrontUrl: "proposed.jpg",
+      otpCode: "9999",
+      password: "hash",
+    }
+  );
+  assert.equal(review.city, "Sharjah");
+  assert.equal(review.vehicleType, "Small Pickup");
+  assert.equal(review.carLicenseFrontUrl, "proposed.jpg");
+  assert.equal(review.otpCode, undefined);
+  assert.equal(review.password, undefined);
+});
+
+test("approved proposals promote allowlisted fields and synchronize legacy aliases", () => {
+  const driver = {
+    city: "Dubai",
+    carLicenseFrontUrl: "old.jpg",
+    isUpdate: true,
+  };
+  promoteProfileProposal(driver, {
+    city: "Ajman",
+    carLicenseFrontUrl: "new.jpg",
+    otpCode: "9999",
+  });
+  assert.equal(driver.city, "Ajman");
+  assert.equal(driver.carLicenseFrontUrl, "new.jpg");
+  assert.equal(driver.licenseCarUrl, "new.jpg");
+  assert.equal(driver.carLicenseUrl, "new.jpg");
+  assert.equal(driver.isUpdate, false);
+  assert.equal(driver.otpCode, undefined);
 });
 
 test("request detail DTO exposes normalized document routes without storage values or secrets", () => {

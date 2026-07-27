@@ -3,12 +3,14 @@ import path from "path";
 import { fileURLToPath } from "url";
 import Admin from "../models/Admin.js";
 import Driver from "../models/Driver.js";
+import DriverLogs from "../models/Driverlogs.js";
 import RequestAudit from "../models/RequestAudit.js";
 import { serveUploadedFile } from "../utils/fileServing.js";
 import {
   ADMIN_REQUEST_DOCUMENTS,
   getDocumentStorageValue,
   getSafeStoredDocumentFileName,
+  promoteProfileProposal,
   resolveAdminRequestDetails,
 } from "../utils/adminRequestDetails.js";
 import {
@@ -346,7 +348,23 @@ const transitionProfileRequest = async (req, res, newStatus) => {
       requestStage: "profile",
       actor: actorFromRequest(req),
       reason,
-      mutateDriver: async (currentDriver) => {
+      mutateDriver: async (currentDriver, { session }) => {
+        if (newStatus === "approved" && currentDriver.isUpdate) {
+          const proposal = await DriverLogs.findOne({
+            driverId: currentDriver._id,
+          })
+            .sort({ updatedAt: -1, _id: -1 })
+            .session(session)
+            .lean();
+          promoteProfileProposal(currentDriver, proposal);
+          if (proposal?._id) {
+            await DriverLogs.updateOne(
+              { _id: proposal._id },
+              { $set: { isApproved: true } },
+              { session }
+            );
+          }
+        }
         if (["pending", "rejected"].includes(newStatus)) currentDriver.isOnline = false;
       },
     });

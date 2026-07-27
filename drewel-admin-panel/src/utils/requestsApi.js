@@ -3,6 +3,53 @@ import { isTrustedApiAssetUrl, normalizeAssetUrl } from "./media";
 
 const requestUrl = `${API_URL}/admin/requests`;
 
+const fallbackMessageForStatus = (status) => {
+  if (status === 401) return "Your session has expired. Please sign in again.";
+  if (status === 403) return "You do not have permission to open this document.";
+  if (status === 404) return "The document file could not be found.";
+  if (status === 409) return "This legacy document cannot be opened from its current storage location.";
+  if (status === 503) return "Document storage is temporarily unavailable. Please try again later.";
+  return "The document could not be opened.";
+};
+
+export const getDocumentErrorMessage = async (error) => {
+  const status = error?.response?.status;
+  const payload = error?.response?.data;
+
+  if (payload && typeof payload === "object" && !(payload instanceof Blob)) {
+    if (typeof payload.message === "string" && payload.message.trim()) {
+      return payload.message.trim();
+    }
+  }
+
+  if (payload instanceof Blob) {
+    try {
+      const text = (await payload.text()).trim();
+      if (text) {
+        try {
+          const parsed = JSON.parse(text);
+          if (typeof parsed?.message === "string" && parsed.message.trim()) {
+            return parsed.message.trim();
+          }
+        } catch {
+          // Only show short plain-text API responses. HTML proxy responses are
+          // intentionally replaced with the status-specific safe fallback.
+          if (!/<(?:!doctype|html|body)\b/i.test(text) && text.length <= 300) {
+            return text;
+          }
+        }
+      }
+    } catch {
+      // Fall through to the status-specific message.
+    }
+  }
+
+  if (!error?.response && typeof error?.message === "string" && error.message.trim()) {
+    return error.message.trim();
+  }
+  return fallbackMessageForStatus(status);
+};
+
 export const getRequests = async (params, signal) => {
   const response = await apiClient.get(requestUrl, { params, signal });
   return response.data;

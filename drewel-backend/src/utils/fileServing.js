@@ -11,6 +11,24 @@ const SAFE_CONTENT_TYPES = new Map([
 const getSafeContentType = (fileName) =>
   SAFE_CONTENT_TYPES.get(path.extname(fileName).toLowerCase());
 
+export const toStorageReadError = (error) => {
+  const status = error?.$metadata?.httpStatusCode;
+  const storageFailure =
+    status === 403 ||
+    ["AccessDenied", "ExpiredToken", "InvalidAccessKeyId", "CredentialsProviderError"]
+      .includes(error?.name);
+  if (!storageFailure) return error;
+
+  return Object.assign(
+    new Error("Document storage is temporarily unavailable. Please contact the system administrator."),
+    {
+      statusCode: 503,
+      code: "DOCUMENT_STORAGE_UNAVAILABLE",
+      cause: error,
+    }
+  );
+};
+
 const setContentHeaders = (
   res,
   fileName,
@@ -44,8 +62,14 @@ export const serveUploadedFile = async ({
     return;
   }
 
+  let storageError;
   if (isS3StorageEnabled()) {
-    const s3File = await getS3ObjectByFileName(s3Prefixes, safeFileName);
+    let s3File;
+    try {
+      s3File = await getS3ObjectByFileName(s3Prefixes, safeFileName);
+    } catch (error) {
+      storageError = toStorageReadError(error);
+    }
     if (s3File?.object?.Body) {
       setContentHeaders(res, safeFileName, contentType, { disposition, cacheControl });
       s3File.object.Body.pipe(res);
@@ -55,6 +79,7 @@ export const serveUploadedFile = async ({
 
   const fileToServe = localPaths.find((candidate) => fs.existsSync(candidate));
   if (!fileToServe) {
+    if (storageError) throw storageError;
     res.status(404).send("File not found");
     return;
   }

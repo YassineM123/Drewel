@@ -33,6 +33,16 @@ const FALLBACK_FIELDS = [
   "passportCopyUrl", "profileImageUrl",
 ];
 
+// Explicitly allowlisted driver-owned fields that may be reviewed and promoted.
+// Authentication and workflow fields are intentionally excluded.
+export const PROFILE_PROPOSAL_FIELDS = Object.freeze([
+  "countryCode", "phone", "whatsappNumber", "fullName", "email", "city",
+  "address", "vehicleType", "licenseCompanyUrl",
+  "carLicenseFrontUrl", "carLicenseBackUrl", "drivingLicenseFrontUrl",
+  "drivingLicenseBackUrl", "idProofFrontUrl", "idProofBackUrl",
+  "passportCopyUrl", "profileImageUrl", "lat", "long",
+]);
+
 export const ADMIN_REQUEST_DOCUMENTS = Object.freeze({
   companyLicense: {
     label: "Company license",
@@ -93,6 +103,36 @@ export const mergeDriverWithLegacyLogs = (driver, logs = []) => {
     merged.idDocumentUrl = merged.idProofFrontUrl || "";
   }
   return merged;
+};
+
+export const overlayProfileProposal = (driver, proposal) => {
+  const merged = { ...driver };
+  if (!proposal) return merged;
+  for (const field of PROFILE_PROPOSAL_FIELDS) {
+    if (Object.hasOwn(proposal, field) && proposal[field] !== undefined) {
+      merged[field] = proposal[field];
+    }
+  }
+  return merged;
+};
+
+export const promoteProfileProposal = (driver, proposal) => {
+  if (!proposal) return driver;
+  for (const field of PROFILE_PROPOSAL_FIELDS) {
+    if (Object.hasOwn(proposal, field) && proposal[field] !== undefined) {
+      driver[field] = proposal[field];
+    }
+  }
+  driver.licenseCarUrl = driver.carLicenseFrontUrl || driver.licenseCarUrl || "";
+  driver.licenseDriverUrl =
+    driver.drivingLicenseFrontUrl || driver.licenseDriverUrl || "";
+  driver.idDocumentUrl = driver.idProofFrontUrl || driver.idDocumentUrl || "";
+  driver.carLicenseUrl = driver.carLicenseFrontUrl || driver.carLicenseUrl || "";
+  driver.drivingLicenseUrl =
+    driver.drivingLicenseFrontUrl || driver.drivingLicenseUrl || "";
+  driver.idProofUrl = driver.idProofFrontUrl || driver.idProofUrl || "";
+  driver.isUpdate = false;
+  return driver;
 };
 
 export const getDocumentStorageValue = (merged, documentKey) => {
@@ -248,7 +288,13 @@ export const resolveAdminRequestDetails = async (requestId) => {
     .select(ADMIN_REQUEST_LOG_FIELDS)
     .sort({ updatedAt: -1, _id: -1 })
     .lean();
-  const merged = mergeDriverWithLegacyLogs(driver, logs);
+  const legacyMerged = mergeDriverWithLegacyLogs(driver, logs);
+  const shouldUseProposal =
+    Boolean(driver.isUpdate) &&
+    ["pending", "rejected"].includes(driver.profileRequestStatus);
+  const merged = shouldUseProposal
+    ? overlayProfileProposal(legacyMerged, logs[0])
+    : legacyMerged;
   return {
     merged,
     dto: buildAdminRequestDetailsDto(merged, logs.length),

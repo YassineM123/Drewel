@@ -1,4 +1,6 @@
 import mongoose from "mongoose";
+import path from "path";
+import { fileURLToPath } from "url";
 import Driver from "../src/models/Driver.js";
 import connectDB from "../src/connection.js";
 import { loadEnv } from "../src/utils/loadEnv.js";
@@ -125,7 +127,10 @@ const run = async () => {
   await mongoose.connection.close();
 };
 
-if (process.argv[1] && import.meta.url === new URL(`file:///${process.argv[1].replace(/\\/g, "/")}`).href) {
+if (
+  process.argv[1] &&
+  path.resolve(fileURLToPath(import.meta.url)) === path.resolve(process.argv[1])
+) {
   run().catch(async (error) => {
     console.error("Request workflow backfill failed:", error.message);
     if (mongoose.connection.readyState !== 0) await mongoose.connection.close();

@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { serveUploadedFile } from "../src/utils/fileServing.js";
+import { serveUploadedFile, toStorageReadError } from "../src/utils/fileServing.js";
 
 const createResponse = () => {
   const headers = new Map();
@@ -50,4 +50,18 @@ test("file serving rejects unsupported document types before filesystem access",
   await serveUploadedFile({ res: response, fileName: "payload.svg", localPaths: [] });
   assert.equal(response.statusCode, 415);
   assert.equal(response.body, "Unsupported file type");
+});
+
+test("quarantined or expired storage credentials become a safe service error", () => {
+  const accessDenied = toStorageReadError({
+    name: "AccessDenied",
+    message: "sensitive provider detail",
+    $metadata: { httpStatusCode: 403 },
+  });
+  assert.equal(accessDenied.statusCode, 503);
+  assert.equal(accessDenied.code, "DOCUMENT_STORAGE_UNAVAILABLE");
+  assert.doesNotMatch(accessDenied.message, /sensitive provider detail/);
+
+  const unrelated = new Error("socket closed");
+  assert.equal(toStorageReadError(unrelated), unrelated);
 });

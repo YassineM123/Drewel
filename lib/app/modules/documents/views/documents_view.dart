@@ -1,5 +1,3 @@
-import 'dart:io';
-
 import 'package:dotted_border/dotted_border.dart';
 import 'package:flutter/material.dart';
 
@@ -43,6 +41,10 @@ class DocumentsView extends GetView<DocumentsController> {
                   style: MyTextStyle.titleStyle16bw,
                 ),
                 buttonMargin: EdgeInsets.symmetric(horizontal: 15.px),
+                buttonColor:
+                    controller.canEditProfile && !controller.showLoading.value
+                        ? primaryColor
+                        : Colors.grey.shade500,
                 showLoading: controller.showLoading.value),
             body: Column(
               mainAxisAlignment: MainAxisAlignment.end,
@@ -62,6 +64,42 @@ class DocumentsView extends GetView<DocumentsController> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
+                          if (controller.isLoadingDetails.value) ...[
+                            const LinearProgressIndicator(
+                              color: primaryColor,
+                              backgroundColor: Color(0xFFFFE7E9),
+                            ),
+                            SizedBox(height: 16.px),
+                          ],
+                          if (controller.loadError.value.isNotEmpty) ...[
+                            Container(
+                              width: double.infinity,
+                              padding: EdgeInsets.all(12.px),
+                              margin: EdgeInsets.only(bottom: 14.px),
+                              decoration: BoxDecoration(
+                                color: Colors.red.shade50,
+                                borderRadius: BorderRadius.circular(10.px),
+                                border: Border.all(color: Colors.red.shade300),
+                              ),
+                              child: Row(
+                                children: [
+                                  Expanded(
+                                    child: Text(
+                                      controller.loadError.value,
+                                      style: MyTextStyle.titleStyle12b.copyWith(
+                                        color: Colors.red.shade900,
+                                      ),
+                                    ),
+                                  ),
+                                  TextButton(
+                                    onPressed:
+                                        controller.callingGetDriverDetails,
+                                    child: const Text('Retry'),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
                           // Pending approval banner (very prominent, at top)
                           if (controller.hasPendingApproval.value &&
                               controller
@@ -78,7 +116,8 @@ class DocumentsView extends GetView<DocumentsController> {
                                     color: Colors.orange.shade400, width: 1.5),
                                 boxShadow: [
                                   BoxShadow(
-                                    color: Colors.orange.withOpacity(0.25),
+                                    color:
+                                        Colors.orange.withValues(alpha: 0.25),
                                     blurRadius: 8,
                                     offset: const Offset(0, 3),
                                   ),
@@ -159,6 +198,35 @@ class DocumentsView extends GetView<DocumentsController> {
                             ),
                           ],
 
+                          if (!controller.isLoadingDetails.value &&
+                              !controller.canEditProfile) ...[
+                            Container(
+                              width: double.infinity,
+                              padding: EdgeInsets.all(12.px),
+                              margin: EdgeInsets.only(bottom: 14.px),
+                              decoration: BoxDecoration(
+                                color: Colors.red.shade50,
+                                borderRadius: BorderRadius.circular(10.px),
+                                border: Border.all(color: Colors.red.shade300),
+                              ),
+                              child: Row(
+                                children: [
+                                  Icon(Icons.lock_outline,
+                                      color: Colors.red.shade700),
+                                  SizedBox(width: 8.px),
+                                  Expanded(
+                                    child: Text(
+                                      controller.profileLockMessage,
+                                      style: MyTextStyle.titleStyle12b.copyWith(
+                                        color: Colors.red.shade900,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+
                           CommonWidgets.commonTextFieldForLoginSignUP(
                               focusNode: controller.focusNodeCity,
                               controller: controller.cityController,
@@ -171,9 +239,11 @@ class DocumentsView extends GetView<DocumentsController> {
                                 color: Colors.black54,
                               ),
                               readOnly: true,
-                              onTap: () {
-                                controller.openCityButtonSheet(context);
-                              }),
+                              onTap: controller.canEditProfile
+                                  ? () {
+                                      controller.openCityButtonSheet(context);
+                                    }
+                                  : null),
                           CommonWidgets.commonTextFieldForLoginSignUP(
                               focusNode: controller.focusNodeType,
                               controller: controller.typeController,
@@ -186,9 +256,12 @@ class DocumentsView extends GetView<DocumentsController> {
                                 color: Colors.black54,
                               ),
                               readOnly: true,
-                              onTap: () {
-                                controller.openvehicleTypeButtonSheet(context);
-                              }),
+                              onTap: controller.canEditProfile
+                                  ? () {
+                                      controller
+                                          .openvehicleTypeButtonSheet(context);
+                                    }
+                                  : null),
 
                           SizedBox(
                             height: 10.px,
@@ -205,68 +278,70 @@ class DocumentsView extends GetView<DocumentsController> {
                               physics: const NeverScrollableScrollPhysics(),
                               itemBuilder: (context, index) {
                                 final docInfo = controller.fileNameList[index];
-                                final bool requiresBack =
-                                    docInfo['requiresBack'] ?? false;
                                 final bool isBackImage =
                                     docInfo['isBack'] ?? false;
+                                final bool isRequired =
+                                    controller.isBackRequired(index);
 
                                 return GestureDetector(
-                                  onTap: () {
-                                    controller.showAlertDialog(index);
-                                  },
+                                  onTap: controller.canEditProfile
+                                      ? () {
+                                          controller.showAlertDialog(index);
+                                        }
+                                      : null,
                                   child: Column(
                                     crossAxisAlignment:
                                         CrossAxisAlignment.start,
                                     children: [
-                                      Row(
+                                      Wrap(
+                                        crossAxisAlignment:
+                                            WrapCrossAlignment.center,
+                                        spacing: 5.px,
+                                        runSpacing: 3.px,
                                         children: [
                                           Text(
                                             docInfo['name'],
                                             style: MyTextStyle.titleStyle14b,
                                           ),
-                                          if (requiresBack) ...[
-                                            SizedBox(width: 5.px),
-                                            Text(
-                                              StringConstants.backRequired,
-                                              style: MyTextStyle.titleStyle12b
-                                                  .copyWith(
-                                                color: primaryColor,
-                                                fontWeight: FontWeight.w600,
-                                              ),
+                                          if (isRequired)
+                                            Row(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                Icon(
+                                                  Icons.warning_amber_rounded,
+                                                  color: Colors.orange,
+                                                  size: 16.px,
+                                                ),
+                                                SizedBox(width: 3.px),
+                                                Text(
+                                                  'Required *',
+                                                  style: MyTextStyle
+                                                      .titleStyle12b
+                                                      .copyWith(
+                                                    color: Colors.orange,
+                                                    fontWeight: FontWeight.w600,
+                                                  ),
+                                                ),
+                                              ],
                                             ),
-                                          ],
-                                          if (isBackImage) ...[
-                                            SizedBox(width: 5.px),
-                                            Icon(
-                                              Icons.warning_amber_rounded,
-                                              color: Colors.orange,
-                                              size: 16.px,
-                                            ),
-                                            SizedBox(width: 3.px),
-                                            Text(
-                                              'Required',
-                                              style: MyTextStyle.titleStyle12b
-                                                  .copyWith(
-                                                color: Colors.orange,
-                                                fontWeight: FontWeight.w600,
-                                              ),
-                                            ),
-                                          ],
                                         ],
                                       ),
                                       SizedBox(
                                         height: 5.px,
                                       ),
                                       DottedBorder(
-                                        color: isBackImage
+                                        color: isRequired
                                             ? (controller.selectedFile[index] ==
                                                         null &&
                                                     controller
                                                         .documentUrl[index]
                                                         .isEmpty
-                                                ? Colors.orange.withOpacity(0.5)
-                                                : Colors.green.withOpacity(0.5))
-                                            : Colors.black.withOpacity(0.2),
+                                                ? Colors.orange
+                                                    .withValues(alpha: 0.5)
+                                                : Colors.green
+                                                    .withValues(alpha: 0.5))
+                                            : Colors.black
+                                                .withValues(alpha: 0.2),
                                         dashPattern: const [6, 6],
                                         strokeWidth: 2,
                                         borderPadding: EdgeInsets.all(4.px),
@@ -278,21 +353,24 @@ class DocumentsView extends GetView<DocumentsController> {
                                           child: Stack(
                                             alignment: Alignment.center,
                                             children: [
-                                              controller.selectedFile[index] !=
+                                              controller.selectedPreviewBytes[
+                                                          index] !=
                                                       null
-                                                  ? Image.file(
+                                                  ? Image.memory(
+                                                      controller
+                                                              .selectedPreviewBytes[
+                                                          index]!,
                                                       height: 100.px,
                                                       width:
                                                           MediaQuery.of(context)
                                                               .size
                                                               .width,
-                                                      fit: BoxFit.fill,
-                                                      File(
-                                                        controller
-                                                            .selectedFile[
-                                                                index]!
-                                                            .path
-                                                            .toString(),
+                                                      fit: BoxFit.cover,
+                                                      errorBuilder: (context,
+                                                              error,
+                                                              stackTrace) =>
+                                                          _DocumentLoadError(
+                                                        isRequired: isRequired,
                                                       ),
                                                     )
                                                   : SizedBox(
@@ -305,9 +383,8 @@ class DocumentsView extends GetView<DocumentsController> {
                                                               .documentUrl[
                                                                   index]
                                                               .isNotEmpty
-                                                          ? CommonWidgets
-                                                              .imageView(
-                                                              image: controller
+                                                          ? Image.network(
+                                                              controller
                                                                       .documentUrl[
                                                                   index],
                                                               height: 100.px,
@@ -316,13 +393,22 @@ class DocumentsView extends GetView<DocumentsController> {
                                                                           context)
                                                                       .size
                                                                       .width,
+                                                              fit: BoxFit.cover,
+                                                              errorBuilder: (context,
+                                                                      error,
+                                                                      stackTrace) =>
+                                                                  _DocumentLoadError(
+                                                                isRequired:
+                                                                    isRequired,
+                                                              ),
                                                             )
                                                           : Container(
                                                               color: isBackImage
                                                                   ? Colors
                                                                       .orange
-                                                                      .withOpacity(
-                                                                          0.05)
+                                                                      .withValues(
+                                                                          alpha:
+                                                                              0.05)
                                                                   : null,
                                                             ),
                                                     ),
@@ -357,11 +443,10 @@ class DocumentsView extends GetView<DocumentsController> {
                                                     ),
                                                   ],
                                                 )
-                                              else if (controller.selectedFile[
-                                                          index] !=
-                                                      null ||
-                                                  controller.documentUrl[index]
-                                                      .isNotEmpty)
+                                              else if (controller
+                                                          .selectedPreviewBytes[
+                                                      index] !=
+                                                  null)
                                                 Positioned(
                                                   top: 5.px,
                                                   right: 5.px,
@@ -393,7 +478,7 @@ class DocumentsView extends GetView<DocumentsController> {
                               }),
 
                           SizedBox(
-                            height: 50.px,
+                            height: 90.px,
                           )
                         ],
                       ),
@@ -404,5 +489,27 @@ class DocumentsView extends GetView<DocumentsController> {
             )),
       );
     });
+  }
+}
+
+class _DocumentLoadError extends StatelessWidget {
+  const _DocumentLoadError({required this.isRequired});
+
+  final bool isRequired;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = isRequired ? Colors.orange.shade700 : Colors.red.shade700;
+    return Container(
+      height: 100.px,
+      width: double.infinity,
+      color: color.withValues(alpha: 0.06),
+      alignment: Alignment.center,
+      child: Text(
+        'Preview unavailable - tap to replace',
+        textAlign: TextAlign.center,
+        style: MyTextStyle.titleStyle12b.copyWith(color: color),
+      ),
+    );
   }
 }

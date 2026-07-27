@@ -9,6 +9,7 @@ import {
   approveProfileRequest,
   approveRequest,
   getProtectedDocumentBlob,
+  getDocumentErrorMessage,
   getRequestDetails,
   getRequestHistory,
   rejectProfileRequest,
@@ -84,7 +85,7 @@ const saveBlob = (blob, filename) => {
   document.body.appendChild(link);
   link.click();
   link.remove();
-  URL.revokeObjectURL(objectUrl);
+  window.setTimeout(() => URL.revokeObjectURL(objectUrl), 0);
 };
 
 const PreviewDialog = ({ preview, onClose }) => {
@@ -146,10 +147,7 @@ const DriverDetail = () => {
   const previewTriggerRef = useRef(null);
 
   const closePreview = useCallback(() => {
-    setPreview((current) => {
-      if (current?.revoke) URL.revokeObjectURL(current.objectUrl);
-      return null;
-    });
+    setPreview(null);
     window.setTimeout(() => previewTriggerRef.current?.focus(), 0);
   }, []);
 
@@ -303,7 +301,7 @@ const DriverDetail = () => {
         window.open(document.url, "_blank", "noopener,noreferrer");
         toast("info", "Opened from external storage");
       } else {
-        Swal.fire("Error", documentError?.response?.data?.message || "The document could not be opened.", "error");
+        Swal.fire("Error", await getDocumentErrorMessage(documentError), "error");
       }
     } finally {
       setBusyDocument("");
@@ -321,7 +319,7 @@ const DriverDetail = () => {
         window.open(document.url, "_blank", "noopener,noreferrer");
         toast("info", "Opened from external storage");
       } else {
-        Swal.fire("Error", documentError?.response?.data?.message || "The document could not be downloaded.", "error");
+        Swal.fire("Error", await getDocumentErrorMessage(documentError), "error");
       }
     } finally {
       setBusyDocument("");
@@ -365,6 +363,7 @@ const DriverDetail = () => {
 
         <section className="tile p-4 request-detail-section" aria-labelledby="request-two-title">
           <div className="request-section-heading"><div><span>Request 2</span><h2 id="request-two-title">Driver profile and documents</h2></div><div className="request-stage-heading-status"><span className={`badge ${statusBadgeClass(profileStatus)}`}>{profileStatus.replaceAll("_", " ").toUpperCase()}</span><strong>{availableDocuments}/{documents.length} available</strong></div></div>
+          {request.isUpdate && ["pending", "rejected"].includes(profileStatus) && <div className="alert alert-info" role="status">This section shows the driver&apos;s latest submitted changes. Approving Request 2 will apply them to the live profile.</div>}
           <dl className="request-info-grid">
             <div><dt>Address</dt><dd>{request.address || request.driverLogs?.address || "Not available"}</dd></div><div><dt>City</dt><dd>{request.city || request.driverLogs?.city || "Not available"}</dd></div>
             <div><dt>Vehicle type</dt><dd>{request.vehicleType || request.driverLogs?.vehicleType || "Not available"}</dd></div><div><dt>Contract number</dt><dd>{request.contractNumber || "Not available"}</dd></div>

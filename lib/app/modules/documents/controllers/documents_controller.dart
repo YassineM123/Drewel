@@ -1,7 +1,9 @@
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:responsive_sizer/responsive_sizer.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -35,6 +37,8 @@ class DocumentsController extends GetxController {
 
   final count = 0.obs;
   final showLoading = false.obs;
+  final isLoadingDetails = true.obs;
+  final loadError = ''.obs;
   final countryDailCode = '+971'.obs;
   final whatsappCountryCode = '+971'.obs;
 
@@ -49,7 +53,39 @@ class DocumentsController extends GetxController {
   // 4: ID Proof Front, 5: ID Proof Back
   // 6: Profile Image, 7: Passport Copy, 8: License Company
   List<File?> selectedFile = List.filled(9, null);
+  List<Uint8List?> selectedPreviewBytes = List.filled(9, null);
   List<String> documentUrl = List.filled(9, '');
+
+  bool get isBasicRequestApproved {
+    final driver = driverDetail?.driver;
+    final status = (driver?.status ?? '').toLowerCase();
+    return status == 'approved' ||
+        status == 'completed' ||
+        driver?.isApproved == true;
+  }
+
+  bool get isProfileRequestPending =>
+      (driverDetail?.driver?.profileRequestStatus ?? '').toLowerCase() ==
+      'pending';
+
+  bool get canEditProfile => isBasicRequestApproved && !isProfileRequestPending;
+
+  bool get canSubmit =>
+      canEditProfile &&
+      !isLoadingDetails.value &&
+      !showLoading.value &&
+      hasUnsavedChanges;
+
+  String get profileLockMessage {
+    final driver = driverDetail?.driver;
+    if (isProfileRequestPending) {
+      return 'Your profile and documents are waiting for admin approval.';
+    }
+    if ((driver?.status ?? '').toLowerCase() == 'rejected') {
+      return 'Request 1 was rejected. Ask an administrator to reopen it before editing your documents.';
+    }
+    return 'Request 1 must be approved by an administrator before you can submit profile documents.';
+  }
 
   bool get hasUnsavedChanges {
     if (selectedFile.any((File? file) => file != null)) return true;
@@ -63,91 +99,132 @@ class DocumentsController extends GetxController {
     {
       'name': 'Car License - Front',
       'key': ApiKeyConstants.carLicenseFront,
-      'requiresBack': true,
       'isBack': false
     },
     {
       'name': 'Car License - Back',
       'key': ApiKeyConstants.carLicenseBack,
-      'requiresBack': false,
       'isBack': true
     },
     {
       'name': 'Driver License - Front',
       'key': ApiKeyConstants.drivingLicenseFront,
-      'requiresBack': true,
       'isBack': false
     },
     {
       'name': 'Driver License - Back',
       'key': ApiKeyConstants.drivingLicenseBack,
-      'requiresBack': false,
       'isBack': true
     },
     {
       'name': 'ID Proof - Front',
       'key': ApiKeyConstants.idProofFront,
-      'requiresBack': true,
       'isBack': false
     },
     {
       'name': 'ID Proof - Back',
       'key': ApiKeyConstants.idProofBack,
-      'requiresBack': false,
       'isBack': true
     },
     {
       'name': 'Profile Image',
       'key': ApiKeyConstants.profileImage,
-      'requiresBack': false,
       'isBack': false
     },
     {
       'name': 'Passport Copy',
       'key': ApiKeyConstants.passportCopy,
-      'requiresBack': false,
       'isBack': false
     },
     {
       'name': 'License Company',
       'key': ApiKeyConstants.licenseCompany,
-      'requiresBack': false,
       'isBack': false
     },
   ];
   @override
-  void onInit() async {
+  void onInit() {
     super.onInit();
     startListener();
     // Ensure no stale document selections from previous sessions
     selectedFile = List.filled(9, null);
+    selectedPreviewBytes = List.filled(9, null);
     documentUrl = List.filled(9, '');
     callingGetDriverDetails();
   }
 
   void increment() => count.value++;
 
-  void showAlertDialog(int index) async {
-    selectedFile[index] = await ImagePickerAndCropper.pickImage(
+  Future<void> showAlertDialog(int index) async {
+    if (!canEditProfile) {
+      CommonWidgets.snackBarView(title: profileLockMessage);
+      return;
+    }
+    final file = await ImagePickerAndCropper.pickImage(
       context: Get.context!,
       wantCropper: true,
       color: Theme.of(Get.context!).primaryColor,
     );
-    increment();
+    if (file == null) return;
+    try {
+      selectedFile[index] = file;
+      selectedPreviewBytes[index] = kIsWeb
+          ? await XFile(file.path).readAsBytes()
+          : await file.readAsBytes();
+      increment();
+    } catch (_) {
+      selectedFile[index] = null;
+      selectedPreviewBytes[index] = null;
+      CommonWidgets.snackBarView(
+        title: 'The selected image could not be read. Please choose another.',
+      );
+    }
+  }
+
+  bool isDocumentPresent(int index) =>
+      selectedFile[index] != null || documentUrl[index].trim().isNotEmpty;
+
+  bool isBackRequired(int index) {
+    const backToFront = <int, int>{1: 0, 3: 2, 5: 4};
+    final frontIndex = backToFront[index];
+    return frontIndex != null &&
+        selectedFile[frontIndex] != null &&
+        !isDocumentPresent(index);
+  }
+
+  bool isPendingDocument(int index) {
+    if (!isProfileRequestPending) return false;
+    final logs = driverDetail?.driver?.driverLogs;
+    if (logs == null) return false;
+    final pendingUrls = <String?>[
+      logs.carLicenseFrontUrl,
+      logs.carLicenseBackUrl,
+      logs.drivingLicenseFrontUrl,
+      logs.drivingLicenseBackUrl,
+      logs.idProofFrontUrl,
+      logs.idProofBackUrl,
+      logs.profileImageUrl,
+      logs.passportCopyUrl,
+      logs.licenseCompanyUrl,
+    ];
+    return (pendingUrls[index] ?? '').trim().isNotEmpty;
   }
 
   Future<void> callingGetDriverDetails() async {
-    print('start driver details.......');
+    if (isLoadingDetails.value && driverDetail != null) return;
+    isLoadingDetails.value = true;
+    loadError.value = '';
     try {
       SharedPreferences pref = await SharedPreferences.getInstance();
       String driverId = pref.getString(ApiKeyConstants.userId) ?? '';
       AddDriverDetailModel? loginModel =
-          await ApiMethods.getDriverDetailsApi(driverId: driverId);
+          await ApiMethods.getDriverDetailsApi(driverId: driverId).timeout(
+        const Duration(seconds: 20),
+      );
       if (loginModel != null &&
           loginModel.success != null &&
           loginModel.success! &&
           loginModel.driver != null) {
-        print('get driver details successfully completed....');
         driverDetail = loginModel;
         cityController.text = driverDetail?.driver?.city ?? '';
         typeController.text = driverDetail?.driver?.vehicleType ?? '';
@@ -167,31 +244,51 @@ class DocumentsController extends GetxController {
         // Index 2: Driver License Front, 3: Driver License Back
         // Index 4: ID Proof Front, 5: ID Proof Back
         // Index 6: Profile Image, 7: Passport Copy, 8: License Company
-        documentUrl[0] = driverDetail?.driver?.carLicenseFrontUrl ??
-            driverDetail?.driver?.carLicenseUrl ??
-            '';
-        documentUrl[1] = driverDetail?.driver?.carLicenseBackUrl ?? '';
-        documentUrl[2] = driverDetail?.driver?.drivingLicenseFrontUrl ??
-            driverDetail?.driver?.drivingLicenseUrl ??
-            '';
-        documentUrl[3] = driverDetail?.driver?.drivingLicenseBackUrl ?? '';
-        documentUrl[4] = driverDetail?.driver?.idProofFrontUrl ??
-            driverDetail?.driver?.idProofUrl ??
-            '';
-        documentUrl[5] = driverDetail?.driver?.idProofBackUrl ?? '';
-        documentUrl[6] = driverDetail?.driver?.profileImageUrl ?? '';
-        documentUrl[7] = driverDetail?.driver?.passportCopyUrl ?? '';
-        documentUrl[8] = driverDetail?.driver?.licenseCompanyUrl ?? '';
+        final driver = driverDetail!.driver!;
+        final logs = driver.driverLogs;
+        final usePending = isProfileRequestPending && logs != null;
+        String resolved(String? approved, String? pending) {
+          final pendingValue = (pending ?? '').trim();
+          return usePending && pendingValue.isNotEmpty
+              ? pendingValue
+              : (approved ?? '').trim();
+        }
+
+        documentUrl[0] = resolved(
+          driver.carLicenseFrontUrl ?? driver.carLicenseUrl,
+          logs?.carLicenseFrontUrl,
+        );
+        documentUrl[1] =
+            resolved(driver.carLicenseBackUrl, logs?.carLicenseBackUrl);
+        documentUrl[2] = resolved(
+          driver.drivingLicenseFrontUrl ?? driver.drivingLicenseUrl,
+          logs?.drivingLicenseFrontUrl,
+        );
+        documentUrl[3] =
+            resolved(driver.drivingLicenseBackUrl, logs?.drivingLicenseBackUrl);
+        documentUrl[4] = resolved(
+          driver.idProofFrontUrl ?? driver.idProofUrl,
+          logs?.idProofFrontUrl,
+        );
+        documentUrl[5] = resolved(driver.idProofBackUrl, logs?.idProofBackUrl);
+        documentUrl[6] =
+            resolved(driver.profileImageUrl, logs?.profileImageUrl);
+        documentUrl[7] =
+            resolved(driver.passportCopyUrl, logs?.passportCopyUrl);
+        documentUrl[8] =
+            resolved(driver.licenseCompanyUrl, logs?.licenseCompanyUrl);
         _evaluatePendingApprovalStatus();
-        increment();
       } else {
-        CommonWidgets.snackBarView(
-            title: loginModel?.message ?? 'Get driver data Failed ...');
+        loadError.value =
+            loginModel?.message ?? 'Unable to load your driver profile.';
       }
-    } catch (e) {
-      CommonWidgets.snackBarView(title: 'Somethings wrong...');
+    } catch (_) {
+      loadError.value =
+          'Check your internet connection, then try loading the page again.';
+    } finally {
+      isLoadingDetails.value = false;
+      increment();
     }
-    increment();
   }
 
   bool _fieldEquals(String? a, String? b) =>
@@ -278,7 +375,18 @@ class DocumentsController extends GetxController {
   }
 
   Future<void> clickOnSubmit(BuildContext context) async {
-    if (cityController.text.isNotEmpty && typeController.text.isNotEmpty) {
+    if (showLoading.value) return;
+    if (!canEditProfile) {
+      CommonWidgets.snackBarView(title: profileLockMessage);
+      return;
+    }
+    if (!hasUnsavedChanges) {
+      CommonWidgets.snackBarView(title: 'There are no changes to update.');
+      return;
+    }
+    final city = cityController.text.trim();
+    final vehicleType = typeController.text.trim();
+    if (city.isNotEmpty && vehicleType.isNotEmpty) {
       // Validate paired documents: If front is updated, back is required
       // Pairs: [0,1] Car License, [2,3] Driver License, [4,5] ID Proof
       bool pairedDocsValid = true;
@@ -286,25 +394,19 @@ class DocumentsController extends GetxController {
 
       // Car License pair (index 0 = front, index 1 = back)
       // If new front is uploaded, back must exist OR be newly uploaded
-      if (selectedFile[0] != null &&
-          selectedFile[1] == null &&
-          documentUrl[1].isEmpty) {
+      if (selectedFile[0] != null && !isDocumentPresent(1)) {
         pairedDocsValid = false;
         missingBackDocs.add('Car License Back');
       }
 
       // Driver License pair (index 2 = front, index 3 = back)
-      if (selectedFile[2] != null &&
-          selectedFile[3] == null &&
-          documentUrl[3].isEmpty) {
+      if (selectedFile[2] != null && !isDocumentPresent(3)) {
         pairedDocsValid = false;
         missingBackDocs.add('Driver License Back');
       }
 
       // ID Proof pair (index 4 = front, index 5 = back)
-      if (selectedFile[4] != null &&
-          selectedFile[5] == null &&
-          documentUrl[5].isEmpty) {
+      if (selectedFile[4] != null && !isDocumentPresent(5)) {
         pairedDocsValid = false;
         missingBackDocs.add('ID Proof Back');
       }
@@ -318,45 +420,16 @@ class DocumentsController extends GetxController {
       try {
         showLoading.value = true;
 
-        // Include all existing driver data to prevent overwriting
         SharedPreferences sp = await SharedPreferences.getInstance();
         String driverId = sp.getString(ApiKeyConstants.userId) ??
             driverDetail?.driver?.sId ??
             '';
 
-        // Get phone number without country code
-        String phoneNumber = sp.getString(ApiKeyConstants.phone) ??
-            driverDetail?.driver?.phone ??
-            '';
-
-        // Build whatsapp number with country code
-        String whatsappNumber = driverDetail?.driver?.whatsappNumber ?? '';
-
         Map<String, String> bodyParams = {
-          // Driver ID - required for update
           ApiKeyConstants.id: driverId,
-          // Matching driver register fields
-          ApiKeyConstants.countryCode: countryDailCode.value,
-          ApiKeyConstants.fullName: driverDetail?.driver?.fullName ?? '',
-          ApiKeyConstants.phone: phoneNumber,
-          ApiKeyConstants.whatsappNumber: whatsappNumber,
-          ApiKeyConstants.address: driverDetail?.driver?.address ?? '',
-          // Updated fields
-          ApiKeyConstants.city: cityController.text,
-          ApiKeyConstants.vehicleType: typeController.text,
-          // Location coordinates
-          ApiKeyConstants.lat: driverDetail?.driver?.lat?.toString() ?? '0',
-          ApiKeyConstants.long: driverDetail?.driver?.long?.toString() ?? '0',
+          ApiKeyConstants.city: city,
+          ApiKeyConstants.vehicleType: vehicleType,
         };
-
-        // Debug logging
-        print('=== UPDATE DOCUMENTS DEBUG ===');
-        print('Driver ID: $driverId');
-        print('Country Code: ${countryDailCode.value}');
-        print('City: ${cityController.text}');
-        print('Vehicle Type: ${typeController.text}');
-        print('Full bodyParams: $bodyParams');
-        print('==============================');
 
         // Build image list from fileNameList keys
         List<File?> imagesToSend = [];
@@ -370,37 +443,26 @@ class DocumentsController extends GetxController {
           }
         }
 
-        print('Images to send: ${imageKeysToSend.length}');
-
-        // Use the update API method
         AddDriverDetailModel? addDriverDetailModel =
             await ApiMethods.driverUpdateDetailsApi(
                 bodyParams: bodyParams,
                 imageList: imagesToSend,
                 imageKeyList: imageKeysToSend);
 
-        // Debug: Print server response
-        print('=== SERVER RESPONSE ===');
-        print('Success: ${addDriverDetailModel?.success}');
-        print('Message: ${addDriverDetailModel?.message}');
-        print(
-            'Driver vehicle type from response: ${addDriverDetailModel?.driver?.vehicleType}');
-        print('========================');
-
         if (addDriverDetailModel != null &&
             addDriverDetailModel.success != null &&
             addDriverDetailModel.success! &&
             addDriverDetailModel.driver != null) {
-          print('update document successfully completed ....');
+          // Clear local previews before refreshing the authoritative state.
+          selectedFile = List.filled(9, null);
+          selectedPreviewBytes = List.filled(9, null);
+          increment();
 
           // Refresh driver details to get updated data
           await callingGetDriverDetails();
 
           // Update driver home controller's userData if it exists
           await _updateDriverHomeUserData();
-
-          // Clear selected files after successful upload
-          selectedFile = List.filled(9, null);
 
           CommonWidgets.snackBarView(
             title:
@@ -413,13 +475,15 @@ class DocumentsController extends GetxController {
                   addDriverDetailModel?.message ?? 'Driver Details Failed ...');
         }
       } catch (e) {
+        CommonWidgets.snackBarView(
+          title: 'The update could not be completed. Please try again.',
+        );
+      } finally {
         showLoading.value = false;
-        print("Error:----${e.toString()}");
-        CommonWidgets.snackBarView(title: 'Somethings wrong...');
+        increment();
       }
-      showLoading.value = false;
     } else {
-      CommonWidgets.snackBarView(title: 'Select city and vehicle type ...');
+      CommonWidgets.snackBarView(title: 'Select a city and vehicle type.');
     }
   }
 
@@ -439,11 +503,10 @@ class DocumentsController extends GetxController {
             ApiKeyConstants.fullName: driverDetail!.driver!.fullName ?? '',
             ApiKeyConstants.type: ApiKeyConstants.driver,
           };
-          print('Driver home userData updated with new profile image');
         }
       }
     } catch (e) {
-      print('Error updating driver home userData: $e');
+      debugPrint('Unable to refresh the driver home profile: $e');
     }
   }
 
@@ -476,6 +539,7 @@ class DocumentsController extends GetxController {
                               .cityList[index]
                               .replaceAll('\n', '')
                               .trim();
+                          increment();
                           Get.back();
                         },
                         child: Container(
@@ -485,7 +549,7 @@ class DocumentsController extends GetxController {
                           decoration: BoxDecoration(
                             borderRadius: BorderRadius.circular(10.px),
                             border: Border.all(
-                                color: Colors.black.withOpacity(0.4)),
+                                color: Colors.black.withValues(alpha: 0.4)),
                           ),
                           child: Text(
                             LocalData()
@@ -534,8 +598,6 @@ class DocumentsController extends GetxController {
                               .transportList[index]['name']
                               .toString()
                               .trim();
-                          print(
-                              'Selected vehicle type: ${typeController.text}');
                           Get.back();
                           increment(); // Trigger UI update
                         },
@@ -546,7 +608,7 @@ class DocumentsController extends GetxController {
                           decoration: BoxDecoration(
                             borderRadius: BorderRadius.circular(10.px),
                             border: Border.all(
-                                color: Colors.black.withOpacity(0.4)),
+                                color: Colors.black.withValues(alpha: 0.4)),
                           ),
                           child: Row(
                             children: [
@@ -577,5 +639,16 @@ class DocumentsController extends GetxController {
         );
       },
     );
+  }
+
+  @override
+  void onClose() {
+    focusNodeCity.removeListener(onFocusChange);
+    focusNodeType.removeListener(onFocusChange);
+    focusNodeCity.dispose();
+    focusNodeType.dispose();
+    cityController.dispose();
+    typeController.dispose();
+    super.onClose();
   }
 }

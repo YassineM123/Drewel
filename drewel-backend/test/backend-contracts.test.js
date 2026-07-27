@@ -5,6 +5,7 @@ import { readFileSync } from "node:fs";
 import {
   AVAILABLE_DRIVER_FIELDS,
   buildAvailableDriverFilter,
+  buildProfileProposalSnapshot,
   canDriverSetOnlineStatus,
 } from "../src/controllers/driverController.js";
 import { sanitizeAuthSubject } from "../src/utils/authResponse.js";
@@ -74,6 +75,42 @@ test("driver eligibility is enforced when going online but never blocks going of
   assert.equal(canDriverSetOnlineStatus({ ...eligible, isDeleted: true }, true), false);
   assert.equal(canDriverSetOnlineStatus({ status: "rejected" }, false), true);
   assert.equal(canDriverSetOnlineStatus({}, false), true);
+});
+
+test("profile proposal snapshots preserve unchanged documents and discard stale proposal values", () => {
+  const driver = {
+    _id: "driver-1",
+    countryCode: "+971",
+    phone: "5012345678",
+    city: "Abu Dhabi",
+    vehicleType: "Small Pickup",
+    carLicenseFrontUrl: "approved-car-front.jpg",
+    carLicenseBackUrl: "approved-car-back.jpg",
+    idProofFrontUrl: "approved-id-front.jpg",
+    idProofBackUrl: "approved-id-back.jpg",
+    profileImageUrl: "approved-profile.jpg",
+  };
+
+  const firstProposal = buildProfileProposalSnapshot(driver, {
+    city: "Dubai",
+    carLicenseFrontUrl: "new-car-front.jpg",
+  });
+
+  assert.equal(firstProposal.city, "Dubai");
+  assert.equal(firstProposal.carLicenseFrontUrl, "new-car-front.jpg");
+  assert.equal(firstProposal.carLicenseBackUrl, "approved-car-back.jpg");
+  assert.equal(firstProposal.idProofFrontUrl, "approved-id-front.jpg");
+  assert.equal(firstProposal.idProofBackUrl, "approved-id-back.jpg");
+  assert.equal(firstProposal.phone, "5012345678");
+
+  const retryProposal = buildProfileProposalSnapshot(driver, {
+    vehicleType: "Large Pickup",
+  });
+
+  assert.equal(retryProposal.city, "Abu Dhabi");
+  assert.equal(retryProposal.vehicleType, "Large Pickup");
+  assert.equal(retryProposal.carLicenseFrontUrl, "approved-car-front.jpg");
+  assert.equal(retryProposal.carLicenseBackUrl, "approved-car-back.jpg");
 });
 
 test("available-driver matching is trimmed, exact, case-insensitive, and escaped", () => {
