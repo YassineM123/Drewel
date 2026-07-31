@@ -32,6 +32,16 @@ const userSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+    activeRideId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Ride",
+      default: null,
+      index: true,
+    },
+    activeRideStartedAt: {
+      type: Date,
+      default: null,
+    },
     otpCode: {
       type: String,
       default: null,

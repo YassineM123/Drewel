@@ -55,7 +55,14 @@ export const messagePageHandler = async (
   //     }
   //   ),
   // }
-  socket.emit("message", getConversationMessage);
+  socket.emit(
+    "message",
+    getConversationMessage || {
+      sender: user._id,
+      receiver: userId,
+      messages: [],
+    }
+  );
 };
 
 export const newMessageHandler = async (socket, userId, data = {}) => {
@@ -175,6 +182,11 @@ export const messageSeenHandler = async (socket, currentUserId, otherUserId) => 
 
     const currentConversationList = await getConversation(currentUserId);
     const otherConversationList = await getConversation(otherUserId);
+    const updatedConversation = await ConversationModel.findById(
+      conversation._id
+    ).populate("messages");
+    io.to(currentUserId.toString()).emit("message", updatedConversation);
+    io.to(otherUserId.toString()).emit("message", updatedConversation);
     io.to(currentUserId.toString()).emit("conversation", currentConversationList);
     io.to(otherUserId.toString()).emit("conversation", otherConversationList);
   } catch (error) {

@@ -21,15 +21,24 @@ class ChatMessageModel {
       this.iV});
 
   ChatMessageModel.fromJson(Map<String, dynamic> json) {
-    sId = json['_id'];
-    text = json['text'];
-    imageUrl = json['imageUrl'];
-    videoUrl = json['videoUrl'];
+    sId = json['_id']?.toString();
+    text = json['text']?.toString();
+    imageUrl = json['imageUrl']?.toString();
+    videoUrl = json['videoUrl']?.toString();
     seen = json['seen'];
-    msgByUserId = json['msgByUserId'];
-    createdAt = json['createdAt'];
-    updatedAt = json['updatedAt'];
+    msgByUserId = _readId(json['msgByUserId']);
+    createdAt = json['createdAt']?.toString();
+    updatedAt = json['updatedAt']?.toString();
     iV = json['__v'];
+  }
+
+  static String? _readId(dynamic value) {
+    if (value == null) return null;
+    if (value is Map) {
+      final dynamic nestedId = value['_id'] ?? value['id'];
+      return nestedId?.toString();
+    }
+    return value.toString();
   }
 
   Map<String, dynamic> toJson() {

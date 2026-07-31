@@ -59,13 +59,7 @@ export const toWalletDto = (wallet, offerCost = null) => {
 };
 
 export const isWelcomeBonusEligible = (driver) =>
-  Boolean(
-    driver &&
-      driver.isApproved === true &&
-      driver.status === "completed" &&
-      driver.profileRequestStatus === "approved" &&
-      driver.isDeleted !== true
-  );
+  Boolean(driver && driver.isDeleted !== true);
 
 export const ensureWallet = async (driverId, session = null) =>
   DriverPointsWallet.findOneAndUpdate(
@@ -187,7 +181,7 @@ export const grantWelcomeBonusInSession = async (
         newAvailableBalance: totalAvailable(wallet),
         previousReservedBalance: totalReserved(previous),
         newReservedBalance: totalReserved(wallet),
-        reason: "One-time verified driver welcome bonus",
+        reason: "One-time driver account welcome bonus",
         idempotencyKey: `welcome:${driver._id}`,
         metadata: { source },
       },
@@ -458,6 +452,93 @@ export const creditPointsInSession = async ({
       reason,
       idempotencyKey,
       metadata,
+    },
+    session
+  );
+  return { wallet: updated, transaction, idempotent: false };
+};
+
+export const refundRidePointsInSession = async ({
+  driverId,
+  rideId,
+  points,
+  adminId,
+  reason,
+  idempotencyKey,
+  session,
+}) => {
+  const existing = await PointTransaction.findOne({ idempotencyKey }).session(session);
+  if (existing) {
+    const wallet = await DriverPointsWallet.findOne({ driverId }).session(session);
+    return { wallet, transaction: existing, idempotent: true };
+  }
+  const charge = await PointTransaction.findOne({
+    driverId,
+    rideId,
+    type: "RIDE_CHARGE",
+    status: "COMPLETED",
+  }).session(session);
+  if (!charge) {
+    throw new PointsError("No captured ride charge exists", 409, "RIDE_CHARGE_NOT_FOUND");
+  }
+  const priorRefunds = await PointTransaction.find({
+    driverId,
+    rideId,
+    type: "TECHNICAL_REFUND",
+    status: "COMPLETED",
+  })
+    .select("points")
+    .session(session);
+  const refundedPoints = priorRefunds.reduce(
+    (total, transaction) => total + transaction.points,
+    0
+  );
+  const refundablePoints = charge.points - refundedPoints;
+  if (refundablePoints < 1) {
+    throw new PointsError(
+      "Ride points have already been fully refunded",
+      409,
+      "RIDE_CHARGE_ALREADY_REFUNDED"
+    );
+  }
+  const refundPoints = points == null ? refundablePoints : Number(points);
+  if (
+    !Number.isSafeInteger(refundPoints) ||
+    refundPoints < 1 ||
+    refundPoints > refundablePoints
+  ) {
+    throw new PointsError("Refund points are invalid", 400, "INVALID_REFUND_POINTS");
+  }
+  const wallet = await ensureWallet(driverId, session);
+  const bonusPoints = Math.min(charge.bonusPoints, refundPoints);
+  const purchasedPoints = refundPoints - bonusPoints;
+  const updated = await updateWalletWithVersion(
+    wallet,
+    {
+      $inc: {
+        availableBonusPoints: bonusPoints,
+        availablePurchasedPoints: purchasedPoints,
+        totalRefunded: refundPoints,
+      },
+    },
+    session
+  );
+  const transaction = await addLedgerEntry(
+    {
+      driverId,
+      type: "TECHNICAL_REFUND",
+      status: "COMPLETED",
+      points: refundPoints,
+      bonusPoints,
+      purchasedPoints,
+      previousAvailableBalance: totalAvailable(wallet),
+      newAvailableBalance: totalAvailable(updated),
+      previousReservedBalance: totalReserved(wallet),
+      newReservedBalance: totalReserved(updated),
+      rideId,
+      adminId,
+      reason,
+      idempotencyKey,
     },
     session
   );

@@ -17,6 +17,17 @@ abstract class DriverPointsRepository {
     required String idempotencyKey,
   });
   Future<List<TripOffer>> getMyOffers();
+  Future<List<TripOffer>> getIncomingOffers() => getMyOffers();
+  Future<TripOffer> acceptOffer(
+    String offerId, {
+    required String idempotencyKey,
+  }) =>
+      throw UnimplementedError();
+  Future<TripOffer> declineOffer(
+    String offerId, {
+    required String idempotencyKey,
+  }) =>
+      throw UnimplementedError();
 }
 
 class ApiDriverPointsRepository implements DriverPointsRepository {
@@ -126,5 +137,46 @@ class ApiDriverPointsRepository implements DriverPointsRepository {
         .whereType<Map>()
         .map((item) => TripOffer.fromJson(Map<String, dynamic>.from(item)))
         .toList(growable: false);
+  }
+
+  @override
+  Future<List<TripOffer>> getIncomingOffers() async {
+    final response = await _api
+        .get('${ApiUrlConstants.baseUrl}trip-offers/incoming?limit=20');
+    final dynamic raw = response['offers'];
+    if (raw is! List) return const <TripOffer>[];
+    return raw
+        .whereType<Map>()
+        .map((item) => TripOffer.fromJson(Map<String, dynamic>.from(item)))
+        .toList(growable: false);
+  }
+
+  @override
+  Future<TripOffer> acceptOffer(
+    String offerId, {
+    required String idempotencyKey,
+  }) =>
+      _offerAction(offerId, 'accept', idempotencyKey);
+
+  @override
+  Future<TripOffer> declineOffer(
+    String offerId, {
+    required String idempotencyKey,
+  }) =>
+      _offerAction(offerId, 'decline', idempotencyKey);
+
+  Future<TripOffer> _offerAction(
+    String offerId,
+    String action,
+    String idempotencyKey,
+  ) async {
+    final response = await _api.post(
+      '${ApiUrlConstants.baseUrl}trip-offers/$offerId/$action',
+      const <String, dynamic>{},
+      <String, String>{'Idempotency-Key': idempotencyKey},
+    );
+    return TripOffer.fromJson(
+      Map<String, dynamic>.from(response['offer'] as Map),
+    );
   }
 }

@@ -9,7 +9,12 @@ class ActiveRideRepository {
 
   ActiveRideModel _readRide(Map<String, dynamic> response) {
     final dynamic raw = response['ride'] ?? response['data'];
-    return ActiveRideModel.fromJson(Map<String, dynamic>.from(raw as Map));
+    if (raw is! Map) {
+      throw const CommunicationApiException(
+        'The server returned invalid ride data.',
+      );
+    }
+    return ActiveRideModel.fromJson(Map<String, dynamic>.from(raw));
   }
 
   Future<ActiveRideModel> createOrGetContact(String driverId) async =>
@@ -56,14 +61,79 @@ class ActiveRideRepository {
 
   Future<ActiveRideModel> transitionRide(
     String rideId,
-    String status,
-  ) async =>
+    String status, {
+    String? idempotencyKey,
+    RideCoordinateModel? location,
+    String? pickupPin,
+    String? reason,
+    String? note,
+  }) async =>
       _readRide(
         await _api.patch(
           '${ApiUrlConstants.baseUrl}rides/$rideId/status',
-          <String, dynamic>{'status': status},
+          <String, dynamic>{
+            'status': status,
+            if (location != null) 'location': location.toJson(),
+            if (pickupPin?.trim().isNotEmpty == true)
+              'pickupPin': pickupPin!.trim(),
+            if (reason?.trim().isNotEmpty == true) 'reason': reason!.trim(),
+            if (note?.trim().isNotEmpty == true) 'note': note!.trim(),
+          },
+          idempotencyKey == null
+              ? null
+              : <String, String>{'Idempotency-Key': idempotencyKey},
         ),
       );
+
+  Future<ActiveRideModel> getRide(String rideId) async => _readRide(
+        await _api.get('${ApiUrlConstants.baseUrl}rides/$rideId'),
+      );
+
+  Future<RideRouteModel> getRoute(
+    String rideId, {
+    required String phase,
+  }) async {
+    final Map<String, dynamic> response = await _api.get(
+      '${ApiUrlConstants.baseUrl}rides/$rideId/route?phase='
+      '${Uri.encodeQueryComponent(phase)}',
+    );
+    final dynamic raw = response['route'] ?? response['data'];
+    if (raw is! Map) {
+      throw const CommunicationApiException(
+        'The server returned invalid route data.',
+      );
+    }
+    return RideRouteModel.fromJson(Map<String, dynamic>.from(raw));
+  }
+
+  Future<ActiveRideModel> cancelRide(
+    String rideId, {
+    required String reason,
+    required String note,
+    required String idempotencyKey,
+    RideCoordinateModel? location,
+  }) async =>
+      _readRide(
+        await _api.post(
+          '${ApiUrlConstants.baseUrl}rides/$rideId/cancel',
+          <String, dynamic>{
+            'reason': reason.trim(),
+            if (note.trim().isNotEmpty) 'note': note.trim(),
+            if (location != null) 'location': location.toJson(),
+          },
+          <String, String>{'Idempotency-Key': idempotencyKey},
+        ),
+      );
+
+  Future<void> updateDriverLocation(
+    String rideId,
+    RideCoordinateModel location,
+  ) async {
+    await _api.post(
+      '${ApiUrlConstants.baseUrl}rides/$rideId/location',
+      location.toJson(),
+    );
+  }
 
   Future<ActiveRideModel?> getActiveRide() async {
     try {

@@ -27,24 +27,6 @@ export const normalizedDriverIdentity = (driver = {}) => {
 
 export const getBackfillEligibility = (driver = {}, duplicateIdentities = new Set()) => {
   if (driver.isDeleted === true) return { eligible: false, reason: "deleted" };
-  if (driver.isApproved !== true) return { eligible: false, reason: "not_approved" };
-
-  // In Drewel's approval workflow, completed is assigned only after the
-  // profile/document request is approved by an admin. Driver.isVerified is not
-  // used here because it is not populated by the driver approval workflow.
-  if (
-    driver.status !== "completed" ||
-    driver.profileRequestStatus !== "approved"
-  ) {
-    return { eligible: false, reason: "documents_not_verified" };
-  }
-
-  const identity = normalizedDriverIdentity(driver);
-  if (!identity) return { eligible: false, reason: "missing_identity" };
-  if (duplicateIdentities.has(identity)) {
-    return { eligible: false, reason: "duplicate_identity" };
-  }
-
   return { eligible: true, reason: "eligible" };
 };
 
@@ -251,7 +233,7 @@ export const runDriverPointsBackfill = async ({
                 newAvailableBalance: previousAvailableBalance + welcomePoints,
                 previousReservedBalance,
                 newReservedBalance: previousReservedBalance,
-                reason: "Welcome bonus backfill for an approved, document-verified driver",
+                reason: "Welcome bonus backfill for an existing driver account",
                 idempotencyKey: state.idempotencyKey,
                 metadata: {
                   source: "backfill-driver-points",

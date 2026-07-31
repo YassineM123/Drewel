@@ -33,6 +33,8 @@ import '../modules/communication/views/ride_chat_screen.dart';
 import '../modules/points/bindings/driver_points_binding.dart';
 import '../modules/points/views/buy_points_view.dart';
 import '../modules/points/views/my_points_view.dart';
+import '../modules/active_ride/bindings/active_ride_binding.dart';
+import '../modules/active_ride/views/active_ride_view.dart';
 
 part 'app_routes.dart';
 
@@ -136,6 +138,11 @@ class AppPages {
       name: _Paths.BUY_POINTS,
       page: () => const BuyPointsView(),
       binding: DriverPointsBinding(),
+    ),
+    GetPage(
+      name: _Paths.ACTIVE_RIDE,
+      page: () => const ActiveRideView(),
+      binding: ActiveRideBinding(),
     ),
   ];
 }

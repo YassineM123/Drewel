@@ -6,6 +6,7 @@ import 'app/routes/app_pages.dart';
 import 'common/theme_data.dart';
 import 'app/modules/communication/controllers/call_state_controller.dart';
 import 'app/modules/points/points_translations.dart';
+import 'app/modules/active_ride/bindings/active_ride_binding.dart';
 
 void main() {
   runApp(
@@ -13,7 +14,10 @@ void main() {
       title: "Drewel",
       initialRoute: AppPages.INITIAL,
       getPages: AppPages.routes,
-      initialBinding: CommunicationBinding(),
+      initialBinding: BindingsBuilder(() {
+        CommunicationBinding().dependencies();
+        ActiveRideBinding().dependencies();
+      }),
       debugShowCheckedModeBanner: false,
       theme: MThemeData.themeData(),
       translations: PointsTranslations(),

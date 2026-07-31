@@ -41,8 +41,9 @@ class CommunicationApiClient {
   Future<Map<String, dynamic>> patch(
     String url, [
     Map<String, dynamic>? body,
+    Map<String, String>? extraHeaders,
   ]) =>
-      _send('PATCH', url, body: body);
+      _send('PATCH', url, body: body, extraHeaders: extraHeaders);
 
   Future<Map<String, dynamic>> _send(
     String method,
@@ -78,18 +79,37 @@ class CommunicationApiClient {
         ),
     };
 
-    final dynamic decoded = response.body.trim().isEmpty
-        ? <String, dynamic>{}
-        : jsonDecode(response.body);
+    dynamic decoded = <String, dynamic>{};
+    if (response.body.trim().isNotEmpty) {
+      try {
+        decoded = jsonDecode(response.body);
+      } on FormatException {
+        decoded = <String, dynamic>{};
+      }
+    }
     final Map<String, dynamic> payload = decoded is Map
         ? Map<String, dynamic>.from(decoded)
         : <String, dynamic>{};
     if (response.statusCode < 200 || response.statusCode >= 300) {
+      final String rawMessage = response.body
+          .replaceAll(RegExp(r'<[^>]*>'), ' ')
+          .replaceAll(RegExp(r'\s+'), ' ')
+          .trim();
       throw CommunicationApiException(
-        (payload['message'] ?? 'Unable to complete this action.').toString(),
+        (payload['message'] ??
+                (rawMessage.isNotEmpty && rawMessage.length <= 240
+                    ? rawMessage
+                    : 'Unable to complete this action.'))
+            .toString(),
         statusCode: response.statusCode,
         code: payload['code']?.toString(),
         payload: payload,
+      );
+    }
+    if (decoded is! Map) {
+      throw CommunicationApiException(
+        'The server returned an invalid response.',
+        statusCode: response.statusCode,
       );
     }
     return payload;

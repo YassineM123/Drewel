@@ -90,6 +90,30 @@ void main() {
     );
   });
 
+  test('text 404 is reported as an API error instead of a FormatException',
+      () async {
+    final api = CommunicationApiClient(
+      client: MockClient((_) async => http.Response(
+            '<html><body>Cannot GET /api/driver/points/wallet</body></html>',
+            404,
+            headers: <String, String>{'content-type': 'text/html'},
+          )),
+    );
+
+    await expectLater(
+      api.get('https://example.test/api/driver/points/wallet'),
+      throwsA(
+        isA<CommunicationApiException>()
+            .having((error) => error.statusCode, 'statusCode', 404)
+            .having(
+              (error) => error.message,
+              'message',
+              contains('Cannot GET /api/driver/points/wallet'),
+            ),
+      ),
+    );
+  });
+
   test('purchase request sends only pack and client reference', () async {
     late Map<String, dynamic> capturedBody;
     final repository = ApiDriverPointsRepository(CommunicationApiClient(

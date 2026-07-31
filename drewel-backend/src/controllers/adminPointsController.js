@@ -726,6 +726,10 @@ export const creditVerifiedPointPurchaseRequest = async (req, res) => {
     requireExplicitConfirmation(req.body?.confirmation);
     const requestId = requireObjectId(req.params.id, "purchaseRequestId");
     const clientIdempotencyKey = requireIdempotencyKey(req);
+    const reason = requireBoundedString(req.body?.reason, "reason", {
+      min: 3,
+      max: 1000,
+    });
     const result = await runPointsTransaction(async (session) => {
       const purchaseRequest = await PointPurchaseRequest.findById(requestId)
         .select(
@@ -774,11 +778,7 @@ export const creditVerifiedPointPurchaseRequest = async (req, res) => {
         adminId: req.pointsAdmin.id,
         purchaseRequestId: purchaseRequest._id,
         paymentReference: purchaseRequest.paymentReference,
-        reason: requireBoundedString(
-          req.body?.reason || "Verified point purchase credited",
-          "reason",
-          { min: 3, max: 1000 }
-        ),
+        reason,
         idempotencyKey: `purchase-credit:${purchaseRequest._id}`,
         metadata: {
           source: "purchase_request",

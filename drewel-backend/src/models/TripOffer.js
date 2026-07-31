@@ -107,6 +107,12 @@ const tripOfferSchema = new mongoose.Schema(
     },
     expiresAt: { type: Date, required: true, index: true, immutable: true },
     acceptedAt: { type: Date, default: null },
+    acceptanceIdempotencyKey: {
+      type: String,
+      default: "",
+      trim: true,
+      maxlength: 200,
+    },
     declinedAt: { type: Date, default: null },
     cancelledAt: { type: Date, default: null },
     expiredAt: { type: Date, default: null },

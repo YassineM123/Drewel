@@ -154,6 +154,7 @@ for (const hook of [
   "updateOne",
   "updateMany",
   "findOneAndUpdate",
+  "findOneAndReplace",
   "replaceOne",
   "deleteOne",
   "deleteMany",

@@ -237,6 +237,12 @@ const Headers = ({ setIsSideBarOpen }) => {
             </NavLink>
           </li>
           <li>
+            <NavLink className="app-menu__item" to="/rides">
+              <i className="app-menu__icon mx-3 fa fa-route" aria-hidden="true"></i>
+              <span className="app-menu__label">Rides</span>
+            </NavLink>
+          </li>
+          <li>
             <NavLink className="app-menu__item" to="/chat">
               <i
                 className="app-menu__icon mx-3 fa-sharp fa-light fa-comments pr-1"

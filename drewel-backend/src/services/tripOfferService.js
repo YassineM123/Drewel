@@ -1,6 +1,8 @@
 import mongoose from "mongoose";
 import Driver from "../models/Driver.js";
+import User from "../models/User.js";
 import Ride from "../models/Ride.js";
+import RideAudit from "../models/RideAudit.js";
 import TripOffer from "../models/TripOffer.js";
 import PointsSettings from "../models/PointsSettings.js";
 import {
@@ -12,6 +14,7 @@ import {
   runPointsTransaction,
   toWalletDto,
 } from "./pointsWalletService.js";
+import { createPickupPin, decryptPickupPin } from "./rideTransitionService.js";
 
 const offerTtlMs = (seconds) => seconds * 1000;
 
@@ -24,6 +27,7 @@ const driverOfferFilter = (driverId) => ({
   isDeleted: { $ne: true },
   isOnline: true,
   availabilityStatus: "Online",
+  activeRideId: null,
 });
 
 export const toTripOfferDto = (offer) => ({
@@ -268,7 +272,7 @@ const releaseCompetingOffers = async (acceptedOffer, session) => {
   }
 };
 
-export const acceptTripOffer = async ({ offerId, passengerId }) =>
+export const acceptTripOffer = async ({ offerId, passengerId, idempotencyKey }) =>
   runPointsTransaction(async (session) => {
     const offer = await TripOffer.findById(offerId).session(session);
     if (!offer) throw new PointsError("Trip offer not found", 404, "TRIP_OFFER_NOT_FOUND");
@@ -277,10 +281,16 @@ export const acceptTripOffer = async ({ offerId, passengerId }) =>
     }
     if (offer.status === "accepted") {
       const [ride, wallet] = await Promise.all([
-        Ride.findById(offer.rideId).session(session),
+        Ride.findById(offer.rideId).select("+pickupPinEncrypted").session(session),
         mongoose.model("DriverPointsWallet").findOne({ driverId: offer.driverId }).session(session),
       ]);
-      return { offer, ride, wallet, idempotent: true };
+      return {
+        offer,
+        ride,
+        wallet,
+        pickupPin: decryptPickupPin(ride?.pickupPinEncrypted),
+        idempotent: true,
+      };
     }
     if (offer.status !== "pending" || offer.reservationState !== "reserved") {
       throw new PointsError("Trip offer is no longer active", 409, "TRIP_OFFER_NOT_ACTIVE");
@@ -297,7 +307,13 @@ export const acceptTripOffer = async ({ offerId, passengerId }) =>
 
     const driver = await Driver.findOneAndUpdate(
       driverOfferFilter(offer.driverId),
-      { $set: { availabilityStatus: "Busy" } },
+      {
+        $set: {
+          availabilityStatus: "Busy",
+          activeRideId: offer.contactRideId,
+          activeRideStartedAt: new Date(),
+        },
+      },
       { new: true, session }
     );
     if (!driver) {
@@ -307,7 +323,25 @@ export const acceptTripOffer = async ({ offerId, passengerId }) =>
         "DRIVER_NOT_AVAILABLE"
       );
     }
+    const passenger = await User.findOneAndUpdate(
+      { _id: passengerId, activeRideId: null, isRestricted: false },
+      {
+        $set: {
+          activeRideId: offer.contactRideId,
+          activeRideStartedAt: new Date(),
+        },
+      },
+      { new: true, session }
+    );
+    if (!passenger) {
+      throw new PointsError(
+        "Passenger already has an active ride",
+        409,
+        "ACTIVE_RIDE_CONFLICT"
+      );
+    }
     const now = new Date();
+    const pickupPin = createPickupPin();
     const ride = await Ride.findOneAndUpdate(
       {
         _id: offer.contactRideId,
@@ -317,14 +351,20 @@ export const acceptTripOffer = async ({ offerId, passengerId }) =>
       },
       {
         $set: {
-          status: "accepted",
+          status: "confirmed",
           acceptedAt: now,
+          acceptanceIdempotencyKey: idempotencyKey,
           confirmedAt: now,
           confirmedBy: passengerId,
           pickup: offer.pickup,
           destination: offer.destination,
           vehicleType: offer.vehicleType || driver.vehicleType || "",
           agreedPrice: offer.offeredPrice,
+          pickupPinHash: pickupPin.hash,
+          pickupPinSalt: pickupPin.salt,
+          pickupPinEncrypted: pickupPin.encrypted,
+          pickupPinAttempts: 0,
+          pickupPinLockedUntil: null,
         },
       },
       { new: true, session, runValidators: true }
@@ -366,6 +406,20 @@ export const acceptTripOffer = async ({ offerId, passengerId }) =>
       throw new PointsError("Offer changed concurrently", 409, "OFFER_STATE_CONFLICT");
     }
     await releaseCompetingOffers(accepted, session);
+    await RideAudit.create(
+      [
+        {
+          rideId: ride._id,
+          action: "ride_confirmed",
+          fromStatus: "contacting",
+          toStatus: "confirmed",
+          actorId: passengerId,
+          actorRole: "passenger",
+          idempotencyKey: offer.idempotencyKey,
+        },
+      ],
+      { session }
+    );
 
     await Ride.updateMany(
       {
@@ -418,7 +472,13 @@ export const acceptTripOffer = async ({ offerId, passengerId }) =>
       ],
       session
     );
-    return { offer: accepted, ride, wallet: charge.wallet, idempotent: false };
+    return {
+      offer: accepted,
+      ride,
+      wallet: charge.wallet,
+      pickupPin: pickupPin.pin,
+      idempotent: false,
+    };
   });
 
 const terminalTimestamp = (status) => ({

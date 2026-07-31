@@ -6,7 +6,11 @@ import PointPurchaseRequest from "../models/PointPurchaseRequest.js";
 import PointPack from "../models/PointPack.js";
 import PointsSettings from "../models/PointsSettings.js";
 import { resolvePrincipal } from "../services/rideCommunicationPolicy.js";
-import { ensureWallet, toWalletDto } from "../services/pointsWalletService.js";
+import {
+  ensureWallet,
+  grantWelcomeBonus,
+  toWalletDto,
+} from "../services/pointsWalletService.js";
 import {
   PointsValidationError,
   optionalEnum,
@@ -39,6 +43,8 @@ const requireDriver = async (req) => {
 export const getMyPointsWallet = async (req, res) => {
   try {
     const principal = await requireDriver(req);
+    const driver = await Driver.findById(principal.id);
+    await grantWelcomeBonus(driver, { source: "wallet_access" });
     const [wallet, settings] = await Promise.all([
       ensureWallet(principal.id),
       PointsSettings.getEffective(),

@@ -13,6 +13,7 @@ import { sendOtpUsingTwilio } from "../utils/sendOtp.js";
 import { serveUploadedFile } from "../utils/fileServing.js";
 import { buildPublicAssetUrl } from "../utils/publicAssets.js";
 import { sanitizeAuthSubject } from "../utils/authResponse.js";
+import { grantWelcomeBonus } from "../services/pointsWalletService.js";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
@@ -121,6 +122,7 @@ export const loginUser = async (req, res) => {
       });
     }
     let user = null;
+    let driverAccountCreated = false;
     const otpCode = generateOtp(4);
     if (type === "user") {
       user = await User.findOne({ phone: { $in: phoneCandidates } });
@@ -145,6 +147,7 @@ export const loginUser = async (req, res) => {
           status: "pending",
           basicRequestSubmittedAt: null,
         });
+        driverAccountCreated = true;
       } else {
         user.otpCode = otpCode;
         user.countryCode = normalizedCountryCode;
@@ -153,6 +156,11 @@ export const loginUser = async (req, res) => {
         }
         await user.save();
       }
+      await grantWelcomeBonus(user, {
+        source: driverAccountCreated
+          ? "driver_account_created"
+          : "driver_account_sign_in",
+      });
     }
 
     const delivery = await sendOtpUsingTwilio(

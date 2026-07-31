@@ -1,7 +1,7 @@
 import express from "express";
 import { requireSignIn } from "../middlewares/authMiddleware.js";
-import { createDriverContact, confirmMission, createSafetyAction, getActiveRide, getRide, listMyRides, listRideCalls, listRideMessages, sendRideMessage, transitionRide, updateMessageReceipt } from "../controllers/rideController.js";
-import { contactRateLimit, messageRateLimit } from "../middlewares/marketplaceRateLimit.js";
+import { cancelRide, createDriverContact, confirmMission, createSafetyAction, getActiveRide, getRide, getRideRoute, listMyRides, listRideCalls, listRideMessages, postRideLocation, sendRideMessage, transitionRide, updateMessageReceipt } from "../controllers/rideController.js";
+import { contactRateLimit, messageRateLimit, rideActionRateLimit, rideLocationRateLimit } from "../middlewares/marketplaceRateLimit.js";
 
 const router = express.Router();
 router.use(requireSignIn);
@@ -10,7 +10,10 @@ router.get("/active", getActiveRide);
 router.get("/mine", listMyRides);
 router.get("/:rideId", getRide);
 router.post("/:rideId/confirm", contactRateLimit, confirmMission);
-router.patch("/:rideId/status", transitionRide);
+router.patch("/:rideId/status", rideActionRateLimit, transitionRide);
+router.post("/:rideId/cancel", rideActionRateLimit, cancelRide);
+router.get("/:rideId/route", getRideRoute);
+router.post("/:rideId/location", rideLocationRateLimit, postRideLocation);
 router.get("/:rideId/calls", listRideCalls);
 router.get("/:rideId/messages", listRideMessages);
 router.post("/:rideId/messages", messageRateLimit, sendRideMessage);

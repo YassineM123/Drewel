@@ -103,6 +103,22 @@ class SocketService {
     }
   }
 
+  void emitWithAck(
+    String event,
+    dynamic data,
+    void Function(dynamic response) callback,
+  ) {
+    final IO.Socket? socket = _socket;
+    if (socket == null || !socket.connected) {
+      callback(<String, dynamic>{
+        'success': false,
+        'code': 'SOCKET_DISCONNECTED',
+      });
+      return;
+    }
+    socket.emitWithAck(event, data, ack: callback);
+  }
+
   // Listen to an event
   void on(String event, Function(dynamic) callback) {
     if (_socket != null) {
@@ -221,4 +237,21 @@ class SocketService {
   /// User leaves city room
   void emitLeaveCityRoom(String city) =>
       emit('leave-city-room', {'city': city});
+
+  void joinRide(String rideId, void Function(dynamic response) callback) =>
+      emitWithAck('ride:join', <String, dynamic>{'rideId': rideId}, callback);
+
+  void leaveRide(String rideId) =>
+      emit('ride:leave', <String, dynamic>{'rideId': rideId});
+
+  void emitRideDriverLocation(
+    String rideId,
+    Map<String, dynamic> location,
+    void Function(dynamic response) callback,
+  ) =>
+      emitWithAck(
+        'ride:driver_location',
+        <String, dynamic>{'rideId': rideId, ...location},
+        callback,
+      );
 }

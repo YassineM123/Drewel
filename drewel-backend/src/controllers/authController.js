@@ -8,6 +8,17 @@ import { sendOTPwhatsapp } from "../utils/whatsapp.js";
 import generateOtp from "../helpers/generateOtp.js";
 import { sendOtpUsingTwilio } from "../utils/sendOtp.js";
 import { sanitizeAuthSubject } from "../utils/authResponse.js";
+import { grantWelcomeBonus } from "../services/pointsWalletService.js";
+
+export const issueAppAuthToken = (subjectId) =>
+  jwt.sign(
+    { _id: subjectId },
+    process.env.JWT_SECRET,
+    {
+      expiresIn:
+        String(process.env.APP_JWT_EXPIRES_IN || "7d").trim() || "7d",
+    }
+  );
 
 const normalizePhoneDigits = (value = "") => String(value).replace(/\D/g, "");
 const normalizeCountryCode = (value = "") => {
@@ -69,6 +80,9 @@ const provisionAuthSubject = async ({
       subject.countryCode = normalizedCountryCode;
       await subject.save();
     }
+    if (type === "driver") {
+      await grantWelcomeBonus(subject, { source: "driver_account_sign_in" });
+    }
     return subject;
   }
 
@@ -80,12 +94,14 @@ const provisionAuthSubject = async ({
   }
 
   if (type === "driver") {
-    return Driver.create({
+    const driver = await Driver.create({
       phone: normalizedPhone,
       countryCode: normalizedCountryCode,
       status: "pending",
       basicRequestSubmittedAt: null,
     });
+    await grantWelcomeBonus(driver, { source: "driver_account_created" });
+    return driver;
   }
 
   return null;
@@ -234,7 +250,7 @@ export const verifyOtp = async (req, res) => {
         message: "Invalid OTP",
       });
 
-    const token = jwt.sign({ _id: user._id }, process.env.JWT_SECRET);
+    const token = issueAppAuthToken(user._id);
 
     user.otpCode = null;
     await user.save();
@@ -410,7 +426,7 @@ export const verifyOTPWhatsapp = async (req, res) => {
       });
     }
 
-    const token = jwt.sign({ _id: user._id }, process.env.JWT_SECRET);
+    const token = issueAppAuthToken(user._id);
 
     return res.status(200).send({
       success: true,

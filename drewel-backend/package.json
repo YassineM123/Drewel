@@ -12,6 +12,7 @@
     "backfill:driver-status": "node scripts/backfill-driver-status.js",
     "backfill:request-workflow": "node scripts/backfill-request-workflow.js",
     "backfill:driver-points": "node scripts/backfill-driver-points.js",
+    "backfill:active-ride-locks": "node scripts/backfill-active-ride-locks.js",
     "repair:admin-role": "node scripts/set-admin-role.js",
     "audit:image-assets": "node scripts/audit-image-assets.js",
     "whatsapp:diagnose": "node scripts/diagnose-whatsapp-otp.js",

@@ -1,6 +1,10 @@
 class ApiUrlConstants {
   static const String _defaultApiBaseUrl = 'https://admin-dreewel.com/api/';
   static const String _defaultSocketUrl = 'https://admin-dreewel.com';
+  static const String supportAdminId = String.fromEnvironment(
+    'SUPPORT_ADMIN_ID',
+    defaultValue: '6861224ceac0edaf19ffa056',
+  );
 
   static const String _configuredApiBaseUrl = String.fromEnvironment(
     'API_BASE_URL',

@@ -7,6 +7,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../../data/apis/api_constants/api_key_constants.dart';
 import '../../../data/apis/api_models/ride_message_model.dart';
 import '../../../data/apis/api_models/driver_points_models.dart';
+import '../../../data/apis/communication_api_client.dart';
+import '../../../data/repositories/driver_points_repository.dart';
+import '../../active_ride/controllers/active_ride_controller.dart';
 import '../../points/bindings/driver_points_binding.dart';
 import '../../points/controllers/driver_points_controller.dart';
 import '../../points/widgets/trip_offer_points.dart';
@@ -24,6 +27,10 @@ class _RideChatScreenState extends State<RideChatScreen> {
   DriverPointsController? _points;
   final TextEditingController _textController = TextEditingController();
   final List<RideMessageModel> _messages = <RideMessageModel>[];
+  late final ApiDriverPointsRepository _offerRepository =
+      ApiDriverPointsRepository(CommunicationApiClient());
+  final List<TripOffer> _incomingOffers = <TripOffer>[];
+  String? _offerActionLoading;
   String _selfId = '';
   String _role = '';
   bool _loading = true;
@@ -69,11 +76,22 @@ class _RideChatScreenState extends State<RideChatScreen> {
         DriverPointsBinding().dependencies();
         _points = Get.find<DriverPointsController>();
       }
+      List<TripOffer> incoming = const <TripOffer>[];
+      if (role != ApiKeyConstants.driver) {
+        incoming = (await _offerRepository.getIncomingOffers())
+            .where((TripOffer offer) =>
+                offer.contactRideId == rideId && offer.status == 'pending')
+            .toList(growable: false);
+      }
+      if (!mounted) return;
       setState(() {
         _selfId = selfId;
         _role = role;
         _messages.clear();
         _messages.addAll(messages);
+        _incomingOffers
+          ..clear()
+          ..addAll(incoming);
         if (showLoader) _loading = false;
       });
       for (final RideMessageModel message in messages.where(
@@ -158,6 +176,13 @@ class _RideChatScreenState extends State<RideChatScreen> {
                       ? const SizedBox.shrink()
                       : TripOfferStatusCard(offer: offer);
                 }),
+              for (final TripOffer offer in _incomingOffers)
+                _IncomingOfferCard(
+                  offer: offer,
+                  loading: _offerActionLoading == offer.id,
+                  onAccept: () => _respondToOffer(offer, accept: true),
+                  onDecline: () => _respondToOffer(offer, accept: false),
+                ),
               if (_error != null)
                 MaterialBanner(
                   content: Text(_error!),
@@ -259,6 +284,65 @@ class _RideChatScreenState extends State<RideChatScreen> {
           ),
         ),
       );
+
+  Future<void> _respondToOffer(
+    TripOffer offer, {
+    required bool accept,
+  }) async {
+    if (_offerActionLoading != null) return;
+    final bool confirmed = await showDialog<bool>(
+          context: context,
+          builder: (BuildContext dialogContext) => AlertDialog(
+            title: Text(accept ? 'Accept trip offer?' : 'Decline trip offer?'),
+            content: Text(
+              accept
+                  ? 'Accepting creates your active ride and confirms the '
+                      'driver’s offer.'
+                  : 'The driver’s reserved points will be released.',
+            ),
+            actions: <Widget>[
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext, false),
+                child: const Text('Back'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.pop(dialogContext, true),
+                child: Text(accept ? 'Accept offer' : 'Decline offer'),
+              ),
+            ],
+          ),
+        ) ??
+        false;
+    if (!confirmed || !mounted) return;
+    setState(() => _offerActionLoading = offer.id);
+    final String key = 'offer:${offer.id}:${accept ? 'accept' : 'decline'}:'
+        '${DateTime.now().microsecondsSinceEpoch}';
+    try {
+      if (accept) {
+        await _offerRepository.acceptOffer(offer.id, idempotencyKey: key);
+      } else {
+        await _offerRepository.declineOffer(offer.id, idempotencyKey: key);
+      }
+      if (Get.isRegistered<ActiveRideController>()) {
+        await Get.find<ActiveRideController>().recover(showLoader: false);
+      }
+      await _communication.refreshActiveRide();
+      if (!mounted) return;
+      setState(() => _incomingOffers.removeWhere(
+            (TripOffer candidate) => candidate.id == offer.id,
+          ));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content:
+              Text(accept ? 'Trip offer accepted.' : 'Trip offer declined.'),
+        ),
+      );
+    } on CommunicationApiException catch (error) {
+      if (mounted) setState(() => _error = error.message);
+    } finally {
+      if (mounted) setState(() => _offerActionLoading = null);
+    }
+  }
 
   Future<void> _showMissionConfirmation() async {
     final DriverPointsController? pointsController = _points;
@@ -437,5 +521,89 @@ class _RideChatScreenState extends State<RideChatScreen> {
         ),
       );
     }
+  }
+}
+
+class _IncomingOfferCard extends StatelessWidget {
+  const _IncomingOfferCard({
+    required this.offer,
+    required this.loading,
+    required this.onAccept,
+    required this.onDecline,
+  });
+
+  final TripOffer offer;
+  final bool loading;
+  final VoidCallback onAccept;
+  final VoidCallback onDecline;
+
+  @override
+  Widget build(BuildContext context) {
+    String address(Map<String, dynamic>? location, String fallback) =>
+        (location?['address'] ?? fallback).toString();
+    return Card(
+      margin: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            Row(
+              children: <Widget>[
+                const Icon(Icons.local_offer_outlined),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Trip offer',
+                    style: Theme.of(context)
+                        .textTheme
+                        .titleMedium
+                        ?.copyWith(fontWeight: FontWeight.w700),
+                  ),
+                ),
+                if (offer.offeredPrice != null)
+                  Text(
+                    '${offer.offeredPrice!.toStringAsFixed(2)} '
+                    '${offer.currency ?? ''}',
+                    style: const TextStyle(fontWeight: FontWeight.w700),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Text('Pickup: ${address(offer.pickup, 'Pickup location')}'),
+            Text(
+              'Destination: ${address(offer.destination, 'Destination')}',
+            ),
+            if (offer.note?.trim().isNotEmpty == true) Text(offer.note!),
+            const SizedBox(height: 12),
+            Row(
+              children: <Widget>[
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: loading ? null : onDecline,
+                    child: const Text('Decline'),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: FilledButton(
+                    onPressed: loading ? null : onAccept,
+                    child: loading
+                        ? const SizedBox.square(
+                            dimension: 18,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
+                          )
+                        : const Text('Accept'),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }

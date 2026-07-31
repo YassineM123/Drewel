@@ -1,6 +1,8 @@
 class AppConfig {
-  // Inject with: flutter run --dart-define=GOOGLE_MAPS_API_KEY=xxx
+  // Legacy Places lookup only. Never add a default secret here. Map display
+  // keys belong in the native Android/iOS build configuration.
   static const String googleMapsApiKey = String.fromEnvironment(
-      'GOOGLE_MAPS_API_KEY',
-      defaultValue: 'AIzaSyANiWgr3u86BpMVKFGD50GpoZ2u5u4aDbk');
+    'GOOGLE_PLACES_CLIENT_API_KEY',
+    defaultValue: '',
+  );
 }

@@ -1,6 +1,6 @@
 import crypto from "node:crypto";
 import mongoose from "mongoose";
-import Ride from "../models/Ride.js";
+import Ride, { ACTIVE_RIDE_STATUSES } from "../models/Ride.js";
 import Driver from "../models/Driver.js";
 import RideMessage from "../models/RideMessage.js";
 import CommunicationAudit from "../models/CommunicationAudit.js";
@@ -15,19 +15,17 @@ import { endActiveCallsForRide, toCallDto } from "../services/callSessionService
 import CallSession from "../models/CallSession.js";
 import User from "../models/User.js";
 import RideSafetyAction from "../models/RideSafetyAction.js";
+import RideAudit from "../models/RideAudit.js";
 import { counterpartFor } from "../services/rideCommunicationPolicy.js";
 import { buildAvailableDriverFilter } from "../utils/availableDrivers.js";
-
-const ACTIVE_RIDE_STATUSES = ["accepted", "driver_arriving", "driver_arrived", "in_progress"];
-const DRIVER_TRANSITIONS = {
-  // Acceptance is exclusively performed by the passenger through the
-  // transaction-backed Trip Offer endpoint so points cannot be bypassed.
-  requested: ["cancelled"],
-  accepted: ["driver_arriving", "cancelled"],
-  driver_arriving: ["driver_arrived", "cancelled"],
-  driver_arrived: ["in_progress", "cancelled"],
-  in_progress: ["completed"],
-};
+import {
+  RideTransitionError,
+  decryptPickupPin,
+  transitionRideState,
+  verifyPickupPin,
+} from "../services/rideTransitionService.js";
+import { computeRideRoute } from "../services/googleRoutesService.js";
+import { updateActiveRideLocation } from "../services/rideLocationService.js";
 
 const rideDto = (ride) => ({
   id: String(ride._id),
@@ -45,6 +43,12 @@ const rideDto = (ride) => ({
   contactAllowed: isRideContactAllowed(ride),
   createdAt: ride.createdAt,
   updatedAt: ride.updatedAt,
+  stateVersion: ride.stateVersion || 0,
+  driverOnTheWayAt: ride.driverOnTheWayAt,
+  driverArrivedAt: ride.driverArrivedAt,
+  pickupConfirmedAt: ride.pickupConfirmedAt,
+  lastDriverLocation: ride.lastDriverLocation,
+  cancellation: ride.cancellation,
   ...(ride.status !== "contacting"
     ? {
         pickup: ride.pickup,
@@ -77,6 +81,18 @@ const publicRideDto = async (ride) => {
   return { ...rideDto(ride), passenger: publicParticipantDto(passenger, "passenger"), driver: publicParticipantDto(driver, "driver") };
 };
 
+const participantRideDto = async (ride, principal) => {
+  const dto = await publicRideDto(ride);
+  if (principal?.role === "passenger" && String(ride.passengerId) === String(principal.id)) {
+    const secret = await Ride.findById(ride._id).select("+pickupPinEncrypted").lean();
+    const pickupPin = decryptPickupPin(secret?.pickupPinEncrypted);
+    if (pickupPin && !["completed", "cancelled", "cancelled_by_user", "cancelled_by_driver", "cancelled_by_admin"].includes(ride.status)) {
+      dto.pickupPin = pickupPin;
+    }
+  }
+  return dto;
+};
+
 const sendError = (res, error) => res.status(error.statusCode || 500).json({
   success: false,
   code: error.code || "INTERNAL_ERROR",
@@ -87,6 +103,18 @@ export const createDriverContact = async (req, res) => {
   try {
     const principal = await resolvePrincipal(req.user?._id);
     if (principal.role !== "passenger") throw new CommunicationPolicyError("Only passengers can contact a driver", 403, "PASSENGER_REQUIRED");
+    const passengerAvailable = await User.exists({
+      _id: principal.id,
+      activeRideId: null,
+      isRestricted: false,
+    });
+    if (!passengerAvailable) {
+      throw new CommunicationPolicyError(
+        "Passenger already has an active ride",
+        409,
+        "ACTIVE_RIDE_CONFLICT"
+      );
+    }
     const { driverId } = req.body || {};
     if (!mongoose.isValidObjectId(driverId)) throw new CommunicationPolicyError("Valid driverId is required", 400, "INVALID_DRIVER_ID");
     const driver = await Driver.findOne({
@@ -288,20 +316,14 @@ export const getRide = async (req, res) => {
   try {
     const principal = await resolvePrincipal(req.user?._id);
     const { ride } = await assertRideParticipant(principal, req.params.rideId);
-    return res.json({ success: true, ride: await publicRideDto(ride) });
+    return res.json({ success: true, ride: await participantRideDto(ride, principal) });
   } catch (error) { return sendError(res, error); }
 };
 
 export const getActiveRide = async (req, res) => {
   try {
     const principal = await resolvePrincipal(req.user?._id);
-    const filter = {
-      $or: [
-        { status: "contacting", communicationBlockedAt: null },
-        { status: { $in: ACTIVE_RIDE_STATUSES } },
-        { status: "completed", contactEndsAt: { $gt: new Date() }, communicationBlockedAt: null },
-      ],
-    };
+    const filter = { status: { $in: ACTIVE_RIDE_STATUSES } };
     if (principal.role === "passenger") {
       filter.passengerId = principal.id;
       if (req.query.driverId) {
@@ -314,7 +336,7 @@ export const getActiveRide = async (req, res) => {
       throw new CommunicationPolicyError("Ride participant required", 403, "RIDE_PARTICIPANT_REQUIRED");
     }
     const ride = await Ride.findOne(filter).sort({ updatedAt: -1 });
-    return res.json({ success: true, ride: ride ? await publicRideDto(ride) : null });
+    return res.json({ success: true, ride: ride ? await participantRideDto(ride, principal) : null });
   } catch (error) { return sendError(res, error); }
 };
 
@@ -353,59 +375,126 @@ export const listMyRides = async (req, res) => {
 export const transitionRide = async (req, res) => {
   try {
     const principal = await resolvePrincipal(req.user?._id);
-    if (principal.role !== "driver") throw new CommunicationPolicyError("Only the assigned driver can transition a ride", 403, "DRIVER_REQUIRED");
-    if (!mongoose.isValidObjectId(req.params.rideId)) throw new CommunicationPolicyError("Invalid ride id", 400, "INVALID_RIDE_ID");
-    const ride = await Ride.findById(req.params.rideId);
-    if (!ride) throw new CommunicationPolicyError("Ride not found", 404, "RIDE_NOT_FOUND");
-    if (String(ride.driverId) !== String(principal.id)) throw new CommunicationPolicyError("You are not assigned to this ride", 403, "NOT_ASSIGNED_DRIVER");
+    if (!mongoose.isValidObjectId(req.params.rideId)) {
+      throw new CommunicationPolicyError("Invalid ride id", 400, "INVALID_RIDE_ID");
+    }
+    const existingRide = await Ride.findById(req.params.rideId).select("_id");
+    if (!existingRide) {
+      throw new CommunicationPolicyError("Ride not found", 404, "RIDE_NOT_FOUND");
+    }
     const nextStatus = String(req.body?.status || "").trim();
-    if (!(DRIVER_TRANSITIONS[ride.status] || []).includes(nextStatus)) {
-      throw new CommunicationPolicyError(`Cannot transition ride from ${ride.status} to ${nextStatus}`, 409, "INVALID_RIDE_TRANSITION");
+    let pickupPinVerified = false;
+    if (nextStatus === "pickup_confirmed") {
+      await verifyPickupPin({
+        rideId: req.params.rideId,
+        driverId: principal.id,
+        pin: req.body?.pickupPin,
+      });
+      pickupPinVerified = true;
     }
-    const now = new Date();
-    const set = { status: nextStatus };
-    if (nextStatus === "accepted") set.acceptedAt = now;
-    if (nextStatus === "in_progress") set.startedAt = now;
-    if (["completed", "cancelled"].includes(nextStatus)) {
-      const grace = Math.min(1440, Math.max(0, Number.parseInt(process.env.RIDE_CONTACT_GRACE_PERIOD_MINUTES || "30", 10) || 0));
-      set.endedAt = now;
-      set.contactEndsAt = nextStatus === "completed" ? new Date(now.getTime() + grace * 60000) : now;
-    }
-    const updated = await Ride.findOneAndUpdate(
-      { _id: ride._id, status: ride.status }, { $set: set }, { new: true }
-    );
-    if (!updated) throw new CommunicationPolicyError("Ride state changed concurrently", 409, "RIDE_STATE_CONFLICT");
-    if (["completed", "cancelled"].includes(nextStatus)) await endActiveCallsForRide(updated._id, `ride_${nextStatus}`);
-    if (["completed", "cancelled"].includes(nextStatus)) {
-      const currentDriver = await Driver.findById(updated.driverId)
-        .select("_id isOnline");
-      const driver = currentDriver
-        ? await Driver.findByIdAndUpdate(
-            updated.driverId,
-            {
-              $set: {
-                availabilityStatus: currentDriver.isOnline
-                  ? "Online"
-                  : "Offline",
-              },
-            },
-            { new: true }
-          ).select("_id isOnline availabilityStatus updatedAt")
-        : null;
+    const updated = await transitionRideState({
+      rideId: req.params.rideId,
+      principal,
+      nextStatus,
+      idempotencyKey: req.get("Idempotency-Key") || req.body?.idempotencyKey,
+      location: req.body?.location,
+      reason: req.body?.reason,
+      note: req.body?.note,
+      overrideReason: req.body?.overrideReason,
+      pickupPinVerified,
+    });
+    const terminal = ["completed", "cancelled_by_user", "cancelled_by_driver", "cancelled_by_admin"].includes(nextStatus);
+    if (terminal) await endActiveCallsForRide(updated._id, `ride_${nextStatus}`);
+    const room = `ride:${updated._id}`;
+    const event = nextStatus === "completed"
+      ? "ride:completed"
+      : nextStatus.startsWith("cancelled_")
+        ? "ride:cancelled"
+        : "ride:status_changed";
+    const payload = { rideId: String(updated._id), status: updated.status, stateVersion: updated.stateVersion };
+    io.to(room).to(String(updated.passengerId)).to(String(updated.driverId)).emit(event, payload);
+    io.to(String(updated.passengerId)).to(String(updated.driverId)).emit("ride:state", payload);
+    if (terminal) {
+      const driver = await Driver.findById(updated.driverId).select("_id isOnline availabilityStatus updatedAt");
       if (driver) {
         io.emit("driver:availability", {
           driverId: String(driver._id),
-          status: driver.isOnline ? "Online" : "Offline",
+          status: driver.availabilityStatus,
           isAvailable: driver.isOnline === true,
           updatedAt: driver.updatedAt,
         });
       }
     }
-    await CommunicationAudit.create({ rideId: updated._id, action: `ride_${nextStatus}`, actorId: principal.id, actorRole: "driver", outcome: "success" });
-    io.to(String(updated.passengerId)).to(String(updated.driverId)).emit("ride:state", { rideId: String(updated._id), status: updated.status });
-    return res.json({ success: true, ride: await publicRideDto(updated) });
+    return res.json({ success: true, ride: await participantRideDto(updated, principal) });
   } catch (error) {
     if (error?.code === 11000) return sendError(res, new CommunicationPolicyError("Passenger or driver already has an active ride", 409, "ACTIVE_RIDE_CONFLICT"));
+    return sendError(res, error);
+  }
+};
+
+export const cancelRide = async (req, res) => {
+  try {
+    const principal = await resolvePrincipal(req.user?._id);
+    const nextStatus =
+      principal.role === "passenger"
+        ? "cancelled_by_user"
+        : principal.role === "driver"
+          ? "cancelled_by_driver"
+          : "cancelled_by_admin";
+    req.body = { ...req.body, status: nextStatus };
+    return transitionRide(req, res);
+  } catch (error) {
+    return sendError(res, error);
+  }
+};
+
+export const getRideRoute = async (req, res) => {
+  try {
+    const principal = await resolvePrincipal(req.user?._id);
+    const { ride } = await assertRideParticipant(principal, req.params.rideId);
+    if (!ACTIVE_RIDE_STATUSES.includes(ride.status)) {
+      throw new RideTransitionError("Route data is only available for an active ride", 409, "RIDE_NOT_ACTIVE");
+    }
+    const phase = String(req.query.phase || "").trim();
+    if (!["pickup", "destination"].includes(phase)) {
+      throw new RideTransitionError("phase must be pickup or destination", 400, "INVALID_ROUTE_PHASE");
+    }
+    const route = await computeRideRoute({ ride, phase });
+    io.to(`ride:${ride._id}`)
+      .to(String(ride.passengerId))
+      .to(String(ride.driverId))
+      .emit("ride:eta_updated", {
+        rideId: String(ride._id),
+        phase,
+        distanceMeters: route.distanceMeters,
+        duration: route.duration,
+        calculatedAt: route.calculatedAt,
+      });
+    return res.json({ success: true, route });
+  } catch (error) {
+    return sendError(res, error);
+  }
+};
+
+export const postRideLocation = async (req, res) => {
+  try {
+    const principal = await resolvePrincipal(req.user?._id);
+    if (principal.role !== "driver") {
+      throw new RideTransitionError("Only drivers may update ride location", 403, "DRIVER_REQUIRED");
+    }
+    const ride = await updateActiveRideLocation({
+      rideId: req.params.rideId,
+      driverId: principal.id,
+      payload: req.body,
+    });
+    const payload = {
+      rideId: String(ride._id),
+      status: ride.status,
+      location: ride.lastDriverLocation,
+    };
+    io.to(`ride:${ride._id}`).to(String(ride.passengerId)).emit("ride:driver_location", payload);
+    return res.json({ success: true, ...payload });
+  } catch (error) {
     return sendError(res, error);
   }
 };
@@ -514,6 +603,33 @@ export const createSafetyAction = (type) => async (req, res) => {
     }
     if (type === "report") {
       await CallSession.findOneAndUpdate({ rideId: ride._id }, { $set: { reported: true } }, { sort: { createdAt: -1 } });
+      if (ride.status === "in_progress") {
+        const disputed = await Ride.findOneAndUpdate(
+          { _id: ride._id, status: "in_progress" },
+          { $set: { status: "disputed" }, $inc: { stateVersion: 1 } },
+          { new: true }
+        );
+        if (disputed) {
+          await RideAudit.create({
+            rideId: disputed._id,
+            action: "ride_disputed",
+            fromStatus: "in_progress",
+            toStatus: "disputed",
+            actorId: principal.id,
+            actorRole: participantRole,
+            reasonCode: reason.slice(0, 120),
+          });
+          const payload = {
+            rideId: String(disputed._id),
+            status: disputed.status,
+            stateVersion: disputed.stateVersion,
+          };
+          io.to(`ride:${disputed._id}`)
+            .to(String(disputed.passengerId))
+            .to(String(disputed.driverId))
+            .emit("ride:status_changed", payload);
+        }
+      }
     }
     await CommunicationAudit.create({ rideId: ride._id, action: `ride_${type}`, actorId: principal.id, actorRole: participantRole, outcome: "success" });
     return res.status(201).json({ success: true, action: { id: String(action._id), rideId: String(action.rideId), type: action.type, reason: action.reason, createdAt: action.createdAt } });

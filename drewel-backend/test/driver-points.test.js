@@ -1,6 +1,7 @@
 import test, { after, before } from "node:test";
 import assert from "node:assert/strict";
 import mongoose from "mongoose";
+import jwt from "jsonwebtoken";
 import { loadEnv } from "../src/utils/loadEnv.js";
 import Driver from "../src/models/Driver.js";
 import User from "../src/models/User.js";
@@ -40,6 +41,7 @@ import {
   updatePointPurchaseRequest,
 } from "../src/controllers/adminPointsController.js";
 import { assertNoDirectBalanceMutation } from "../src/helpers/pointsValidation.js";
+import { issueAppAuthToken } from "../src/controllers/authController.js";
 
 const testDbName = process.env.POINTS_INTEGRATION_TEST_DB || "";
 const integrationEnabled = /^drewel-points-test-[a-z0-9-]+$/i.test(testDbName);
@@ -109,12 +111,12 @@ after(async () => {
   await mongoose.disconnect();
 });
 
-test("welcome eligibility requires final document approval", () => {
+test("welcome eligibility includes every non-deleted driver account", () => {
   assert.equal(isWelcomeBonusEligible(driverData(1)), true);
-  assert.equal(isWelcomeBonusEligible(driverData(2, { status: "approved" })), false);
+  assert.equal(isWelcomeBonusEligible(driverData(2, { status: "approved" })), true);
   assert.equal(
     isWelcomeBonusEligible(driverData(3, { profileRequestStatus: "pending" })),
-    false
+    true
   );
   assert.equal(isWelcomeBonusEligible(driverData(4, { isDeleted: true })), false);
 });
@@ -508,6 +510,29 @@ test("plain administrators cannot gain points access through capability fields",
   );
 });
 
+test("verified purchase credit requires an explicit administrator reason", async () => {
+  const response = responseRecorder();
+  await creditVerifiedPointPurchaseRequest(
+    {
+      params: { id: String(new mongoose.Types.ObjectId()) },
+      body: { confirmation: true },
+      headers: { "idempotency-key": "purchase-credit-reason-required-0001" },
+      get(name) {
+        return this.headers[String(name).toLowerCase()];
+      },
+      pointsAdmin: {
+        id: new mongoose.Types.ObjectId(),
+        role: "owner",
+        isOwner: true,
+      },
+    },
+    response
+  );
+  assert.equal(response.result.statusCode, 400);
+  assert.equal(response.result.body.code, "POINTS_VALIDATION_ERROR");
+  assert.match(response.result.body.message, /reason/i);
+});
+
 test(
   "plain admins cannot adjust points and passengers cannot read driver wallets",
   { skip: !integrationEnabled },
@@ -722,6 +747,106 @@ test(
 );
 
 test(
+  "literal lifecycle declines one offer, charges five rides, reaches zero, and blocks the sixth",
+  { skip: !integrationEnabled },
+  async () => {
+    const [driver, passenger] = await Promise.all([
+      Driver.create(driverData(91)),
+      User.create({ phone: "55000091", countryCode: "+216", isVerified: true }),
+    ]);
+    await grantWelcomeBonus(driver);
+    let contact = await Ride.create({
+      passengerId: passenger._id,
+      driverId: driver._id,
+      status: "contacting",
+      reference: "POINTS-LITERAL-DECLINE",
+    });
+    const declined = await createTripOffer(
+      offerPayload({ driver, contact, suffix: "00000191" })
+    );
+    await closeTripOffer({
+      offerId: declined.offer._id,
+      actorId: passenger._id,
+      actorRole: "passenger",
+      terminalStatus: "declined",
+      reason: "Literal lifecycle decline",
+    });
+    let wallet = await DriverPointsWallet.findOne({ driverId: driver._id });
+    assert.equal(wallet.availableBonusPoints, 100);
+    assert.equal(wallet.reservedBonusPoints, 0);
+
+    const acceptedRideIds = [];
+    for (let index = 0; index < 5; index += 1) {
+      if (index > 0) {
+        contact = await Ride.create({
+          passengerId: passenger._id,
+          driverId: driver._id,
+          status: "contacting",
+          reference: `POINTS-LITERAL-${index}`,
+        });
+      }
+      const offer = await createTripOffer(
+        offerPayload({
+          driver,
+          contact,
+          suffix: `0000019${index + 2}`,
+        })
+      );
+      const accepted = await acceptTripOffer({
+        offerId: offer.offer._id,
+        passengerId: passenger._id,
+      });
+      acceptedRideIds.push(String(accepted.ride._id));
+      await Promise.all([
+        Ride.updateOne(
+          { _id: accepted.ride._id },
+          { $set: { status: "completed", endedAt: new Date() } }
+        ),
+        Driver.updateOne(
+          { _id: driver._id },
+          { $set: { availabilityStatus: "Online", isOnline: true } }
+        ),
+      ]);
+    }
+    wallet = await DriverPointsWallet.findOne({ driverId: driver._id });
+    assert.equal(new Set(acceptedRideIds).size, 5);
+    assert.equal(wallet.availableBonusPoints, 0);
+    assert.equal(wallet.reservedBonusPoints, 0);
+    assert.equal(wallet.totalConsumed, 100);
+    assert.equal(
+      await PointTransaction.countDocuments({
+        driverId: driver._id,
+        type: "RIDE_CHARGE",
+      }),
+      5
+    );
+    const blockedContact = await Ride.create({
+      passengerId: passenger._id,
+      driverId: driver._id,
+      status: "contacting",
+      reference: "POINTS-LITERAL-BLOCKED",
+    });
+    await assert.rejects(
+      createTripOffer(
+        offerPayload({
+          driver,
+          contact: blockedContact,
+          suffix: "00000199",
+        })
+      ),
+      (error) => error.code === "INSUFFICIENT_AVAILABLE_POINTS"
+    );
+    assert.equal(
+      await PointTransaction.countDocuments({
+        driverId: driver._id,
+        type: "WELCOME_BONUS",
+      }),
+      1
+    );
+  }
+);
+
+test(
   "payment verification rejects an already-used payment reference",
   { skip: !integrationEnabled },
   async () => {
@@ -791,6 +916,25 @@ test("modified clients cannot submit balances at any nesting depth", () => {
       () => assertNoDirectBalanceMutation(payload),
       (error) => error.code === "DIRECT_BALANCE_MUTATION_FORBIDDEN"
     );
+  }
+});
+
+test("driver and passenger authentication tokens have a configurable expiry", () => {
+  const previousSecret = process.env.JWT_SECRET;
+  const previousExpiry = process.env.APP_JWT_EXPIRES_IN;
+  try {
+    process.env.JWT_SECRET = "test-only-jwt-secret-with-sufficient-entropy";
+    process.env.APP_JWT_EXPIRES_IN = "15m";
+    const decoded = jwt.verify(
+      issueAppAuthToken(new mongoose.Types.ObjectId()),
+      process.env.JWT_SECRET
+    );
+    assert.equal(decoded.exp - decoded.iat, 15 * 60);
+  } finally {
+    if (previousSecret === undefined) delete process.env.JWT_SECRET;
+    else process.env.JWT_SECRET = previousSecret;
+    if (previousExpiry === undefined) delete process.env.APP_JWT_EXPIRES_IN;
+    else process.env.APP_JWT_EXPIRES_IN = previousExpiry;
   }
 });
 
@@ -889,6 +1033,13 @@ test(
       PointTransaction.deleteOne({ _id: ledger._id }),
       /append-only/
     );
+    await assert.rejects(
+      PointTransaction.findOneAndReplace(
+        { _id: ledger._id },
+        ledger.toObject()
+      ),
+      /append-only/
+    );
     const audit = await PointsAdminAudit.create({
       action: "PURCHASE_REQUEST_TRANSITION",
       adminId: new mongoose.Types.ObjectId(),
@@ -907,6 +1058,13 @@ test(
     );
     await assert.rejects(
       PointsAdminAudit.deleteOne({ _id: audit._id }),
+      /append-only/
+    );
+    await assert.rejects(
+      PointsAdminAudit.findOneAndReplace(
+        { _id: audit._id },
+        audit.toObject()
+      ),
       /append-only/
     );
   }

@@ -30,8 +30,8 @@ import { startPointsJobs } from "./src/jobs/pointsJobs.js";
 loadEnv();
 validatePublicAssetConfig();
 
-const PORT = process.env.PORT || 3001;
-const HOST = process.env.HOST || "127.0.0.1";
+const PORT = Number.parseInt(process.env.PORT || "3001", 10);
+const HOST = process.env.HOST || "0.0.0.0";
 const ALLOW_START_WITHOUT_DB =
   String(process.env.ALLOW_START_WITHOUT_DB || "false").toLowerCase() === "true";
 const LOCAL_ADMIN_BOOTSTRAP =
@@ -120,11 +120,26 @@ app.get("/health", async (req, res) => {
   return res.status(200).json({ success: true, message: "Backend server is running" });
 });
 
+app.use("/api", (req, res) =>
+  res.status(404).json({
+    success: false,
+    code: "API_ROUTE_NOT_FOUND",
+    message: `Cannot ${req.method} ${req.originalUrl}`,
+  })
+);
+
 app.use((err, req, res, next) => {
   console.error("Global Error Handler:", err.message);
-  res.status(500).json({
+  const status =
+    Number.isInteger(err?.statusCode) &&
+    err.statusCode >= 400 &&
+    err.statusCode < 500
+      ? err.statusCode
+      : 500;
+  res.status(status).json({
     success: false,
-    message: err.message || "Internal Server Error",
+    code: status === 500 ? "INTERNAL_ERROR" : err.code || "REQUEST_ERROR",
+    message: status === 500 ? "Internal server error" : err.message,
   });
 });
 

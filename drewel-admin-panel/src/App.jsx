@@ -22,6 +22,8 @@ import ApprovedRequests from "./pages/ApprovedRequests";
 import RejectedRequests from "./pages/RejectedRequests";
 import AllRequests from "./pages/AllRequests";
 import Calls from "./pages/Calls";
+import Rides from "./pages/rides/Rides";
+import RideDetail from "./pages/rides/RideDetail";
 import RequirePointsAccess from "./components/driverPoints/RequirePointsAccess";
 import PointsOverview from "./pages/driverPoints/PointsOverview";
 import DriverWallets from "./pages/driverPoints/DriverWallets";
@@ -59,6 +61,8 @@ function App() {
               <Route path="/notification" element={<PushNotification />} />
               <Route path="/chat" element={<ChatWrapper />} />
               <Route path="/calls" element={<Calls />} />
+              <Route path="/rides" element={<Rides />} />
+              <Route path="/rides/:rideId" element={<RideDetail />} />
               <Route element={<RequirePointsAccess />}>
                 <Route path="/driver-points" element={<PointsOverview />} />
                 <Route path="/driver-points/wallets" element={<DriverWallets />} />

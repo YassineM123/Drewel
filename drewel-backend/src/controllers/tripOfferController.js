@@ -201,6 +201,7 @@ export const acceptOffer = async (req, res) => {
     const result = await acceptTripOffer({
       offerId: requireObjectId(req.params.offerId, "offerId"),
       passengerId: principal.id,
+      idempotencyKey: requireIdempotencyKey(req),
     });
     if (result.expired) {
       return res.status(410).json({
@@ -209,13 +210,18 @@ export const acceptOffer = async (req, res) => {
         offer: toTripOfferDto(result.offer),
       });
     }
+    const rideEvent = {
+      rideId: String(result.ride._id),
+      offerId: String(result.offer._id),
+      status: result.ride.status,
+    };
+    io.to(`ride:${result.ride._id}`)
+      .to(String(result.offer.driverId))
+      .to(String(result.offer.passengerId))
+      .emit(result.idempotent ? "ride:status_changed" : "ride:created", rideEvent);
     io.to(String(result.offer.driverId))
       .to(String(result.offer.passengerId))
-      .emit("ride:state", {
-        rideId: String(result.ride._id),
-        offerId: String(result.offer._id),
-        status: result.ride.status,
-      });
+      .emit("ride:state", rideEvent);
     io.emit("driver:availability", {
       driverId: String(result.offer.driverId),
       status: "Busy",
@@ -229,6 +235,7 @@ export const acceptOffer = async (req, res) => {
         ? getOfferWalletDto(result.wallet, result.offer.pointsCost)
         : null,
       idempotent: result.idempotent,
+      pickupPin: result.pickupPin,
     });
   } catch (error) {
     if (error?.code === 11000) {
@@ -245,6 +252,7 @@ export const acceptOffer = async (req, res) => {
 const closeAs = (actorRole, terminalStatus, reason) => async (req, res) => {
   try {
     const principal = await resolvePrincipal(req.user?._id);
+    requireIdempotencyKey(req);
     if (principal.role !== actorRole) {
       return res.status(403).json({
         success: false,

@@ -7,10 +7,15 @@ import CommunicationAudit from "../models/CommunicationAudit.js";
 
 export const CONTACT_RIDE_STATUSES = [
   "contacting",
+  "offer_pending",
   "accepted",
+  "confirmed",
   "driver_arriving",
+  "driver_on_the_way",
   "driver_arrived",
+  "pickup_confirmed",
   "in_progress",
+  "disputed",
 ];
 
 export class CommunicationPolicyError extends Error {
@@ -30,7 +35,9 @@ export const resolvePrincipal = async (userId) => {
     Driver.findById(userId).select("_id isRestricted isDeleted status isApproved").lean(),
     Admin.findById(userId).select("_id role").lean(),
   ]);
-  if (admin?.role === "admin") return { id: admin._id, role: "admin", subject: admin };
+  if (admin && ["admin", "owner", "finance_admin"].includes(admin.role)) {
+    return { id: admin._id, role: "admin", subject: admin };
+  }
   if (driver) {
     if (driver.isRestricted || driver.isDeleted) throw new CommunicationPolicyError("Account unavailable", 403, "ACCOUNT_UNAVAILABLE");
     return { id: driver._id, role: "driver", subject: driver };
@@ -56,6 +63,9 @@ export const assertRideParticipant = async (principal, rideOrId, { requireContac
     ? rideOrId
     : await Ride.findById(rideOrId);
   if (!ride) throw new CommunicationPolicyError("Ride not found", 404, "RIDE_NOT_FOUND");
+  if (principal.role === "admin") {
+    return { ride, participantRole: "admin" };
+  }
 
   const isPassenger = principal.role === "passenger" && String(ride.passengerId) === String(principal.id);
   const isDriver = principal.role === "driver" && String(ride.driverId) === String(principal.id);
@@ -78,7 +88,10 @@ export const assertRideParticipant = async (principal, rideOrId, { requireContac
       }).catch((error) => console.error("Communication denial audit failed", error.message));
       throw new CommunicationPolicyError("Ride communication is blocked", 403, "RIDE_COMMUNICATION_BLOCKED");
     }
-    const expired = ride.status === "completed" || ride.status === "cancelled";
+    const expired =
+      ride.status === "completed" ||
+      ride.status === "cancelled" ||
+      String(ride.status).startsWith("cancelled_");
     const reasonCode = expired ? "RIDE_CONTACT_EXPIRED" : "RIDE_CONTACT_NOT_ACTIVE";
     await CommunicationAudit.create({
       rideId: ride._id, action: "communication_denied", actorId: principal.id,

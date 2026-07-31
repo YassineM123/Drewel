@@ -23,6 +23,8 @@ import {
   sidebarHandler,
 } from "../utils/globalChat.js";
 import Admin from "../models/Admin.js";
+import Ride, { ACTIVE_RIDE_STATUSES } from "../models/Ride.js";
+import { updateActiveRideLocation } from "../services/rideLocationService.js";
 import {
   AVAILABLE_DRIVER_FIELDS,
   buildAvailableDriverFilter,
@@ -81,7 +83,10 @@ io.on("connection", async (socket) => {
     }
 
     const userId = user._id;
-    const authenticatedAdmin = await Admin.exists({ _id: userId, role: "admin" });
+    const authenticatedAdmin = await Admin.exists({
+      _id: userId,
+      role: { $in: ["admin", "owner", "finance_admin"] },
+    });
     const authenticatedDriver = await Driver.exists({ _id: userId });
     const authenticatedUser = await User.exists({ _id: userId });
     const userIdString = userId.toString();
@@ -285,6 +290,68 @@ io.on("connection", async (socket) => {
       }
     });
 
+    socket.on("ride:join", async ({ rideId } = {}, acknowledge) => {
+      try {
+        if (!mongoose.Types.ObjectId.isValid(rideId)) {
+          acknowledgeSocketEvent(acknowledge, { ok: false, error: "INVALID_RIDE_ID" });
+          return;
+        }
+        const participantFilter = authenticatedAdmin
+          ? { _id: rideId }
+          : authenticatedDriver
+            ? { _id: rideId, driverId: userId }
+            : { _id: rideId, passengerId: userId };
+        const ride = await Ride.findOne({
+          ...participantFilter,
+          status: { $in: ACTIVE_RIDE_STATUSES },
+        }).select("_id status stateVersion");
+        if (!ride) {
+          acknowledgeSocketEvent(acknowledge, { ok: false, error: "RIDE_ROOM_FORBIDDEN" });
+          socket.emit("ride:error", { rideId, code: "RIDE_ROOM_FORBIDDEN" });
+          return;
+        }
+        socket.join(`ride:${ride._id}`);
+        acknowledgeSocketEvent(acknowledge, {
+          ok: true,
+          rideId: String(ride._id),
+          status: ride.status,
+          stateVersion: ride.stateVersion,
+        });
+      } catch {
+        acknowledgeSocketEvent(acknowledge, { ok: false, error: "RIDE_ROOM_JOIN_FAILED" });
+      }
+    });
+
+    socket.on("ride:leave", ({ rideId } = {}, acknowledge) => {
+      if (mongoose.Types.ObjectId.isValid(rideId)) socket.leave(`ride:${rideId}`);
+      acknowledgeSocketEvent(acknowledge, { ok: true });
+    });
+
+    socket.on("ride:driver_location", async ({ rideId, ...location } = {}, acknowledge) => {
+      try {
+        if (!authenticatedDriver || !mongoose.Types.ObjectId.isValid(rideId)) {
+          acknowledgeSocketEvent(acknowledge, { ok: false, error: "RIDE_LOCATION_FORBIDDEN" });
+          return;
+        }
+        const ride = await updateActiveRideLocation({
+          rideId,
+          driverId: userId,
+          payload: location,
+        });
+        const event = {
+          rideId: String(ride._id),
+          status: ride.status,
+          location: ride.lastDriverLocation,
+        };
+        io.to(`ride:${ride._id}`).to(String(ride.passengerId)).emit("ride:driver_location", event);
+        acknowledgeSocketEvent(acknowledge, { ok: true, ...event });
+      } catch (error) {
+        const code = error.code || "LOCATION_UPDATE_FAILED";
+        acknowledgeSocketEvent(acknowledge, { ok: false, error: code });
+        socket.emit("ride:error", { rideId, code });
+      }
+    });
+
     socket.on("update-isUpdate", async ({ driverId, isUpdate } = {}) => {
       try {
         const targetDriverId = authenticatedAdmin && driverId ? driverId : userId;
@@ -328,20 +395,23 @@ io.on("connection", async (socket) => {
           driverSocketCounts.set(userIdString, remaining);
         } else {
           driverSocketCounts.delete(userIdString);
-          const driver = await Driver.findByIdAndUpdate(
-            userId,
-            {
-              $set: {
-                isOnline: false,
-                availabilityStatus: "Offline",
-              },
-            },
-            { new: true }
-          ).select("_id updatedAt");
+          const activeDriver = await Driver.findById(userId)
+            .select("_id activeRideId isOnline");
+          const driver = activeDriver?.activeRideId
+            ? await Driver.findByIdAndUpdate(
+                userId,
+                { $set: { isOnline: false, availabilityStatus: "Busy" } },
+                { new: true }
+              ).select("_id availabilityStatus updatedAt")
+            : await Driver.findByIdAndUpdate(
+                userId,
+                { $set: { isOnline: false, availabilityStatus: "Offline" } },
+                { new: true }
+              ).select("_id availabilityStatus updatedAt");
           if (driver) {
             io.emit("driver:availability", {
               driverId: String(driver._id),
-              status: "Offline",
+              status: driver.availabilityStatus,
               isAvailable: false,
               updatedAt: driver.updatedAt,
             });

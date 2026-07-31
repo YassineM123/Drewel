@@ -8,7 +8,7 @@ import '../../../../common/common_widgets.dart';
 import '../../../../common/drewel_app_bar.dart';
 import '../../../../common/drewel_pop_scope.dart';
 import '../../../../common/text_styles.dart';
-import '../../../data/constants/image_constants.dart';
+import '../../../data/apis/api_models/get_chat_model.dart';
 import '../controllers/support_chat_controller.dart';
 
 class SupportChatView extends GetView<SupportChatController> {
@@ -22,52 +22,8 @@ class SupportChatView extends GetView<SupportChatController> {
           showBackButton: true,
         ),
         backgroundColor: primaryColor,
-        resizeToAvoidBottomInset: true, // Fixes keyboard overlap
-        floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
-        floatingActionButton: Container(
-          margin: EdgeInsets.all(15.px),
-          padding: EdgeInsets.symmetric(horizontal: 15.px, vertical: 5.px),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(50.px),
-            border: Border.all(color: backgroundColor.withOpacity(0.2)),
-          ),
-          child: TextFormField(
-            controller: controller.messageController,
-            decoration: InputDecoration(
-              hintText: 'Type a message',
-              hintStyle: MyTextStyle.titleStyle16b,
-              border: InputBorder.none,
-              focusedBorder: InputBorder.none,
-              enabledBorder: InputBorder.none,
-              suffixIcon: Row(
-                mainAxisSize: MainAxisSize.min,
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  GestureDetector(
-                      onTap: () {
-                        if (controller.messageController.text.isNotEmpty) {
-                          controller.sendMessage();
-                        } else {
-                          CommonWidgets.showMyToastMessage(
-                              'Enter message first ...');
-                        }
-                      },
-                      child:
-                          Icon(Icons.send, size: 25.px, color: primaryColor)),
-                  SizedBox(
-                    width: 8.px,
-                  )
-                  // Padding(
-                  //   padding:  EdgeInsets.symmetric(horizontal: 8.px),
-                  //   child: CommonWidgets.appIcons(assetName: IconConstants.icMic,
-                  //   height: 26.px,width: 12.px),
-                  // )
-                ],
-              ),
-              contentPadding: EdgeInsets.symmetric(vertical: 10.px),
-            ),
-          ),
-        ),
+        resizeToAvoidBottomInset: true,
+        bottomNavigationBar: _buildComposer(),
         body: Obx(() {
           controller.count.value; // Forces rebuild
           return Column(
@@ -91,27 +47,14 @@ class SupportChatView extends GetView<SupportChatController> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Row(
-                        children: [
-                          CommonWidgets.appIcons(
-                              assetName: ImageConstants.imgBoy,
-                              height: 40.px,
-                              width: 40.px),
-                          SizedBox(width: 10.px),
-                          Text(
-                            'Riadh slama',
-                            style: MyTextStyle.titleStyle18bb,
-                          ),
-                        ],
-                      ),
+                      _buildHeader(),
                       SizedBox(height: 10.px),
                       Divider(
-                          color: Colors.black.withOpacity(0.2),
+                          color: Colors.black.withValues(alpha: 0.2),
                           thickness: 1.px),
                       Expanded(
                         child: showConversationList(),
                       ),
-                      SizedBox(height: 80.px),
                     ],
                   ),
                 ),
@@ -121,6 +64,115 @@ class SupportChatView extends GetView<SupportChatController> {
         }),
       ),
     );
+  }
+
+  Widget _buildHeader() {
+    return Row(
+      children: [
+        Obx(
+          () => CircleAvatar(
+            radius: 20.px,
+            backgroundColor: primaryColor.withValues(alpha: 0.12),
+            child: Text(
+              _initials(controller.supportName.value),
+              style: MyTextStyle.titleStyle14bb.copyWith(color: primaryColor),
+            ),
+          ),
+        ),
+        SizedBox(width: 10.px),
+        Expanded(
+          child: Obx(
+            () => Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  controller.supportName.value,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: MyTextStyle.titleStyle18bb,
+                ),
+                Text(
+                  controller.supportOnline.value ? 'Online' : 'Support',
+                  style: MyTextStyle.titleStyle12b.copyWith(
+                    color: controller.supportOnline.value
+                        ? Colors.green.shade700
+                        : Colors.grey.shade600,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildComposer() {
+    return SafeArea(
+      top: false,
+      child: Container(
+        color: primary3Color,
+        padding: EdgeInsets.fromLTRB(15.px, 8.px, 15.px, 12.px),
+        child: TextFormField(
+          controller: controller.messageController,
+          minLines: 1,
+          maxLines: 4,
+          textInputAction: TextInputAction.send,
+          onFieldSubmitted: (_) => _submitMessage(),
+          decoration: InputDecoration(
+            hintText: 'Type a message',
+            hintStyle: MyTextStyle.titleStyle16b.copyWith(
+              color: Colors.grey.shade600,
+            ),
+            filled: true,
+            fillColor: primary3Color,
+            contentPadding: EdgeInsets.symmetric(
+              horizontal: 16.px,
+              vertical: 12.px,
+            ),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(28.px),
+              borderSide: BorderSide(
+                color: backgroundColor.withValues(alpha: 0.25),
+              ),
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(28.px),
+              borderSide: BorderSide(
+                color: backgroundColor.withValues(alpha: 0.25),
+              ),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(28.px),
+              borderSide: const BorderSide(color: primaryColor),
+            ),
+            suffixIcon: IconButton(
+              tooltip: 'Send message',
+              onPressed: _submitMessage,
+              icon: Icon(Icons.send_rounded, size: 25.px, color: primaryColor),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _submitMessage() {
+    if (controller.messageController.text.trim().isEmpty) {
+      CommonWidgets.showMyToastMessage('Enter message first ...');
+      return;
+    }
+    controller.sendMessage();
+  }
+
+  String _initials(String name) {
+    final List<String> parts = name
+        .trim()
+        .split(RegExp(r'\s+'))
+        .where((part) => part.isNotEmpty)
+        .toList();
+    if (parts.isEmpty) return 'DS';
+    return parts.take(2).map((part) => part[0].toUpperCase()).join();
   }
 
   Widget showConversationList() {
@@ -152,7 +204,7 @@ class SupportChatView extends GetView<SupportChatController> {
             Icon(
               Icons.chat_bubble_outline,
               size: 60.px,
-              color: Colors.grey.withOpacity(0.5),
+              color: Colors.grey.withValues(alpha: 0.5),
             ),
             SizedBox(height: 16.px),
             Text(
@@ -173,50 +225,61 @@ class SupportChatView extends GetView<SupportChatController> {
     return ListView.builder(
       itemCount: controller.messageList.length,
       controller: controller.scrollController,
-      shrinkWrap: true,
-      padding: EdgeInsets.zero,
+      padding: EdgeInsets.symmetric(vertical: 8.px),
       itemBuilder: (context, index) {
-        return Container(
-          width: MediaQuery.of(context).size.width,
-          padding: EdgeInsets.all(20.px),
-          margin: EdgeInsets.only(
-            top: 5.px,
-            bottom: 5.px,
-            left: controller.messageList[index].msgByUserId == controller.userId
-                ? 100.px
-                : 0,
-            right:
-                controller.messageList[index].msgByUserId == controller.userId
-                    ? 0.px
-                    : 100.px,
-          ),
-          decoration: BoxDecoration(
-            color:
-                controller.messageList[index].msgByUserId == controller.userId
-                    ? primaryColor
-                    : primary3Color,
-            border: Border.all(
-                color: backgroundColor.withOpacity(0.5), width: 1.px),
-            borderRadius: BorderRadius.only(
-              topLeft: Radius.circular(16.px),
-              topRight: Radius.circular(16.px),
-              bottomRight: Radius.circular(
-                  controller.messageList[index].msgByUserId == controller.userId
-                      ? 0.px
-                      : 16.px),
-              bottomLeft: Radius.circular(
-                  controller.messageList[index].msgByUserId == controller.userId
-                      ? 16.px
-                      : 0.px),
-            ),
-          ),
-          child: Text(
-            controller.messageList[index].text ?? '',
-            style:
-                controller.messageList[index].msgByUserId == controller.userId
-                    ? MyTextStyle.titleStyle16w
-                    : MyTextStyle.titleStyle16b,
-          ),
+        final ChatMessageModel message = controller.messageList[index];
+        final bool isMine = controller.isMyMessage(message);
+        return LayoutBuilder(
+          builder: (context, constraints) {
+            return Align(
+              alignment: isMine ? Alignment.centerRight : Alignment.centerLeft,
+              child: ConstrainedBox(
+                constraints:
+                    BoxConstraints(maxWidth: constraints.maxWidth * .78),
+                child: Container(
+                  padding: EdgeInsets.symmetric(
+                    horizontal: 14.px,
+                    vertical: 10.px,
+                  ),
+                  margin: EdgeInsets.symmetric(vertical: 4.px),
+                  decoration: BoxDecoration(
+                    color: isMine ? primaryColor : Colors.grey.shade100,
+                    border:
+                        isMine ? null : Border.all(color: Colors.grey.shade300),
+                    borderRadius: BorderRadius.only(
+                      topLeft: Radius.circular(16.px),
+                      topRight: Radius.circular(16.px),
+                      bottomRight: Radius.circular(isMine ? 4.px : 16.px),
+                      bottomLeft: Radius.circular(isMine ? 16.px : 4.px),
+                    ),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        message.text ?? '',
+                        style: isMine
+                            ? MyTextStyle.titleStyle16w
+                            : MyTextStyle.titleStyle16b,
+                      ),
+                      if (controller.formatMessageTime(message).isNotEmpty) ...[
+                        SizedBox(height: 3.px),
+                        Text(
+                          controller.formatMessageTime(message),
+                          style: MyTextStyle.titleStyle12b.copyWith(
+                            color: isMine
+                                ? Colors.white.withValues(alpha: .75)
+                                : Colors.grey.shade600,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ),
+            );
+          },
         );
       },
     );

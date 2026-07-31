@@ -56,6 +56,12 @@ app.*.map.json
 *_accessKeys*.csv
 drewel-backend/.env
 /tmp/device-check/
+/tmp/
+**/dist/
+**/build/
+android/key.properties
+ios/Flutter/Maps.xcconfig
 
 # JavaScript dependencies
 **/node_modules/
+ios/Flutter/Secrets.xcconfig

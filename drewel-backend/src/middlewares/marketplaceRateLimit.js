@@ -28,3 +28,29 @@ export const messageRateLimit = rateLimit({
     message: "Too many messages",
   },
 });
+
+export const rideActionRateLimit = rateLimit({
+  windowMs: 60_000,
+  limit: 20,
+  standardHeaders: "draft-8",
+  legacyHeaders: false,
+  keyGenerator: authenticatedKey,
+  message: {
+    success: false,
+    code: "RIDE_ACTION_RATE_LIMITED",
+    message: "Too many ride action attempts",
+  },
+});
+
+export const rideLocationRateLimit = rateLimit({
+  windowMs: 60_000,
+  limit: 60,
+  standardHeaders: "draft-8",
+  legacyHeaders: false,
+  keyGenerator: authenticatedKey,
+  message: {
+    success: false,
+    code: "RIDE_LOCATION_RATE_LIMITED",
+    message: "Too many ride location updates",
+  },
+});

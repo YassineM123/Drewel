@@ -63,10 +63,14 @@ export const isAdmin = async (req, res, next) => {
     req.admin = user;
     return next();
   } catch (error) {
-    console.error(error);
+    console.error("Admin authorization failed:", error.message);
     return res
       .status(500)
-      .send({ success: false, message: "Internal server error", error });
+      .send({
+        success: false,
+        code: "ADMIN_AUTHORIZATION_ERROR",
+        message: "Internal server error",
+      });
   }
 };
 

@@ -171,6 +171,11 @@ class TripOffer {
     required this.stateVersion,
     this.rideId,
     this.expiresAt,
+    this.offeredPrice,
+    this.currency,
+    this.pickup,
+    this.destination,
+    this.note,
   });
 
   final String id;
@@ -181,6 +186,11 @@ class TripOffer {
   final int stateVersion;
   final String? rideId;
   final DateTime? expiresAt;
+  final double? offeredPrice;
+  final String? currency;
+  final Map<String, dynamic>? pickup;
+  final Map<String, dynamic>? destination;
+  final String? note;
 
   factory TripOffer.fromJson(Map<String, dynamic> json) => TripOffer(
         id: (json['id'] ?? json['_id'] ?? '').toString(),
@@ -192,6 +202,17 @@ class TripOffer {
         stateVersion: _integer(json['stateVersion']),
         rideId: json['rideId']?.toString(),
         expiresAt: _date(json['expiresAt']),
+        offeredPrice: json['offeredPrice'] is num
+            ? (json['offeredPrice'] as num).toDouble()
+            : double.tryParse((json['offeredPrice'] ?? '').toString()),
+        currency: json['currency']?.toString(),
+        pickup: json['pickup'] is Map
+            ? Map<String, dynamic>.from(json['pickup'] as Map)
+            : null,
+        destination: json['destination'] is Map
+            ? Map<String, dynamic>.from(json['destination'] as Map)
+            : null,
+        note: json['note']?.toString(),
       );
 }
 

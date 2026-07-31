@@ -65,6 +65,23 @@ class FakePointsRepository implements DriverPointsRepository {
   Future<List<TripOffer>> getMyOffers() async => offerItems;
 
   @override
+  Future<List<TripOffer>> getIncomingOffers() async => offerItems;
+
+  @override
+  Future<TripOffer> acceptOffer(
+    String offerId, {
+    required String idempotencyKey,
+  }) async =>
+      offerItems.firstWhere((TripOffer offer) => offer.id == offerId);
+
+  @override
+  Future<TripOffer> declineOffer(
+    String offerId, {
+    required String idempotencyKey,
+  }) async =>
+      offerItems.firstWhere((TripOffer offer) => offer.id == offerId);
+
+  @override
   Future<TripOffer> sendOffer({
     required TripOfferDraft draft,
     required String clientOfferId,

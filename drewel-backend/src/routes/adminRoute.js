@@ -22,6 +22,14 @@ import { isAdmin, requireSignIn } from '../middlewares/authMiddleware.js';
 import { dashBoardData } from '../controllers/userController.js';
 import { sendOTPusingWhatsapp, verifyOTPWhatsapp } from '../controllers/authController.js';
 import { listAdminCalls } from '../controllers/callController.js';
+import {
+  cancelAdminRide,
+  getAdminRide,
+  listAdminRides,
+  refundRidePoints,
+  resolveRideDispute,
+  unlockRideParticipants,
+} from '../controllers/adminRideController.js';
 
 
 const router = express.Router();
@@ -47,6 +55,12 @@ router.put('/requests/:id/profile/reject', requireSignIn, isAdmin, rejectAdminPr
 router.put('/requests/:id/profile/reopen', requireSignIn, isAdmin, reopenAdminProfileRequest);
 router.get('/requests/:id/history', requireSignIn, isAdmin, getAdminRequestHistory);
 router.get('/calls', requireSignIn, isAdmin, listAdminCalls);
+router.get('/rides', requireSignIn, isAdmin, listAdminRides);
+router.get('/rides/:rideId', requireSignIn, isAdmin, getAdminRide);
+router.post('/rides/:rideId/cancel', requireSignIn, isAdmin, cancelAdminRide);
+router.post('/rides/:rideId/dispute/resolve', requireSignIn, isAdmin, resolveRideDispute);
+router.post('/rides/:rideId/unlock', requireSignIn, isAdmin, unlockRideParticipants);
+router.post('/rides/:rideId/refund-points', requireSignIn, isAdmin, refundRidePoints);
 // Compatibility contract for the current admin build. All status writes now
 // pass through the same validated, auditable transition service.
 router.put('/driver/:id/status', requireSignIn, isAdmin, updateAdminRequestStatus);

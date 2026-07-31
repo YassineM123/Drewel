@@ -16,6 +16,21 @@ const initialState = {
   error: null,
 };
 
+const participantId = (participant) =>
+  String(participant?._id || participant?.id || participant || "");
+
+const conversationMatchesSelection = (conversation, selectedUser, currentUserId) => {
+  if (!conversation || !selectedUser || !currentUserId) return false;
+  const participants = [
+    participantId(conversation.sender),
+    participantId(conversation.receiver),
+  ];
+  return (
+    participants.includes(participantId(selectedUser)) &&
+    participants.includes(String(currentUserId))
+  );
+};
+
 const chatReducer = (state, action) => {
   switch (action.type) {
     case 'SET_CONVERSATIONS':
@@ -24,6 +39,23 @@ const chatReducer = (state, action) => {
       return { ...state, currentConversation: action.payload };
     case 'SET_MESSAGES':
       return { ...state, messages: action.payload };
+    case 'SET_ACTIVE_CONVERSATION':
+      if (
+        !conversationMatchesSelection(
+          action.payload.conversation,
+          state.selectedUser,
+          action.payload.currentUserId
+        )
+      ) {
+        return state;
+      }
+      return {
+        ...state,
+        messages: action.payload.conversation?.messages || [],
+        currentConversation: action.payload.conversation,
+        error: null,
+        loading: false,
+      };
     case 'ADD_MESSAGE':
       return { ...state, messages: [...state.messages, action.payload] };
     case 'SET_SELECTED_USER':
@@ -81,17 +113,22 @@ export const ChatProvider = ({ children }) => {
     // Listen for new messages
     socket.on('message', (conversation) => {
       console.log('[Socket] Received message:', conversation);
-      dispatch({ type: 'SET_MESSAGES', payload: conversation?.messages || [] });
-      dispatch({ type: 'SET_CURRENT_CONVERSATION', payload: conversation || null });
-      dispatch({ type: 'SET_ERROR', payload: null });
-      dispatch({ type: 'SET_LOADING', payload: false });
+      let currentUserId = "";
+      try {
+        currentUserId = JSON.parse(localStorage.getItem("admin") || "{}")?._id || "";
+      } catch {
+        currentUserId = "";
+      }
+      dispatch({
+        type: 'SET_ACTIVE_CONVERSATION',
+        payload: { conversation, currentUserId },
+      });
     });
 
     // Listen for user details
     socket.on('message-user', (userDetails) => {
       console.log('[Socket] Received message-user:', userDetails);
       dispatch({ type: 'SET_USER_DETAILS', payload: userDetails });
-      dispatch({ type: 'SET_LOADING', payload: false });
     });
 
     // Listen for group conversations
@@ -173,7 +210,7 @@ export const ChatProvider = ({ children }) => {
   }, [socket, isConnected]);
 
   const setSelectedUser = useCallback((user) => {
-  dispatch({ type: "SET_SELECTED_USER", payload: user });
+    dispatch({ type: "SET_SELECTED_USER", payload: user });
   }, []);
 
   const value = {
@@ -197,3 +234,5 @@ export const ChatProvider = ({ children }) => {
 ChatProvider.propTypes = {
   children: PropTypes.node.isRequired,
 };
+
+export { chatReducer, conversationMatchesSelection };

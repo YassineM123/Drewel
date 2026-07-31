@@ -48,24 +48,24 @@ test("welcome points default safely and only accept positive integers", () => {
   assert.equal(resolveWelcomePoints({ WELCOME_DRIVER_POINTS: "invalid" }), 100);
 });
 
-test("backfill eligibility requires approved and document-verified workflow state", () => {
+test("backfill eligibility includes every non-deleted driver account", () => {
   assert.deepEqual(getBackfillEligibility(completedDriver()), {
     eligible: true,
     reason: "eligible",
   });
   assert.equal(
     getBackfillEligibility(completedDriver({ status: "approved" })).reason,
-    "documents_not_verified"
+    "eligible"
   );
   assert.equal(
     getBackfillEligibility(
       completedDriver({ profileRequestStatus: "pending" })
     ).reason,
-    "documents_not_verified"
+    "eligible"
   );
   assert.equal(
     getBackfillEligibility(completedDriver({ isApproved: false })).reason,
-    "not_approved"
+    "eligible"
   );
   assert.equal(
     getBackfillEligibility(completedDriver({ isDeleted: true })).reason,
@@ -73,13 +73,13 @@ test("backfill eligibility requires approved and document-verified workflow stat
   );
 });
 
-test("identity normalization catches formatting variants and duplicate accounts", () => {
+test("identity helpers detect duplicates without excluding driver accounts", () => {
   const first = completedDriver({ _id: "one", countryCode: "+216", phone: "22 111 222" });
   const second = completedDriver({ _id: "two", countryCode: "216", phone: "22111222" });
   assert.equal(normalizedDriverIdentity(first), "216:22111222");
   const duplicates = findDuplicateIdentityKeys([first, second]);
   assert.deepEqual([...duplicates], ["216:22111222"]);
-  assert.equal(getBackfillEligibility(first, duplicates).reason, "duplicate_identity");
+  assert.equal(getBackfillEligibility(first, duplicates).reason, "eligible");
 });
 
 test("dry run reports work without creating or mutating wallets", async () => {
@@ -105,10 +105,10 @@ test("dry run reports work without creating or mutating wallets", async () => {
   });
 
   assert.equal(report.scanned, 2);
-  assert.equal(report.eligible, 1);
-  assert.equal(report.walletsToCreate, 1);
-  assert.equal(report.bonusesToGrant, 1);
-  assert.equal(report.skipped.documents_not_verified, 1);
+  assert.equal(report.eligible, 2);
+  assert.equal(report.walletsToCreate, 2);
+  assert.equal(report.bonusesToGrant, 2);
+  assert.equal(report.skipped.documents_not_verified, 0);
   assert.deepEqual(calls, []);
 });
 

@@ -21,6 +21,7 @@ import '../controllers/user_home_controller.dart';
 import '../../communication/controllers/call_state_controller.dart';
 import '../../communication/widgets/secure_communication_panel.dart';
 import '../widgets/marketplace_driver_card.dart';
+import '../../active_ride/widgets/active_ride_card.dart';
 
 class UserHomeView extends StatefulWidget {
   const UserHomeView({super.key});
@@ -122,10 +123,14 @@ class _UserHomeViewState extends State<UserHomeView> {
               final CallStateController communication =
                   Get.find<CallStateController>();
               final String? status = communication.activeRide.value?.status;
-              if (status == null || status == 'contacting') {
-                return const SizedBox.shrink();
-              }
-              return const SecureCommunicationPanel();
+              return Column(
+                mainAxisSize: MainAxisSize.min,
+                children: <Widget>[
+                  const ActiveRideCard(),
+                  if (status != null && status != 'contacting')
+                    const SecureCommunicationPanel(),
+                ],
+              );
             }),
             body: Column(
               mainAxisAlignment: MainAxisAlignment.end,

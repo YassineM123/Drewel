@@ -1,0 +1,73 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  admin:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: drewel-admin-panel
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: drewel-admin-panel/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+      - run: npm test
+      - run: npm run build
+
+  backend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: drewel-backend
+    env:
+      MONGO_URI: mongodb://127.0.0.1:27017/?replicaSet=rs0
+      POINTS_INTEGRATION_TEST_DB: drewel_ci
+      JWT_SECRET: ci-only-long-random-secret-not-for-production
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: drewel-backend/package-lock.json
+      - run: npm ci
+      - name: Start transaction-capable MongoDB
+        working-directory: .
+        run: |
+          docker run --detach --name drewel-ci-mongo --publish 27017:27017 mongo:8 --replSet rs0 --bind_ip_all
+          for attempt in {1..30}; do
+            if docker exec drewel-ci-mongo mongosh --quiet --eval 'db.runCommand({ ping: 1 }).ok' >/dev/null 2>&1; then break; fi
+            sleep 2
+          done
+          docker exec drewel-ci-mongo mongosh --quiet --eval 'rs.initiate({_id:"rs0",members:[{_id:0,host:"localhost:27017"}]})'
+          for attempt in {1..30}; do
+            if docker exec drewel-ci-mongo mongosh --quiet --eval 'db.hello().isWritablePrimary' | grep -q true; then break; fi
+            sleep 2
+          done
+      - run: npm test
+
+  flutter:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      # The legacy app currently has info-level style/deprecation findings.
+      # Errors and warnings remain fatal while that backlog is cleaned up.
+      - run: flutter analyze --no-fatal-infos
+      - run: flutter test

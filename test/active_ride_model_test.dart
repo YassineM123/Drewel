@@ -1,0 +1,71 @@
+import 'package:drewel/app/data/apis/api_models/active_ride_model.dart';
+import 'package:flutter_test/flutter_test.dart';
+
+void main() {
+  group('active ride lifecycle model', () {
+    test('normalizes legacy statuses without changing the server wire state',
+        () {
+      expect(RideStatus.fromValue('accepted'), RideStatus.confirmed);
+      expect(
+        RideStatus.fromValue('driver_arriving'),
+        RideStatus.driverOnTheWay,
+      );
+      expect(RideStatus.pickupConfirmed.wireValue, 'pickup_confirmed');
+      expect(RideStatus.inProgress.canNormallyCancel, isFalse);
+      expect(RideStatus.cancelledByDriver.isTerminal, isTrue);
+    });
+
+    test('parses recovery, route, participant and private pickup PIN data', () {
+      final ActiveRideModel ride = ActiveRideModel.fromJson(
+        <String, dynamic>{
+          'id': 'ride-1',
+          'reference': 'DRW-101',
+          'status': 'driver_arrived',
+          'stateVersion': 7,
+          'contactAllowed': true,
+          'pickupPin': '4217',
+          'pickup': <String, dynamic>{
+            'lat': 36.8,
+            'long': 10.18,
+            'address': 'Pickup',
+          },
+          'destination': <String, dynamic>{
+            'lat': 36.9,
+            'long': 10.2,
+            'address': 'Destination',
+          },
+          'route': <String, dynamic>{
+            'phase': 'pickup',
+            'encodedPolyline': '_p~iF~ps|U_ulLnnqC',
+            'distanceMeters': 2400,
+            'duration': '600s',
+            'steps': <Map<String, dynamic>>[
+              <String, dynamic>{
+                'navigationInstruction': <String, dynamic>{
+                  'instructions': 'Turn right',
+                  'maneuver': 'TURN_RIGHT',
+                },
+                'distanceMeters': 120,
+              },
+            ],
+          },
+        },
+      );
+
+      expect(ride.rideStatus, RideStatus.driverArrived);
+      expect(ride.isRecoverable, isTrue);
+      expect(ride.pickup?.isValid, isTrue);
+      expect(ride.pickupPin, '4217');
+      expect(ride.route?.durationSeconds, 600);
+      expect(ride.route?.steps.single.instruction, 'Turn right');
+      expect(ride.stateVersion, 7);
+    });
+
+    test('rejects malformed coordinates locally', () {
+      final RideCoordinateModel location = RideCoordinateModel.fromJson(
+        <String, dynamic>{'lat': 120, 'long': 10},
+      );
+      expect(location.isValid, isFalse);
+    });
+  });
+}

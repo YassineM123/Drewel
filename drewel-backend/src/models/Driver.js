@@ -128,6 +128,16 @@ const driverSchema = new mongoose.Schema(
       default: "Offline",
       index: true,
     },
+    activeRideId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Ride",
+      default: null,
+      index: true,
+    },
+    activeRideStartedAt: {
+      type: Date,
+      default: null,
+    },
     vehicleModel: {
       type: String,
       default: "",

@@ -989,23 +989,37 @@ export const updateOnlineStatus = async (req, res) => {
         message: "Only completed, active drivers can go online",
       });
     }
-    if (isOnline) {
-      const activeRide = await Ride.exists({
-        driverId: driver._id,
-        status: {
-          $in: ["accepted", "driver_arriving", "driver_arrived", "in_progress"],
-        },
+    const activeRide = driver.activeRideId || await Ride.exists({
+      driverId: driver._id,
+      status: {
+        $in: [
+          "accepted",
+          "driver_arriving",
+          "confirmed",
+          "driver_on_the_way",
+          "driver_arrived",
+          "pickup_confirmed",
+          "in_progress",
+          "disputed",
+        ],
+      },
+    });
+    if (activeRide) {
+      driver.isOnline = isOnline;
+      driver.availabilityStatus = "Busy";
+      await driver.save();
+      io.emit("driver:availability", {
+        driverId: String(driver._id),
+        status: "Busy",
+        isAvailable: false,
+        updatedAt: driver.updatedAt,
       });
-      if (activeRide) {
-        driver.isOnline = true;
-        driver.availabilityStatus = "Busy";
-        await driver.save();
-        return res.status(409).send({
-          success: false,
-          code: "DRIVER_BUSY",
-          message: "Driver is busy with an active mission",
-        });
-      }
+      return res.status(200).send({
+        success: true,
+        code: "DRIVER_BUSY",
+        message: "Connectivity updated; the driver remains busy with an active ride",
+        driver,
+      });
     }
 
     driver.isOnline = isOnline;

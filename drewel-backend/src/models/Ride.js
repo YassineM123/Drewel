@@ -5,10 +5,37 @@ export const RIDE_STATUSES = [
   "requested",
   "accepted",
   "driver_arriving",
+  "offer_pending",
+  "confirmed",
+  "driver_on_the_way",
   "driver_arrived",
+  "pickup_confirmed",
   "in_progress",
   "completed",
   "cancelled",
+  "cancelled_by_user",
+  "cancelled_by_driver",
+  "cancelled_by_admin",
+  "disputed",
+];
+
+export const ACTIVE_RIDE_STATUSES = [
+  "accepted",
+  "driver_arriving",
+  "confirmed",
+  "driver_on_the_way",
+  "driver_arrived",
+  "pickup_confirmed",
+  "in_progress",
+  "disputed",
+];
+
+export const TERMINAL_RIDE_STATUSES = [
+  "completed",
+  "cancelled",
+  "cancelled_by_user",
+  "cancelled_by_driver",
+  "cancelled_by_admin",
 ];
 
 const rideSchema = new mongoose.Schema(
@@ -38,6 +65,49 @@ const rideSchema = new mongoose.Schema(
     agreedPrice: { type: Number, default: null, min: 0 },
     confirmedAt: { type: Date, default: null },
     confirmedBy: { type: mongoose.Schema.Types.ObjectId, default: null },
+    driverOnTheWayAt: { type: Date, default: null },
+    driverArrivedAt: { type: Date, default: null },
+    pickupConfirmedAt: { type: Date, default: null },
+    pickupPinHash: { type: String, default: "", select: false },
+    pickupPinSalt: { type: String, default: "", select: false },
+    pickupPinEncrypted: { type: String, default: "", select: false },
+    pickupPinAttempts: { type: Number, default: 0, min: 0, select: false },
+    pickupPinLockedUntil: { type: Date, default: null, select: false },
+    stateVersion: { type: Number, default: 0, min: 0 },
+    lastDriverLocation: {
+      lat: { type: Number, min: -90, max: 90, default: null },
+      long: { type: Number, min: -180, max: 180, default: null },
+      accuracy: { type: Number, min: 0, max: 10000, default: null },
+      heading: { type: Number, min: 0, max: 360, default: null },
+      speed: { type: Number, min: 0, max: 150, default: null },
+      recordedAt: { type: Date, default: null },
+    },
+    cancellation: {
+      cancelledBy: { type: mongoose.Schema.Types.ObjectId, default: null },
+      actorRole: {
+        type: String,
+        enum: ["passenger", "driver", "admin", "system", null],
+        default: null,
+      },
+      reason: { type: String, default: "", maxlength: 120 },
+      note: { type: String, default: "", maxlength: 1000 },
+      stateBeforeCancellation: { type: String, default: "" },
+      location: {
+        lat: { type: Number, min: -90, max: 90, default: null },
+        long: { type: Number, min: -180, max: 180, default: null },
+      },
+      timestamp: { type: Date, default: null },
+      pointsDecision: {
+        type: String,
+        enum: ["captured_no_refund", "not_captured", "admin_refund_pending", ""],
+        default: "",
+      },
+      adminReviewStatus: {
+        type: String,
+        enum: ["not_required", "pending", "resolved", ""],
+        default: "",
+      },
+    },
   },
   { timestamps: true, versionKey: false }
 );
@@ -50,11 +120,11 @@ rideSchema.index(
 );
 rideSchema.index(
   { passengerId: 1 },
-  { unique: true, partialFilterExpression: { status: { $in: ["accepted", "driver_arriving", "driver_arrived", "in_progress"] } }, name: "one_active_ride_per_passenger" }
+  { unique: true, partialFilterExpression: { status: { $in: ACTIVE_RIDE_STATUSES } }, name: "one_active_ride_per_passenger" }
 );
 rideSchema.index(
   { driverId: 1 },
-  { unique: true, partialFilterExpression: { status: { $in: ["accepted", "driver_arriving", "driver_arrived", "in_progress"] } }, name: "one_active_ride_per_driver" }
+  { unique: true, partialFilterExpression: { status: { $in: ACTIVE_RIDE_STATUSES } }, name: "one_active_ride_per_driver" }
 );
 
 export default mongoose.model("Ride", rideSchema);

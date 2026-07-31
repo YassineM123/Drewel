@@ -1,0 +1,30 @@
+services:
+  - type: web
+    name: drewel-backend
+    env: node
+    plan: free
+    buildCommand: "cd drewel-backend && npm ci"
+    startCommand: "cd drewel-backend && npm run start:prod"
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
+      - key: HOST
+        value: 0.0.0.0
+      - key: TRUST_PROXY_HOPS
+        value: 1
+      - key: ALLOW_START_WITHOUT_DB
+        value: false
+  - type: static_site
+    name: drewel-admin-panel
+    env: static
+    buildCommand: "cd drewel-admin-panel && npm ci && npm run build"
+    staticPublishPath: drewel-admin-panel/dist
+    envVars:
+      - key: VITE_API_URL
+        value: https://drewel-backend.onrender.com/api
+      - key: VITE_SOCKET_URL
+        value: https://drewel-backend.onrender.com
+      - key: VITE_LEGACY_API_URL
+        value: https://drewel-backend.onrender.com/api/v1
