@@ -42,6 +42,7 @@ class ActiveRideModel {
   });
 
   static const Set<String> communicationStatuses = <String>{
+    'contacting',
     'accepted',
     'driver_arriving',
     'driver_arrived',

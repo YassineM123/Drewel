@@ -45,6 +45,32 @@ test("mobile socket retains the latest driver fix and resends after server readi
   assert.match(source, /['"]disconnect['"][\s\S]*?_locationTrackingReady\s*=\s*false/);
 });
 
+test("mobile sockets back off during network loss and stop while backgrounded", () => {
+  const socketSource = readProjectFile("lib/common/socket_services.dart");
+  const driverSource = readProjectFile(
+    "lib/app/modules/driver_home/controllers/driver_home_controller.dart"
+  );
+  const callSource = readProjectFile(
+    "lib/app/modules/communication/controllers/call_state_controller.dart"
+  );
+
+  assert.match(socketSource, /\.setReconnectionDelayMax\(30000\)/);
+  assert.match(socketSource, /_connectionErrorLogInterval/);
+  assert.match(
+    driverSource,
+    /AppLifecycleState\.paused[\s\S]*?socketService\.disconnect\(\)/
+  );
+  assert.match(callSource, /with WidgetsBindingObserver/);
+  assert.match(
+    callSource,
+    /AppLifecycleState\.paused[\s\S]*?_socketService\.disconnect\(\)/
+  );
+  assert.match(
+    callSource,
+    /AppLifecycleState\.resumed[\s\S]*?_sessionToken\s*=\s*''[\s\S]*?configureSession\(\)/
+  );
+});
+
 test("accepted driver GPS movement is pushed immediately as well as by heartbeat", () => {
   const source = readProjectFile(
     "lib/app/modules/driver_home/controllers/driver_home_controller.dart"

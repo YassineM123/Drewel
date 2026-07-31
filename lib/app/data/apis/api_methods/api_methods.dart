@@ -456,11 +456,25 @@ class ApiMethods {
   static Future<DriverListModel?> getAllDriverListApi(
       {void Function(int)? checkResponse,
       required String city,
-      required String vType}) async {
+      required String vType,
+      String availability = 'online',
+      double? latitude,
+      double? longitude,
+      double? maxDistanceKm,
+      double? minPrice,
+      double? maxPrice,
+      int limit = 100}) async {
     final Uri uri = Uri.parse(ApiUrlConstants.endPointOfAvailableDrivers)
         .replace(queryParameters: <String, String>{
       if (city.trim().isNotEmpty) ApiKeyConstants.city: city.trim(),
       if (vType.trim().isNotEmpty) ApiKeyConstants.vehicleType: vType.trim(),
+      if (availability.trim().isNotEmpty) 'availability': availability.trim(),
+      if (latitude != null) 'lat': latitude.toString(),
+      if (longitude != null) 'long': longitude.toString(),
+      if (maxDistanceKm != null) 'maxDistanceKm': maxDistanceKm.toString(),
+      if (minPrice != null) 'minPrice': minPrice.toString(),
+      if (maxPrice != null) 'maxPrice': maxPrice.toString(),
+      'limit': limit.toString(),
     });
     try {
       final SharedPreferences sharedPreferences =

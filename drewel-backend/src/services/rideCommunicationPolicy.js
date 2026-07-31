@@ -5,7 +5,13 @@ import Driver from "../models/Driver.js";
 import Admin from "../models/Admin.js";
 import CommunicationAudit from "../models/CommunicationAudit.js";
 
-export const CONTACT_RIDE_STATUSES = ["accepted", "driver_arriving", "driver_arrived", "in_progress"];
+export const CONTACT_RIDE_STATUSES = [
+  "contacting",
+  "accepted",
+  "driver_arriving",
+  "driver_arrived",
+  "in_progress",
+];
 
 export class CommunicationPolicyError extends Error {
   constructor(message, statusCode = 403, code = "COMMUNICATION_FORBIDDEN") {

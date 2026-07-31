@@ -19,17 +19,19 @@ class DrewelCallButton extends StatelessWidget {
         button: true,
         enabled: enabled && !loading,
         label: label,
-        child: SizedBox(
-          height: 48,
-          child: FilledButton.icon(
-            onPressed: enabled && !loading ? onPressed : null,
-            icon: loading
-                ? const SizedBox.square(
-                    dimension: 18,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Icon(Icons.call_rounded),
-            label: Text(label),
+        child: Tooltip(
+          message: label,
+          child: SizedBox.square(
+            dimension: 48,
+            child: IconButton.filled(
+              onPressed: enabled && !loading ? onPressed : null,
+              icon: loading
+                  ? const SizedBox.square(
+                      dimension: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.call_rounded),
+            ),
           ),
         ),
       );

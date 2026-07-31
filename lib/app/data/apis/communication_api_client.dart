@@ -7,10 +7,17 @@ import '../../../common/api_interceptor_client.dart';
 import 'api_constants/api_key_constants.dart';
 
 class CommunicationApiException implements Exception {
-  const CommunicationApiException(this.message, {this.statusCode});
+  const CommunicationApiException(
+    this.message, {
+    this.statusCode,
+    this.code,
+    this.payload = const <String, dynamic>{},
+  });
 
   final String message;
   final int? statusCode;
+  final String? code;
+  final Map<String, dynamic> payload;
 
   @override
   String toString() => message;
@@ -81,6 +88,8 @@ class CommunicationApiClient {
       throw CommunicationApiException(
         (payload['message'] ?? 'Unable to complete this action.').toString(),
         statusCode: response.statusCode,
+        code: payload['code']?.toString(),
+        payload: payload,
       );
     }
     return payload;

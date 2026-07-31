@@ -31,7 +31,6 @@ class SupportChatController extends GetxController with WidgetsBindingObserver {
     WidgetsBinding.instance.addObserver(this);
   }
 
-
   @override
   void onClose() {
     WidgetsBinding.instance.removeObserver(this);

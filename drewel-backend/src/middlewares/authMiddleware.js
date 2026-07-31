@@ -53,7 +53,7 @@ export const isAdmin = async (req, res, next) => {
     }
 
     const user = await Admin.findById(userId).select("role fullName email").lean();
-    if (!user || user.role !== "admin") {
+    if (!user || !["owner", "finance_admin", "admin"].includes(user.role)) {
       return res.status(403).json({
         success: false,
         message: "You are not an admin",

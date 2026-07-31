@@ -46,6 +46,8 @@ class DocumentsController extends GetxController {
   final hasPendingApproval = false.obs;
   final pendingApprovalMessage = ''.obs;
   final RxList<String> pendingApprovalItems = <String>[].obs;
+  String _loadedCity = '';
+  String _loadedVehicleType = '';
 
   // Document uploads: 9 total (same as driver register)
   // 0: Car License Front, 1: Car License Back
@@ -68,7 +70,9 @@ class DocumentsController extends GetxController {
       (driverDetail?.driver?.profileRequestStatus ?? '').toLowerCase() ==
       'pending';
 
-  bool get canEditProfile => isBasicRequestApproved && !isProfileRequestPending;
+  // Request 2 may be amended while it is pending. Request 1 approval remains
+  // the authorization gate; the pending banner is informational.
+  bool get canEditProfile => isBasicRequestApproved;
 
   bool get canSubmit =>
       canEditProfile &&
@@ -89,10 +93,19 @@ class DocumentsController extends GetxController {
 
   bool get hasUnsavedChanges {
     if (selectedFile.any((File? file) => file != null)) return true;
-    final driver = driverDetail?.driver;
-    if (driver == null) return false;
-    return cityController.text.trim() != (driver.city ?? '').trim() ||
-        typeController.text.trim() != (driver.vehicleType ?? '').trim();
+    if (driverDetail?.driver == null) return false;
+    return cityController.text.trim() != _loadedCity ||
+        typeController.text.trim() != _loadedVehicleType;
+  }
+
+  void setLoadedProfileFields({
+    required String city,
+    required String vehicleType,
+  }) {
+    _loadedCity = city.trim();
+    _loadedVehicleType = vehicleType.trim();
+    cityController.text = _loadedCity;
+    typeController.text = _loadedVehicleType;
   }
 
   List<Map<String, dynamic>> fileNameList = [
@@ -226,9 +239,6 @@ class DocumentsController extends GetxController {
           loginModel.success! &&
           loginModel.driver != null) {
         driverDetail = loginModel;
-        cityController.text = driverDetail?.driver?.city ?? '';
-        typeController.text = driverDetail?.driver?.vehicleType ?? '';
-
         // Set country codes from driver details
         countryDailCode.value = driverDetail?.driver?.countryCode ?? '+971';
         // Extract whatsapp country code if available
@@ -254,6 +264,10 @@ class DocumentsController extends GetxController {
               : (approved ?? '').trim();
         }
 
+        setLoadedProfileFields(
+          city: resolved(driver.city, logs?.city),
+          vehicleType: resolved(driver.vehicleType, logs?.vehicleType),
+        );
         documentUrl[0] = resolved(
           driver.carLicenseFrontUrl ?? driver.carLicenseUrl,
           logs?.carLicenseFrontUrl,
@@ -297,81 +311,68 @@ class DocumentsController extends GetxController {
   /// Compare main driver data vs driverLogs and approval flags
   void _evaluatePendingApprovalStatus() {
     final driver = driverDetail?.driver;
-    final logs = driver?.driverLogs;
-
-    if (driver == null || logs == null) {
+    if (driver == null || !isProfileRequestPending) {
       hasPendingApproval.value = false;
       pendingApprovalMessage.value = '';
       pendingApprovalItems.clear();
       return;
     }
 
-    final bool mainApproved = driver.isApproved ?? false;
-    final bool logsApproved = logs.isApproved ?? false;
-
-    // If both main and logs are approved, nothing is pending
-    if (mainApproved && logsApproved) {
-      hasPendingApproval.value = false;
-      pendingApprovalMessage.value = '';
-      pendingApprovalItems.clear();
-      return;
-    }
+    final logs = driver.driverLogs;
 
     // Collect only the fields that are managed from the documents screen
     // and are not yet approved
     final List<String> items = [];
 
     // City (from documents/profile screen)
-    if (!_fieldEquals(driver.city, logs.city)) {
+    if (logs != null && !_fieldEquals(driver.city, logs.city)) {
       items.add('City');
     }
     // Vehicle type (from documents/profile screen)
-    if (!_fieldEquals(driver.vehicleType, logs.vehicleType)) {
+    if (logs != null && !_fieldEquals(driver.vehicleType, logs.vehicleType)) {
       items.add('Vehicle type');
     }
     // License company document
-    if (!_fieldEquals(driver.licenseCompanyUrl, logs.licenseCompanyUrl)) {
+    if (logs != null &&
+        !_fieldEquals(driver.licenseCompanyUrl, logs.licenseCompanyUrl)) {
       items.add('License company document');
     }
     // Car license (front/back pair)
-    if (!_fieldEquals(driver.carLicenseFrontUrl, logs.carLicenseFrontUrl) ||
-        !_fieldEquals(driver.carLicenseBackUrl, logs.carLicenseBackUrl)) {
+    if (logs != null &&
+        (!_fieldEquals(driver.carLicenseFrontUrl, logs.carLicenseFrontUrl) ||
+            !_fieldEquals(driver.carLicenseBackUrl, logs.carLicenseBackUrl))) {
       items.add('Car license');
     }
     // Driving license (front/back pair)
-    if (!_fieldEquals(
-            driver.drivingLicenseFrontUrl, logs.drivingLicenseFrontUrl) ||
-        !_fieldEquals(
-            driver.drivingLicenseBackUrl, logs.drivingLicenseBackUrl)) {
+    if (logs != null &&
+        (!_fieldEquals(
+                driver.drivingLicenseFrontUrl, logs.drivingLicenseFrontUrl) ||
+            !_fieldEquals(
+                driver.drivingLicenseBackUrl, logs.drivingLicenseBackUrl))) {
       items.add('Driving license');
     }
     // ID proof (front/back pair)
-    if (!_fieldEquals(driver.idProofFrontUrl, logs.idProofFrontUrl) ||
-        !_fieldEquals(driver.idProofBackUrl, logs.idProofBackUrl)) {
+    if (logs != null &&
+        (!_fieldEquals(driver.idProofFrontUrl, logs.idProofFrontUrl) ||
+            !_fieldEquals(driver.idProofBackUrl, logs.idProofBackUrl))) {
       items.add('ID proof');
     }
     // Passport copy
-    if (!_fieldEquals(driver.passportCopyUrl, logs.passportCopyUrl)) {
+    if (logs != null &&
+        !_fieldEquals(driver.passportCopyUrl, logs.passportCopyUrl)) {
       items.add('Passport copy');
     }
     // Profile image (also updated from documents section)
-    if (!_fieldEquals(driver.profileImageUrl, logs.profileImageUrl)) {
+    if (logs != null &&
+        !_fieldEquals(driver.profileImageUrl, logs.profileImageUrl)) {
       items.add('Profile image');
     }
-    hasPendingApproval.value =
-        (!mainApproved || !logsApproved) && items.isNotEmpty;
-    if (hasPendingApproval.value) {
-      pendingApprovalMessage.value =
-          'Your recent changes have been sent for approval and will be updated once approved by the admin.';
-      pendingApprovalItems
-        ..clear()
-        ..addAll(items);
-    } else {
-      // If nothing from the documents section is pending, clear the banner
-      hasPendingApproval.value = false;
-      pendingApprovalMessage.value = '';
-      pendingApprovalItems.clear();
-    }
+    hasPendingApproval.value = true;
+    pendingApprovalMessage.value =
+        'Your latest changes are waiting for admin approval. You can replace a document or amend the details below before approval.';
+    pendingApprovalItems
+      ..clear()
+      ..addAll(items);
   }
 
   Future<void> clickOnSubmit(BuildContext context) async {
@@ -419,6 +420,7 @@ class DocumentsController extends GetxController {
 
       try {
         showLoading.value = true;
+        final bool wasAmendingPendingRequest = isProfileRequestPending;
 
         SharedPreferences sp = await SharedPreferences.getInstance();
         String driverId = sp.getString(ApiKeyConstants.userId) ??
@@ -465,8 +467,9 @@ class DocumentsController extends GetxController {
           await _updateDriverHomeUserData();
 
           CommonWidgets.snackBarView(
-            title:
-                'Your updated documents have been sent to the admin for approval.',
+            title: wasAmendingPendingRequest
+                ? 'Your pending documents were updated and sent to the admin.'
+                : 'Your updated documents have been sent to the admin for approval.',
             success: true,
           );
         } else {

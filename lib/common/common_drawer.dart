@@ -225,6 +225,27 @@ class CustomDrawer extends StatelessWidget {
               ),
               if (userData[ApiKeyConstants.type] == ApiKeyConstants.driver)
                 ListTile(
+                  selected: Get.currentRoute == Routes.MY_POINTS,
+                  selectedTileColor: primaryColor.withOpacity(0.10),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10.px),
+                  ),
+                  contentPadding: EdgeInsets.zero,
+                  leading: Icon(
+                    Icons.toll_rounded,
+                    size: 25.px,
+                    color: primaryColor,
+                  ),
+                  title: Text(
+                    'points.my_points'.tr,
+                    style: MyTextStyle.titleStyle16b,
+                  ),
+                  onTap: () {
+                    _navigate(context, Routes.MY_POINTS);
+                  },
+                ),
+              if (userData[ApiKeyConstants.type] == ApiKeyConstants.driver)
+                ListTile(
                   selected: Get.currentRoute == Routes.DOCUMENTS,
                   selectedTileColor: primaryColor.withOpacity(0.10),
                   shape: RoundedRectangleBorder(

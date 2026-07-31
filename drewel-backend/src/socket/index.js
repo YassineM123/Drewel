@@ -26,6 +26,7 @@ import Admin from "../models/Admin.js";
 import {
   AVAILABLE_DRIVER_FIELDS,
   buildAvailableDriverFilter,
+  toAvailableDriverDto,
 } from "../utils/availableDrivers.js";
 
 const app = express();
@@ -63,6 +64,7 @@ const io = new Server(server, {
 });
 
 const onlineUser = new Set();
+const driverSocketCounts = new Map();
 io.on("connection", async (socket) => {
   const token = socket.handshake.auth.token;
 
@@ -85,6 +87,12 @@ io.on("connection", async (socket) => {
     const userIdString = userId.toString();
     socket.join(userIdString);
     onlineUser.add(userIdString);
+    if (authenticatedDriver) {
+      driverSocketCounts.set(
+        userIdString,
+        (driverSocketCounts.get(userIdString) || 0) + 1
+      );
+    }
 
     socket.on("message-page", async (userId) => {
       await messagePageHandler(socket, userId, user, onlineUser);
@@ -138,7 +146,7 @@ io.on("connection", async (socket) => {
     //   }
     // });
 
-    socket.on("driver-location-update", async ({ driverId, lat, long, fullName, vehicleType, city } = {}, acknowledge) => {
+    socket.on("driver-location-update", async ({ driverId, lat, long } = {}, acknowledge) => {
       try {
         const targetDriverId = authenticatedAdmin && driverId ? driverId : userId;
         if ((!authenticatedAdmin && !authenticatedDriver) || !mongoose.Types.ObjectId.isValid(targetDriverId)) {
@@ -151,22 +159,11 @@ io.on("connection", async (socket) => {
           acknowledgeSocketEvent(acknowledge, { ok: false, error: "INVALID_COORDINATES" });
           return;
         }
-        const trimmedCity = String(city ?? "").trim();
-        const normalizedCity = normalizeCity(trimmedCity);
-        if (!normalizedCity) {
-          socket.emit("error", { message: "Driver city is required" });
-          acknowledgeSocketEvent(acknowledge, { ok: false, error: "CITY_REQUIRED" });
-          return;
-        }
-
         const updatedDriver = await Driver.findByIdAndUpdate(
           targetDriverId,
           {
             lat,
             long,
-            fullName,
-            vehicleType,
-            city: trimmedCity,
             updatedAt: new Date(),
           },
           { new: true }
@@ -179,14 +176,15 @@ io.on("connection", async (socket) => {
 
         const availableDriver = await Driver.findOne({
           _id: updatedDriver._id,
-          ...buildAvailableDriverFilter({ city: trimmedCity }),
+          ...buildAvailableDriverFilter(),
         }).select(AVAILABLE_DRIVER_FIELDS);
+        const normalizedCity = normalizeCity(updatedDriver.city);
 
         // ✅ 1. Send update to all USERS in that city
         if (availableDriver) {
           io.to(normalizedCity).to(normalizeVehicleRoom(updatedDriver.vehicleType)).emit("drivers-nearby", {
             type: "UPDATE",
-            driver: availableDriver,
+            driver: toAvailableDriverDto(availableDriver),
           });
         } else {
           io.to(normalizedCity).to(normalizeVehicleRoom(updatedDriver.vehicleType)).emit("drivers-nearby", {
@@ -229,12 +227,13 @@ io.on("connection", async (socket) => {
 
         const drivers = await Driver.find(filter)
           .select(AVAILABLE_DRIVER_FIELDS)
-          .sort({ updatedAt: -1 });
+          .sort({ updatedAt: -1 })
+          .limit(100);
 
         // ✅ Send initial snapshot immediately
         socket.emit("drivers-nearby", {
           type: "INITIAL",
-          drivers,
+          drivers: drivers.map((driver) => toAvailableDriverDto(driver)),
         });
         acknowledgeSocketEvent(acknowledge, {
           ok: true,
@@ -320,6 +319,35 @@ io.on("connection", async (socket) => {
     socket.on("disconnect", async () => {
       onlineUser.delete(userIdString);
       io.emit("onlineUser", Array.from(onlineUser));
+      if (authenticatedDriver) {
+        const remaining = Math.max(
+          0,
+          (driverSocketCounts.get(userIdString) || 1) - 1
+        );
+        if (remaining) {
+          driverSocketCounts.set(userIdString, remaining);
+        } else {
+          driverSocketCounts.delete(userIdString);
+          const driver = await Driver.findByIdAndUpdate(
+            userId,
+            {
+              $set: {
+                isOnline: false,
+                availabilityStatus: "Offline",
+              },
+            },
+            { new: true }
+          ).select("_id updatedAt");
+          if (driver) {
+            io.emit("driver:availability", {
+              driverId: String(driver._id),
+              status: "Offline",
+              isAvailable: false,
+              updatedAt: driver.updatedAt,
+            });
+          }
+        }
+      }
     });
 
     // Authentication and every realtime location handler are installed now.

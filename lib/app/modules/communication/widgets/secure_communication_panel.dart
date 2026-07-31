@@ -50,35 +50,35 @@ class SecureCommunicationPanel extends GetView<CallStateController> {
                       ),
                     ),
                   Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
                     children: <Widget>[
-                      Expanded(
-                        child: SizedBox(
-                          height: 48,
-                          child: OutlinedButton.icon(
-                            onPressed: enabled ? controller.openRideChat : null,
-                            icon: const Icon(Icons.message_rounded),
-                            label: const Text('Message'),
+                      Semantics(
+                        button: true,
+                        enabled: enabled,
+                        label: 'Message driver',
+                        child: Tooltip(
+                          message: 'Message driver',
+                          child: SizedBox.square(
+                            dimension: 48,
+                            child: IconButton.filledTonal(
+                              onPressed:
+                                  enabled ? controller.openRideChat : null,
+                              icon: const Icon(Icons.message_rounded),
+                            ),
                           ),
                         ),
                       ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: DrewelCallButton(
-                          enabled: enabled,
-                          loading: controller.isBusy.value,
-                          onPressed: controller.initiateCall,
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: SizedBox(
-                          height: 48,
-                          child: OutlinedButton.icon(
-                            onPressed: controller.openSafety,
-                            icon: const Icon(Icons.shield_rounded),
-                            label: const Text('Safety'),
-                          ),
-                        ),
+                      const SizedBox(width: 12),
+                      DrewelCallButton(
+                        enabled: enabled,
+                        loading: controller.isBusy.value,
+                        onPressed: () async {
+                          final String name =
+                              controller.counterpart?.firstName ?? 'Driver';
+                          if (await controller.confirmDrewelCall(name)) {
+                            await controller.initiateCall();
+                          }
+                        },
                       ),
                     ],
                   ),

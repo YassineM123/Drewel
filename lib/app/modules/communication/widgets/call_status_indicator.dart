@@ -16,15 +16,21 @@ class CallStatusIndicator extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final String label = switch (connectionState) {
-      AgoraConnectionState.connecting => 'Connecting securely…',
-      AgoraConnectionState.connected => 'Drewel secure call',
+      AgoraConnectionState.connecting => 'Calling',
+      AgoraConnectionState.connected => 'Connected',
       AgoraConnectionState.reconnecting => 'Reconnecting…',
-      AgoraConnectionState.failed => 'Unable to connect',
+      AgoraConnectionState.failed => 'Unavailable',
       AgoraConnectionState.idle => switch (status) {
-          CallSessionStatus.initiating => 'Calling…',
-          CallSessionStatus.ringing => 'Ringing…',
-          CallSessionStatus.accepted => 'Call accepted',
-          _ => status.name,
+          CallSessionStatus.initiating => 'Calling',
+          CallSessionStatus.ringing => 'Ringing',
+          CallSessionStatus.accepted ||
+          CallSessionStatus.connected =>
+            'Connected',
+          CallSessionStatus.declined => 'Declined',
+          CallSessionStatus.failed || CallSessionStatus.missed => 'Unavailable',
+          CallSessionStatus.cancelled ||
+          CallSessionStatus.ended =>
+            'Call ended',
         },
     };
     return Semantics(

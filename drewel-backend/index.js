@@ -15,6 +15,9 @@ import adminRoute from "./src/routes/adminRoute.js";
 import bannerRoute from "./src/routes/bannerRoute.js";
 import callRoutes from "./src/routes/callRoutes.js";
 import rideRoutes from "./src/routes/rideRoutes.js";
+import driverPointsRoutes from "./src/routes/driverPointsRoutes.js";
+import adminPointsRoutes from "./src/routes/adminPointsRoutes.js";
+import tripOfferRoutes from "./src/routes/tripOfferRoutes.js";
 import { app, server } from "./src/socket/index.js";
 import { isOriginAllowed } from "./src/utils/allowedOrigins.js";
 import {
@@ -22,6 +25,7 @@ import {
   validatePublicAssetConfig,
 } from "./src/utils/publicAssets.js";
 import { startCallExpiryWatchdog } from "./src/jobs/callExpiryJob.js";
+import { startPointsJobs } from "./src/jobs/pointsJobs.js";
 
 loadEnv();
 validatePublicAssetConfig();
@@ -95,11 +99,14 @@ app.use("/api/notification", notificationRoutes);
 app.use("/api/expenses", expensesRoutes);
 app.use("/api/friend", friendRoutes);
 app.use("/api/group", groupRoutes);
+app.use("/api/driver/points", driverPointsRoutes);
 app.use("/api/driver", driverRoutes);
+app.use("/api/admin/points", adminPointsRoutes);
 app.use("/api/admin", adminRoute);
 app.use("/api/banner", bannerRoute);
 app.use("/api/calls", callRoutes);
 app.use("/api/rides", rideRoutes);
+app.use("/api/trip-offers", tripOfferRoutes);
 
 app.get("/api/health", async (req, res) => {
   return res.status(200).json({ success: true, message: "Backend API is running" });
@@ -126,6 +133,7 @@ connectDB()
     await bootstrapLocalAdmin();
     server.listen(PORT, HOST, () => {
       startCallExpiryWatchdog();
+      startPointsJobs();
       console.log("server running at " + HOST + ":" + PORT);
     });
   })

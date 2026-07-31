@@ -42,14 +42,13 @@ class ProgressBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final Widget resolvedProgressIndicator =
-        progressIndicator ??
-            CircularProgressIndicator(
-              backgroundColor: Theme.of(context).colorScheme.onSecondary,
-              color: Theme.of(context).primaryColor,
-              strokeCap: StrokeCap.round,
-              strokeWidth: 6,
-            );
+    final Widget resolvedProgressIndicator = progressIndicator ??
+        CircularProgressIndicator(
+          backgroundColor: Theme.of(context).colorScheme.onSecondary,
+          color: Theme.of(context).primaryColor,
+          strokeCap: StrokeCap.round,
+          strokeWidth: 6,
+        );
 
     if (!inAsyncCall) return child;
 

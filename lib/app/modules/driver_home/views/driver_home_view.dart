@@ -16,6 +16,7 @@ import '../../../../common/text_styles.dart';
 import '../controllers/driver_home_controller.dart';
 import '../../communication/widgets/secure_communication_panel.dart';
 import '../../communication/widgets/driver_ride_requests_panel.dart';
+import '../../points/widgets/driver_points_indicator.dart';
 
 class DriverHomeView extends GetView<DriverHomeController> {
   const DriverHomeView({super.key});
@@ -156,6 +157,17 @@ class DriverHomeView extends GetView<DriverHomeController> {
                                 size: 24.px,
                               ),
                             ),
+                          ),
+                        ),
+                        Positioned(
+                          top: 80.px,
+                          left: 20.px,
+                          child: ConstrainedBox(
+                            constraints: BoxConstraints(
+                              maxWidth:
+                                  MediaQuery.of(context).size.width * 0.58,
+                            ),
+                            child: const DriverPointsIndicator(),
                           ),
                         ),
                         Padding(

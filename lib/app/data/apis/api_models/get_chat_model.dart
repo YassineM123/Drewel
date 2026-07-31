@@ -11,14 +11,14 @@ class ChatMessageModel {
 
   ChatMessageModel(
       {this.sId,
-        this.text,
-        this.imageUrl,
-        this.videoUrl,
-        this.seen,
-        this.msgByUserId,
-        this.createdAt,
-        this.updatedAt,
-        this.iV});
+      this.text,
+      this.imageUrl,
+      this.videoUrl,
+      this.seen,
+      this.msgByUserId,
+      this.createdAt,
+      this.updatedAt,
+      this.iV});
 
   ChatMessageModel.fromJson(Map<String, dynamic> json) {
     sId = json['_id'];

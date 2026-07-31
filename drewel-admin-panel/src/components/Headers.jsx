@@ -3,11 +3,13 @@ import PropTypes from "prop-types";
 import { NavLink, useNavigate } from "react-router-dom";
 import logo1 from "../assets/images/logo1.jpg";
 import $ from "jquery";
+import { getPointsAccess } from "../utils/pointsPermissions";
 
 const Headers = ({ setIsSideBarOpen }) => {
   const sidebarRef = useRef(null);
   const headerRef = useRef(null);
   const navigate = useNavigate();
+  const pointsAccess = getPointsAccess();
 
   // Rest of your state and code...
 
@@ -201,12 +203,30 @@ const Headers = ({ setIsSideBarOpen }) => {
               <i className="treeview-indicator fa fa-angle-right" aria-hidden="true"></i>
             </button>
             <ul className="treeview-menu">
-              <li><NavLink className={({ isActive }) => `treeview-item${isActive ? " active" : ""}`} to="/requests/pending">Pending Requests</NavLink></li>
+              <li><NavLink className={({ isActive }) => `treeview-item${isActive ? " active" : ""}`} to="/requests/pending?stage=profile">Pending Documents</NavLink></li>
+              <li><NavLink className={({ isActive }) => `treeview-item${isActive ? " active" : ""}`} to="/requests/pending?stage=basic">Pending Registrations</NavLink></li>
               <li><NavLink className={({ isActive }) => `treeview-item${isActive ? " active" : ""}`} to="/requests/approved">Approved Requests</NavLink></li>
               <li><NavLink className={({ isActive }) => `treeview-item${isActive ? " active" : ""}`} to="/requests/rejected">Rejected Requests</NavLink></li>
               <li><NavLink className={({ isActive }) => `treeview-item${isActive ? " active" : ""}`} to="/requests/all">All Requests</NavLink></li>
             </ul>
           </li>
+          {pointsAccess.canRead && (
+            <li className="treeview">
+              <button type="button" className="app-menu__item" data-toggle="treeview" aria-haspopup="true" aria-expanded="false" style={{ background: "none", borderTop: 0, borderRight: 0, borderBottom: 0, width: "100%", textAlign: "left" }}>
+                <i className="app-menu__icon mx-3 fa fa-wallet" aria-hidden="true"></i>
+                <span className="app-menu__label">Driver Points</span>
+                <i className="treeview-indicator fa fa-angle-right" aria-hidden="true"></i>
+              </button>
+              <ul className="treeview-menu">
+                <li><NavLink className={({ isActive }) => `treeview-item${isActive ? " active" : ""}`} end to="/driver-points">Overview</NavLink></li>
+                <li><NavLink className={({ isActive }) => `treeview-item${isActive ? " active" : ""}`} to="/driver-points/wallets">Driver Wallets</NavLink></li>
+                <li><NavLink className={({ isActive }) => `treeview-item${isActive ? " active" : ""}`} to="/driver-points/purchase-requests">Purchase Requests</NavLink></li>
+                <li><NavLink className={({ isActive }) => `treeview-item${isActive ? " active" : ""}`} to="/driver-points/transactions">Transactions</NavLink></li>
+                {pointsAccess.isOwner && <li><NavLink className={({ isActive }) => `treeview-item${isActive ? " active" : ""}`} to="/driver-points/packs">Point Packs</NavLink></li>}
+                {pointsAccess.isOwner && <li><NavLink className={({ isActive }) => `treeview-item${isActive ? " active" : ""}`} to="/driver-points/settings">Settings</NavLink></li>}
+              </ul>
+            </li>
+          )}
           <li>
             <NavLink className="app-menu__item" to="/sponsor">
               <i

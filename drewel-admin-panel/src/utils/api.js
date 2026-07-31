@@ -33,14 +33,15 @@ apiClient.interceptors.response.use(
     (response) => response,
     (error) => {
         const status = error?.response?.status;
-        const message = String(error?.response?.data?.message || "").toLowerCase();
+        const code = String(error?.response?.data?.code || "").toUpperCase();
         const isAuthenticationFailure =
             status === 401 ||
-            (status === 403 && (
-                message.includes("token") ||
-                message.includes("login") ||
-                message.includes("admin")
-            ));
+            [
+                "AUTH_REQUIRED",
+                "INVALID_TOKEN",
+                "TOKEN_EXPIRED",
+                "ADMIN_AUTH_REQUIRED",
+            ].includes(code);
 
         if (isAuthenticationFailure) redirectToLogin();
         return Promise.reject(error);

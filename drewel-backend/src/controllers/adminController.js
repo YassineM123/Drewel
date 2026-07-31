@@ -122,7 +122,7 @@ export const loginAdmin = async (req, res) => {
       });
     }
 
-    if (existingAdmin.role !== "admin") {
+    if (!["owner", "finance_admin", "admin"].includes(existingAdmin.role)) {
       return res.status(403).json({
         success: false,
         message: "This account does not have administrator access",

@@ -12,10 +12,31 @@ class ActiveRideRepository {
     return ActiveRideModel.fromJson(Map<String, dynamic>.from(raw as Map));
   }
 
-  Future<ActiveRideModel> requestRide(String driverId) async => _readRide(
+  Future<ActiveRideModel> createOrGetContact(String driverId) async =>
+      _readRide(
         await _api.post(
-          '${ApiUrlConstants.baseUrl}rides',
+          '${ApiUrlConstants.baseUrl}rides/contact',
           <String, dynamic>{'driverId': driverId},
+        ),
+      );
+
+  Future<ActiveRideModel> confirmMission(
+    String rideId, {
+    required Map<String, dynamic> pickup,
+    required Map<String, dynamic> destination,
+    String? vehicleType,
+    double? price,
+  }) async =>
+      _readRide(
+        await _api.post(
+          '${ApiUrlConstants.baseUrl}rides/$rideId/confirm',
+          <String, dynamic>{
+            'pickup': pickup,
+            'destination': destination,
+            if (vehicleType?.trim().isNotEmpty == true)
+              'vehicleType': vehicleType,
+            if (price != null) 'price': price,
+          },
         ),
       );
 

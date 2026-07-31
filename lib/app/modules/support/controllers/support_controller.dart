@@ -6,12 +6,9 @@ class SupportController extends GetxController {
 
   final count = 0.obs;
 
-
-
   void increment() => count.value++;
 
-
-  void clickOnChatButton(){
+  void clickOnChatButton() {
     Get.toNamed(Routes.SUPPORT_CHAT);
   }
 }

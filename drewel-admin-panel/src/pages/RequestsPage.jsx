@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import Swal from "sweetalert2";
 import PropTypes from "prop-types";
 import {
@@ -12,6 +12,16 @@ import {
 import "../assets/css/requests.css";
 
 const PAGE_SIZE_OPTIONS = [10, 25, 50];
+const REQUEST_STAGES = new Set(["basic", "profile"]);
+
+const getInitialRequestStage = (status, searchParams) => {
+  const requestedStage = searchParams?.get("stage");
+  if (REQUEST_STAGES.has(requestedStage)) return requestedStage;
+  // Document amendments are Approval 2 requests. Make them visible when an
+  // administrator opens Pending Requests, while Approval 1 remains one click
+  // away in the stage selector and via its dedicated navigation link.
+  return status === "pending" ? "profile" : "basic";
+};
 
 const pageConfig = {
   pending: { title: "Pending Requests", description: "Requests waiting for review" },
@@ -116,12 +126,13 @@ const openPrintView = (requests, title) => {
 
 const RequestsPage = ({ status = "all" }) => {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const config = pageConfig[status] || pageConfig.all;
   const [requests, setRequests] = useState([]);
   const [kpis, setKpis] = useState({});
   const [filterOptions, setFilterOptions] = useState({ types: [], responsibles: [] });
   const [pagination, setPagination] = useState({ page: 1, limit: 10, total: 0, totalPages: 1 });
-  const [filters, setFilters] = useState({ search: "", period: "all", type: "", responsible: "", stage: "basic", status: status === "all" ? "" : status, sortBy: status === "approved" ? "approvedAt" : "submittedAt", sortOrder: "desc" });
+  const [filters, setFilters] = useState({ search: "", period: "all", type: "", responsible: "", stage: getInitialRequestStage(status, searchParams), status: status === "all" ? "" : status, sortBy: status === "approved" ? "approvedAt" : "submittedAt", sortOrder: "desc" });
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -131,6 +142,14 @@ const RequestsPage = ({ status = "all" }) => {
     const timer = window.setTimeout(() => setDebouncedSearch(filters.search.trim()), 350);
     return () => window.clearTimeout(timer);
   }, [filters.search]);
+
+  useEffect(() => {
+    const requestedStage = searchParams.get("stage");
+    if (REQUEST_STAGES.has(requestedStage) && requestedStage !== filters.stage) {
+      setFilters((current) => ({ ...current, stage: requestedStage }));
+      setPagination((current) => ({ ...current, page: 1 }));
+    }
+  }, [filters.stage, searchParams]);
 
   const dateRange = useMemo(() => {
     if (filters.period === "all") return {};
@@ -233,7 +252,7 @@ const RequestsPage = ({ status = "all" }) => {
         <label className="requests-search"><span>Search by ID or name</span><input className="form-control" type="search" value={filters.search} onChange={(event) => updateFilter('search', event.target.value)} placeholder="Request ID or requester name"/></label>
         <label><span>Period</span><select className="form-control" value={filters.period} onChange={(event) => updateFilter('period', event.target.value)}><option value="all">All time</option><option value="today">Today</option><option value="7d">Last 7 days</option><option value="30d">Last 30 days</option></select></label>
         <label><span>Type</span><select className="form-control" value={filters.type} onChange={(event) => updateFilter('type', event.target.value)}><option value="">All types</option>{(filterOptions.types || []).map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>
-        <label><span>Approval stage</span><select className="form-control" value={filters.stage} onChange={(event) => { const nextStage = event.target.value; setFilters((current) => ({ ...current, stage: nextStage, ...(status === "all" ? { status: "" } : {}) })); setPagination((current) => ({ ...current, page: 1 })); }}><option value="basic">Approval 1</option><option value="profile">Approval 2</option></select></label>
+        <label><span>Approval stage</span><select className="form-control" value={filters.stage} onChange={(event) => { const nextStage = event.target.value; setFilters((current) => ({ ...current, stage: nextStage, ...(status === "all" ? { status: "" } : {}) })); setSearchParams((current) => { const next = new URLSearchParams(current); next.set("stage", nextStage); return next; }, { replace: true }); setPagination((current) => ({ ...current, page: 1 })); }}><option value="basic">Approval 1 - Registration</option><option value="profile">Approval 2 - Profile & documents</option></select></label>
         {status === 'all' && <label><span>Status</span><select className="form-control" value={filters.status} onChange={(event) => updateFilter('status', event.target.value)}><option value="">All statuses</option>{filters.stage === "profile" && <option value="not_submitted">Not submitted</option>}<option value="pending">Pending</option><option value="approved">Approved</option>{filters.stage === "basic" && <option value="completed">Completed</option>}<option value="rejected">Rejected</option></select></label>}
         <label><span>Responsible</span><select className="form-control" value={filters.responsible} onChange={(event) => updateFilter('responsible', event.target.value)}><option value="">All responsibles</option>{(filterOptions.responsibles || []).map((responsible) => <option key={responsible._id} value={responsible._id}>{responsible.fullName || responsible.email}</option>)}</select></label>
         <label><span>Sort by</span><select className="form-control" value={`${filters.sortBy}:${filters.sortOrder}`} onChange={(event) => { const [sortBy, sortOrder] = event.target.value.split(':'); setFilters((current) => ({ ...current, sortBy, sortOrder })); setPagination((current) => ({ ...current, page: 1 })); }}><option value="approvedAt:desc">Approval date - newest</option><option value="approvedAt:asc">Approval date - oldest</option><option value="submittedAt:desc">Submission date - newest</option><option value="submittedAt:asc">Submission date - oldest</option></select></label>

@@ -6,6 +6,10 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../data/apis/api_constants/api_key_constants.dart';
 import '../../../data/apis/api_models/ride_message_model.dart';
+import '../../../data/apis/api_models/driver_points_models.dart';
+import '../../points/bindings/driver_points_binding.dart';
+import '../../points/controllers/driver_points_controller.dart';
+import '../../points/widgets/trip_offer_points.dart';
 import '../controllers/call_state_controller.dart';
 
 class RideChatScreen extends StatefulWidget {
@@ -17,9 +21,11 @@ class RideChatScreen extends StatefulWidget {
 
 class _RideChatScreenState extends State<RideChatScreen> {
   final CallStateController _communication = Get.find<CallStateController>();
+  DriverPointsController? _points;
   final TextEditingController _textController = TextEditingController();
   final List<RideMessageModel> _messages = <RideMessageModel>[];
   String _selfId = '';
+  String _role = '';
   bool _loading = true;
   bool _sending = false;
   String? _error;
@@ -58,8 +64,14 @@ class _RideChatScreenState extends State<RideChatScreen> {
           await _communication.messageRepository.list(rideId);
       if (!mounted) return;
       final String selfId = preferences.getString(ApiKeyConstants.userId) ?? '';
+      final String role = preferences.getString(ApiKeyConstants.type) ?? '';
+      if (role == ApiKeyConstants.driver && _points == null) {
+        DriverPointsBinding().dependencies();
+        _points = Get.find<DriverPointsController>();
+      }
       setState(() {
         _selfId = selfId;
+        _role = role;
         _messages.clear();
         _messages.addAll(messages);
         if (showLoader) _loading = false;
@@ -126,16 +138,26 @@ class _RideChatScreenState extends State<RideChatScreen> {
         appBar: AppBar(
           title: const Text('Drewel secure messages'),
           actions: <Widget>[
-            IconButton(
-              tooltip: 'Safety and support',
-              onPressed: _communication.openSafety,
-              icon: const Icon(Icons.shield_rounded),
-            ),
+            if (_role == ApiKeyConstants.driver &&
+                _communication.activeRide.value?.status == 'contacting')
+              IconButton(
+                tooltip: 'points.send_trip_offer'.tr,
+                onPressed: _showMissionConfirmation,
+                icon: const Icon(Icons.local_offer_outlined),
+              ),
           ],
         ),
         body: SafeArea(
           child: Column(
             children: <Widget>[
+              if (_points != null)
+                Obx(() {
+                  final rideId = _communication.activeRide.value?.id ?? '';
+                  final offer = _points!.offerForRide(rideId);
+                  return offer == null
+                      ? const SizedBox.shrink()
+                      : TripOfferStatusCard(offer: offer);
+                }),
               if (_error != null)
                 MaterialBanner(
                   content: Text(_error!),
@@ -237,4 +259,183 @@ class _RideChatScreenState extends State<RideChatScreen> {
           ),
         ),
       );
+
+  Future<void> _showMissionConfirmation() async {
+    final DriverPointsController? pointsController = _points;
+    if (pointsController == null) return;
+    final TextEditingController pickup = TextEditingController();
+    final TextEditingController pickupLat = TextEditingController();
+    final TextEditingController pickupLong = TextEditingController();
+    final TextEditingController destination = TextEditingController();
+    final TextEditingController destinationLat = TextEditingController();
+    final TextEditingController destinationLong = TextEditingController();
+    final TextEditingController price = TextEditingController();
+    final TextEditingController currency = TextEditingController(text: 'AED');
+    final bool? confirmed = await showDialog<bool>(
+      context: context,
+      builder: (BuildContext dialogContext) => AlertDialog(
+        title: Text('points.send_trip_offer'.tr),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              TextField(
+                controller: pickup,
+                decoration: InputDecoration(labelText: 'points.pickup'.tr),
+              ),
+              Row(
+                children: <Widget>[
+                  Expanded(
+                    child: TextField(
+                      controller: pickupLat,
+                      keyboardType:
+                          const TextInputType.numberWithOptions(decimal: true),
+                      decoration:
+                          InputDecoration(labelText: 'points.pickup_lat'.tr),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: TextField(
+                      controller: pickupLong,
+                      keyboardType:
+                          const TextInputType.numberWithOptions(decimal: true),
+                      decoration:
+                          InputDecoration(labelText: 'points.pickup_long'.tr),
+                    ),
+                  ),
+                ],
+              ),
+              TextField(
+                controller: destination,
+                decoration: InputDecoration(labelText: 'points.destination'.tr),
+              ),
+              Row(
+                children: <Widget>[
+                  Expanded(
+                    child: TextField(
+                      controller: destinationLat,
+                      keyboardType:
+                          const TextInputType.numberWithOptions(decimal: true),
+                      decoration: InputDecoration(
+                        labelText: 'points.destination_lat'.tr,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: TextField(
+                      controller: destinationLong,
+                      keyboardType:
+                          const TextInputType.numberWithOptions(decimal: true),
+                      decoration: InputDecoration(
+                        labelText: 'points.destination_long'.tr,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              TextField(
+                controller: price,
+                keyboardType:
+                    const TextInputType.numberWithOptions(decimal: true),
+                decoration:
+                    InputDecoration(labelText: 'points.offered_price'.tr),
+              ),
+              TextField(
+                controller: currency,
+                textCapitalization: TextCapitalization.characters,
+                maxLength: 3,
+                decoration: InputDecoration(labelText: 'points.currency'.tr),
+              ),
+            ],
+          ),
+        ),
+        actions: <Widget>[
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: Text('points.cancel'.tr),
+          ),
+          FilledButton(
+            onPressed: () {
+              if (pickup.text.trim().isEmpty ||
+                  destination.text.trim().isEmpty ||
+                  double.tryParse(pickupLat.text.trim()) == null ||
+                  double.tryParse(pickupLong.text.trim()) == null ||
+                  double.tryParse(destinationLat.text.trim()) == null ||
+                  double.tryParse(destinationLong.text.trim()) == null ||
+                  double.tryParse(price.text.trim()) == null ||
+                  currency.text.trim().length != 3) {
+                return;
+              }
+              Navigator.pop(dialogContext, true);
+            },
+            child: Text('points.continue'.tr),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) {
+      pickup.dispose();
+      pickupLat.dispose();
+      pickupLong.dispose();
+      destination.dispose();
+      destinationLat.dispose();
+      destinationLong.dispose();
+      price.dispose();
+      currency.dispose();
+      return;
+    }
+    final draft = TripOfferDraft(
+      contactRideId: _communication.activeRide.value?.id ?? '',
+      pickup: <String, dynamic>{
+        'address': pickup.text.trim(),
+        'lat': double.parse(pickupLat.text.trim()),
+        'long': double.parse(pickupLong.text.trim()),
+      },
+      destination: <String, dynamic>{
+        'address': destination.text.trim(),
+        'lat': double.parse(destinationLat.text.trim()),
+        'long': double.parse(destinationLong.text.trim()),
+      },
+      offeredPrice: double.parse(price.text.trim()),
+      currency: currency.text.trim().toUpperCase(),
+    );
+    final bool send =
+        await showOfferReservationConfirmation(context, pointsController);
+    if (!send || !mounted) {
+      pickup.dispose();
+      pickupLat.dispose();
+      pickupLong.dispose();
+      destination.dispose();
+      destinationLat.dispose();
+      destinationLong.dispose();
+      price.dispose();
+      currency.dispose();
+      return;
+    }
+    final SendOfferResult result = await pointsController.sendOffer(draft);
+    pickup.dispose();
+    pickupLat.dispose();
+    pickupLong.dispose();
+    destination.dispose();
+    destinationLat.dispose();
+    destinationLong.dispose();
+    price.dispose();
+    currency.dispose();
+    if (!mounted) return;
+    // Successful reservations are already shown by the offer status card and
+    // the deduplicated realtime notification. Only surface failures here.
+    if (result != SendOfferResult.sent) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            result == SendOfferResult.insufficientPoints
+                ? 'points.insufficient'.tr
+                : 'points.send_failed'.tr,
+          ),
+        ),
+      );
+    }
+  }
 }

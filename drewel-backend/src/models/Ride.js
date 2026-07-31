@@ -1,6 +1,7 @@
 import mongoose from "mongoose";
 
 export const RIDE_STATUSES = [
+  "contacting",
   "requested",
   "accepted",
   "driver_arriving",
@@ -23,12 +24,30 @@ const rideSchema = new mongoose.Schema(
     contactEndsAt: { type: Date, default: null, index: true },
     communicationBlockedAt: { type: Date, default: null },
     communicationBlockedBy: { type: mongoose.Schema.Types.ObjectId, default: null },
+    pickup: {
+      lat: { type: Number, min: -90, max: 90 },
+      long: { type: Number, min: -180, max: 180 },
+      address: { type: String, default: "", maxlength: 300 },
+    },
+    destination: {
+      lat: { type: Number, min: -90, max: 90 },
+      long: { type: Number, min: -180, max: 180 },
+      address: { type: String, default: "", maxlength: 300 },
+    },
+    vehicleType: { type: String, default: "", maxlength: 120 },
+    agreedPrice: { type: Number, default: null, min: 0 },
+    confirmedAt: { type: Date, default: null },
+    confirmedBy: { type: mongoose.Schema.Types.ObjectId, default: null },
   },
   { timestamps: true, versionKey: false }
 );
 
 rideSchema.index({ passengerId: 1, status: 1, updatedAt: -1 });
 rideSchema.index({ driverId: 1, status: 1, updatedAt: -1 });
+rideSchema.index(
+  { passengerId: 1, driverId: 1 },
+  { unique: true, partialFilterExpression: { status: "contacting" }, name: "one_open_contact_per_pair" }
+);
 rideSchema.index(
   { passengerId: 1 },
   { unique: true, partialFilterExpression: { status: { $in: ["accepted", "driver_arriving", "driver_arrived", "in_progress"] } }, name: "one_active_ride_per_passenger" }

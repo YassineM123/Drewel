@@ -17,6 +17,8 @@ import {
 } from "../src/connection.js";
 import {
   buildAvailableDriverFilter as buildSharedAvailableDriverFilter,
+  parseDriverDiscoveryQuery,
+  toAvailableDriverDto,
 } from "../src/utils/availableDrivers.js";
 
 const routeLayer = (router, path, method) =>
@@ -113,6 +115,33 @@ test("profile proposal snapshots preserve unchanged documents and discard stale 
   assert.equal(retryProposal.carLicenseBackUrl, "approved-car-back.jpg");
 });
 
+test("pending profile amendments preserve the existing proposal snapshot", () => {
+  const pendingProposal = {
+    _id: "proposal-1",
+    driverId: "driver-1",
+    countryCode: "+971",
+    phone: "5012345678",
+    city: "Dubai",
+    vehicleType: "Small Pickup",
+    carLicenseFrontUrl: "pending-car-front.jpg",
+    carLicenseBackUrl: "pending-car-back.jpg",
+    idProofFrontUrl: "pending-id-front.jpg",
+    idProofBackUrl: "pending-id-back.jpg",
+  };
+
+  const amendedProposal = buildProfileProposalSnapshot(pendingProposal, {
+    city: "Sharjah",
+    carLicenseFrontUrl: "replacement-car-front.jpg",
+  });
+
+  assert.equal(amendedProposal.city, "Sharjah");
+  assert.equal(amendedProposal.vehicleType, "Small Pickup");
+  assert.equal(amendedProposal.carLicenseFrontUrl, "replacement-car-front.jpg");
+  assert.equal(amendedProposal.carLicenseBackUrl, "pending-car-back.jpg");
+  assert.equal(amendedProposal.idProofFrontUrl, "pending-id-front.jpg");
+  assert.equal(amendedProposal.idProofBackUrl, "pending-id-back.jpg");
+});
+
 test("available-driver matching is trimmed, exact, case-insensitive, and escaped", () => {
   const filter = buildSharedAvailableDriverFilter({
     city: "  Tunis.*  ",
@@ -123,6 +152,45 @@ test("available-driver matching is trimmed, exact, case-insensitive, and escaped
   assert.equal(filter.city.$regex.test("Tunis-anything"), false);
   assert.equal(filter.vehicleType.$regex.test("small (pickup)"), true);
   assert.equal(filter.vehicleType.$regex.test("Small Pickup"), false);
+});
+
+test("marketplace filters validate bounds and public DTO hides private registration", () => {
+  assert.deepEqual(parseDriverDiscoveryQuery({
+    lat: "36.8065",
+    long: "10.1815",
+    maxDistanceKm: "25",
+    limit: "20",
+  }), {
+    lat: 36.8065,
+    long: 10.1815,
+    maxDistanceKm: 25,
+    limit: 20,
+  });
+  assert.throws(() => parseDriverDiscoveryQuery({ lat: "91" }), /lat must be between/);
+  assert.throws(
+    () => parseDriverDiscoveryQuery({ minPrice: "20", maxPrice: "10" }),
+    /minPrice cannot exceed/
+  );
+  assert.throws(
+    () => parseDriverDiscoveryQuery({ availability: "offline" }),
+    /availability must be/
+  );
+  const dto = toAvailableDriverDto({
+    _id: "driver-1",
+    firstName: "A",
+    registration: "PRIVATE-123",
+    registrationVisible: false,
+    isOnline: true,
+    availabilityStatus: "Online",
+    lat: 36.8,
+    long: 10.18,
+  }, { lat: 36.81, long: 10.19 });
+  assert.equal(dto.registration, null);
+  assert.equal(dto.isAvailable, true);
+  assert.equal(typeof dto.distanceKm, "number");
+  for (const pii of ["phone", "countryCode", "whatsappNumber"]) {
+    assert.equal(Object.hasOwn(dto, pii), false);
+  }
 });
 
 test("controller preserves the shared available-driver filter contract", () => {

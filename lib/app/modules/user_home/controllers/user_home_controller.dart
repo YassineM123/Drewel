@@ -410,7 +410,8 @@ class UserHomeController extends GetxController
   void _prepareVehicleDiscoveryResults(List<Drivers> drivers) {
     final LatLng origin = _selectedCityCenter;
     final List<Drivers> validDrivers = drivers
-        .where((Drivers driver) => _driverPosition(driver) != null)
+        .where((Drivers driver) =>
+            driver.isOnlineAndAvailable && _driverPosition(driver) != null)
         .toList()
       ..sort((Drivers a, Drivers b) {
         final LatLng aPosition = _driverPosition(a)!;
@@ -804,16 +805,19 @@ class UserHomeController extends GetxController
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     super.didChangeAppLifecycleState(state);
-    if (state == AppLifecycleState.paused ||
+    if (state == AppLifecycleState.hidden ||
+        state == AppLifecycleState.paused ||
         state == AppLifecycleState.detached) {
       _stopDriverPolling();
       // App is in background - leave city room
       if (_currentCity != null) {
         socketService.emitLeaveCityRoom(_currentCity!);
       }
+      socketService.disconnect();
     } else if (state == AppLifecycleState.resumed) {
       _startDriverPolling();
       callingGetAllDriverListApi(showLoader: false, showError: false);
+      _initSocket();
       // App is in foreground - rejoin city room
       if (_currentCity != null) {
         socketService.emitJoinCityRoom(
@@ -881,11 +885,46 @@ class UserHomeController extends GetxController
         _joinRealtimeTrackingRoom();
       });
       socketService.connect(ApiUrlConstants.socketUrl, token);
+      socketService.off('driver:availability');
+      socketService.on('driver:availability', _handleDriverAvailability);
       socketService.onConnect(() {
         if (!_canUpdateView) return;
         print('User location socket connected');
       });
     }
+  }
+
+  void _handleDriverAvailability(dynamic data) {
+    final Map<String, dynamic>? payload = _asStringMap(data);
+    if (payload == null || !_canUpdateView) return;
+    final String? driverId = _extractDriverId(payload);
+    if (driverId == null) return;
+    final String status =
+        (payload['status'] ?? payload['availabilityStatus'] ?? '')
+            .toString()
+            .trim()
+            .toLowerCase();
+    final bool available = payload['isAvailable'] == true && status == 'online';
+    final int index =
+        allDriversList.indexWhere((Drivers driver) => driver.sId == driverId);
+
+    if (!available) {
+      allDriversList.removeWhere((Drivers driver) => driver.sId == driverId);
+      if (selectedDriverId == driverId) _resetSelectedDriver();
+      filterDriversByVisibleBounds();
+      return;
+    }
+
+    if (index < 0) {
+      // The event deliberately contains no private profile data. Refresh the
+      // authenticated, privacy-safe marketplace projection to add the driver.
+      callingGetAllDriverListApi(showLoader: false, showError: false);
+      return;
+    }
+    allDriversList[index].availabilityStatus = 'online';
+    allDriversList[index].isAvailable = true;
+    allDriversList[index].isOnline = true;
+    filterDriversByVisibleBounds();
   }
 
   /// Disconnect socket
@@ -1643,6 +1682,9 @@ class UserHomeController extends GetxController
         // drivers by vehicle and use their live coordinates for map coverage.
         city: '',
         vType: parameter[ApiKeyConstants.vehicleType] ?? '',
+        availability: 'online',
+        latitude: hasReferenceLocation ? referenceLocation.latitude : null,
+        longitude: hasReferenceLocation ? referenceLocation.longitude : null,
         checkResponse: (int status) => responseStatus = status,
       );
       if (!_canUpdateView) return;

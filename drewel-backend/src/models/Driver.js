@@ -122,6 +122,37 @@ const driverSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+    availabilityStatus: {
+      type: String,
+      enum: ["Online", "Busy", "Offline"],
+      default: "Offline",
+      index: true,
+    },
+    vehicleModel: {
+      type: String,
+      default: "",
+      maxlength: 120,
+    },
+    registration: {
+      type: String,
+      default: "",
+      maxlength: 40,
+    },
+    registrationVisible: {
+      type: Boolean,
+      default: false,
+    },
+    rating: {
+      type: Number,
+      default: null,
+      min: 0,
+      max: 5,
+    },
+    priceEstimate: {
+      type: Number,
+      default: null,
+      min: 0,
+    },
     isApproved: {
       type: Boolean,
       default: false,
@@ -226,5 +257,6 @@ driverSchema.index({ status: 1, basicRequestSubmittedAt: -1, _id: -1 });
 driverSchema.index({ status: 1, approvedBy: 1, approvedAt: -1 });
 driverSchema.index({ profileRequestStatus: 1, profileSubmittedAt: -1, _id: -1 });
 driverSchema.index({ profileRequestStatus: 1, profileApprovedBy: 1, profileApprovedAt: -1 });
+driverSchema.index({ isOnline: 1, availabilityStatus: 1, city: 1, vehicleType: 1 });
 
 export default mongoose.model("Driver", driverSchema);

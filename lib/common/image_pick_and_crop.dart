@@ -60,8 +60,7 @@ class ImagePickerAndCropper {
                 pickImageFromGallery = true;
                 try {
                   enableAndroidPhotoPickerIfAvailable();
-                  imagePicker = await ImagePicker()
-                      .pickImage(
+                  imagePicker = await ImagePicker().pickImage(
                     source: ImageSource.gallery,
                     requestFullMetadata: false,
                   );
@@ -75,7 +74,8 @@ class ImagePickerAndCropper {
           ],
           title: Text(StringConstants.selectImage,
               style: MyTextStyle.titleStyle18bb),
-          content: Text('Document image size should be below 5 MB',
+          content: Text(
+            'Document image size should be below 5 MB',
             //StringConstants.chooseImageFromTheOptionsBelow,
             style: MyTextStyle.titleStyle14bb,
           ),
@@ -150,7 +150,8 @@ class ImagePickerAndCropper {
           final sizeInMb = bytes / (1024 * 1024);
           print('Image size: ${sizeInMb.toStringAsFixed(2)} MB');
           if (sizeInMb > 5.0) {
-            CommonWidgets.snackBarView(title: "Image size should be less than 5 MB");
+            CommonWidgets.snackBarView(
+                title: "Image size should be less than 5 MB");
             return null;
           } else {
             return file;

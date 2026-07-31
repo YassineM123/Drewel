@@ -18,8 +18,9 @@ import '../../../data/constants/icons_constant.dart';
 import '../../../data/constants/string_constants.dart';
 import '../../../routes/app_pages.dart';
 import '../controllers/user_home_controller.dart';
-import '../../communication/widgets/secure_communication_panel.dart';
 import '../../communication/controllers/call_state_controller.dart';
+import '../../communication/widgets/secure_communication_panel.dart';
+import '../widgets/marketplace_driver_card.dart';
 
 class UserHomeView extends StatefulWidget {
   const UserHomeView({super.key});
@@ -117,7 +118,15 @@ class _UserHomeViewState extends State<UserHomeView> {
             ),
             resizeToAvoidBottomInset: false,
             backgroundColor: primaryColor,
-            bottomNavigationBar: const SecureCommunicationPanel(),
+            bottomNavigationBar: Obx(() {
+              final CallStateController communication =
+                  Get.find<CallStateController>();
+              final String? status = communication.activeRide.value?.status;
+              if (status == null || status == 'contacting') {
+                return const SizedBox.shrink();
+              }
+              return const SecureCommunicationPanel();
+            }),
             body: Column(
               mainAxisAlignment: MainAxisAlignment.end,
               crossAxisAlignment: CrossAxisAlignment.center,
@@ -620,6 +629,12 @@ class _UserHomeViewState extends State<UserHomeView> {
     Drivers item,
     int index,
   ) {
+    if (item.sId?.trim().isNotEmpty == true) {
+      return Padding(
+        padding: EdgeInsets.symmetric(vertical: 5.px),
+        child: _marketplaceCard(context, item, index, selected: true),
+      );
+    }
     final bool hasDistance = controller.selectedDriverDistance.value > 0;
 
     return GestureDetector(
@@ -772,29 +787,19 @@ class _UserHomeViewState extends State<UserHomeView> {
                 ),
               ],
             ),
-            _requestRideButton(item),
           ],
         ),
       ),
     );
   }
 
-  Widget _requestRideButton(Drivers driver) {
-    final CallStateController communication = Get.find<CallStateController>();
-    return Obx(() => SizedBox(
-          height: 48,
-          child: OutlinedButton(
-            onPressed: communication.isBusy.value ||
-                    communication.activeRide.value != null ||
-                    communication.pendingRide.value != null
-                ? null
-                : () => communication.requestRide(driver.sId ?? ''),
-            child: const Text('Request ride'),
-          ),
-        ));
-  }
-
   Widget _buildDriverCard(BuildContext context, Drivers item, int index) {
+    if (item.sId?.trim().isNotEmpty == true) {
+      return Padding(
+        padding: EdgeInsets.symmetric(vertical: 5.px),
+        child: _marketplaceCard(context, item, index),
+      );
+    }
     return GestureDetector(
       onTap: () {
         controller.clickOnDriverIndex(index);
@@ -904,7 +909,6 @@ class _UserHomeViewState extends State<UserHomeView> {
                         );
                       },
                     ),
-                  _requestRideButton(item),
                 ],
               ),
             ),
@@ -912,6 +916,47 @@ class _UserHomeViewState extends State<UserHomeView> {
         ),
       ),
     );
+  }
+
+  Widget _marketplaceCard(
+    BuildContext context,
+    Drivers driver,
+    int index, {
+    bool selected = false,
+  }) {
+    final CallStateController communication = Get.find<CallStateController>();
+    final double calculatedDistance = controller.getDistanceFromUser(driver);
+    final double? distance =
+        calculatedDistance.isFinite && calculatedDistance >= 0
+            ? calculatedDistance
+            : null;
+    return Obx(
+      () => MarketplaceDriverCard(
+        driver: driver,
+        selected: selected,
+        distanceKm: distance,
+        actionsLoading: communication.contactingDriverId.value == driver.sId,
+        onTap: () => controller.clickOnDriverIndex(index),
+        onChat: driver.canChat
+            ? () => communication.openDriverChat(driver.sId ?? '')
+            : null,
+        onCall: driver.canCall
+            ? () => _confirmDriverCall(context, driver, communication)
+            : null,
+      ),
+    );
+  }
+
+  Future<void> _confirmDriverCall(
+    BuildContext context,
+    Drivers driver,
+    CallStateController communication,
+  ) async {
+    final bool arabic = Localizations.localeOf(context).languageCode == 'ar';
+    final String name = driver.fullName ?? (arabic ? 'السائق' : 'Driver');
+    if (await communication.confirmDrewelCall(name)) {
+      await communication.initiateDriverCall(driver.sId ?? '');
+    }
   }
 
   Widget _buildDriversPlaceholderState(BuildContext context) {

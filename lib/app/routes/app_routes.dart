@@ -20,6 +20,8 @@ abstract class Routes {
   static const OUTGOING_CALL = _Paths.OUTGOING_CALL;
   static const ACTIVE_CALL = _Paths.ACTIVE_CALL;
   static const RIDE_CHAT = _Paths.RIDE_CHAT;
+  static const MY_POINTS = _Paths.MY_POINTS;
+  static const BUY_POINTS = _Paths.BUY_POINTS;
 }
 
 abstract class _Paths {
@@ -41,4 +43,6 @@ abstract class _Paths {
   static const OUTGOING_CALL = '/communication/call/outgoing';
   static const ACTIVE_CALL = '/communication/call/active';
   static const RIDE_CHAT = '/communication/messages';
+  static const MY_POINTS = '/driver/points';
+  static const BUY_POINTS = '/driver/points/buy';
 }

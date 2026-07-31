@@ -1,0 +1,283 @@
+import TripOffer from "../models/TripOffer.js";
+import Notification from "../models/Notification.js";
+import { io } from "../socket/index.js";
+import { resolvePrincipal } from "../services/rideCommunicationPolicy.js";
+import {
+  acceptTripOffer,
+  closeTripOffer,
+  createTripOffer,
+  getOfferWalletDto,
+  toTripOfferDto,
+} from "../services/tripOfferService.js";
+import {
+  PointsValidationError,
+  hashIdempotencyPayload,
+  pointsValidationErrorResponse,
+  requireBoundedString,
+  requireIdempotencyKey,
+  requireObjectId,
+} from "../helpers/pointsValidation.js";
+
+const sendError = (res, error) => {
+  if (pointsValidationErrorResponse(error, res)) return;
+  return res.status(error.statusCode || error.status || 500).json({
+    success: false,
+    code: error.code || "TRIP_OFFER_INTERNAL_ERROR",
+    message: error.statusCode || error.status ? error.message : "Internal server error",
+  });
+};
+
+const parseLocation = (value, field) => {
+  const lat = Number(value?.lat);
+  const long = Number(value?.long);
+  const address = String(value?.address || "").trim();
+  if (
+    !Number.isFinite(lat) ||
+    lat < -90 ||
+    lat > 90 ||
+    !Number.isFinite(long) ||
+    long < -180 ||
+    long > 180 ||
+    address.length > 300
+  ) {
+    throw new PointsValidationError(`${field} is invalid`);
+  }
+  return { lat, long, address };
+};
+
+const parseOfferPayload = (body = {}) => {
+  const offeredPrice = Number(body.offeredPrice);
+  if (!Number.isFinite(offeredPrice) || offeredPrice < 0 || offeredPrice > 1_000_000_000) {
+    throw new PointsValidationError("offeredPrice is invalid");
+  }
+  const currency = requireBoundedString(body.currency, "currency", {
+    min: 3,
+    max: 3,
+    pattern: /^[A-Za-z]{3}$/,
+  }).toUpperCase();
+  return {
+    contactRideId: requireObjectId(body.contactRideId, "contactRideId"),
+    clientOfferId: requireBoundedString(body.clientOfferId, "clientOfferId", {
+      min: 8,
+      max: 200,
+      pattern: /^[A-Za-z0-9][A-Za-z0-9._:-]+$/,
+    }),
+    offeredPrice,
+    currency,
+    pickup: parseLocation(body.pickup, "pickup"),
+    destination: parseLocation(body.destination, "destination"),
+    vehicleType: String(body.vehicleType || "").trim().slice(0, 120),
+    note: String(body.note || "").trim().slice(0, 1000),
+  };
+};
+
+export const sendTripOffer = async (req, res) => {
+  let authenticatedDriverId = null;
+  try {
+    const principal = await resolvePrincipal(req.user?._id);
+    if (principal.role !== "driver") {
+      return res.status(403).json({
+        success: false,
+        code: "DRIVER_REQUIRED",
+        message: "Only drivers can send trip offers",
+      });
+    }
+    authenticatedDriverId = principal.id;
+    const idempotencyKey = requireIdempotencyKey(req);
+    const payload = parseOfferPayload(req.body);
+    const requestFingerprint = hashIdempotencyPayload(payload);
+    const result = await createTripOffer({
+      driverId: principal.id,
+      ...payload,
+      idempotencyKey,
+      requestFingerprint,
+    });
+    return res.status(result.idempotent ? 200 : 201).json({
+      success: true,
+      offer: toTripOfferDto(result.offer),
+      wallet: getOfferWalletDto(result.wallet, result.offer.pointsCost),
+      idempotent: result.idempotent,
+    });
+  } catch (error) {
+    if (error?.code === 11000) {
+      return res.status(409).json({
+        success: false,
+        code: "TRIP_OFFER_CONFLICT",
+        message: "A pending offer already exists for this conversation",
+      });
+    }
+    if (error?.code === "INSUFFICIENT_AVAILABLE_POINTS" && authenticatedDriverId) {
+      const minute = new Date().toISOString().slice(0, 16);
+      const eventKey = `insufficient-points:${authenticatedDriverId}:${minute}`;
+      await Notification.findOneAndUpdate(
+        { eventKey },
+        {
+          $setOnInsert: {
+            userId: authenticatedDriverId,
+            recipientType: "driver",
+            type: "POINTS_INSUFFICIENT_BALANCE",
+            message: "You do not have enough available points to send this offer",
+            eventKey,
+            isValid: true,
+          },
+        },
+        { upsert: true, setDefaultsOnInsert: true }
+      ).catch(() => {});
+    }
+    return sendError(res, error);
+  }
+};
+
+export const listMyTripOffers = async (req, res) => {
+  try {
+    const principal = await resolvePrincipal(req.user?._id);
+    if (!["driver", "passenger"].includes(principal.role)) {
+      return res.status(403).json({ success: false, code: "OFFER_ACCESS_FORBIDDEN" });
+    }
+    const limit = Math.min(50, Math.max(1, Number.parseInt(req.query.limit || "20", 10) || 20));
+    const filter =
+      principal.role === "driver"
+        ? { driverId: principal.id }
+        : { passengerId: principal.id };
+    if (req.query.status) {
+      const status = String(req.query.status).trim().toLowerCase();
+      if (
+        !["pending", "accepted", "declined", "expired", "cancelled", "delivery_failed"].includes(
+          status
+        )
+      ) {
+        throw new PointsValidationError("status is invalid");
+      }
+      filter.status = status;
+    }
+    if (req.query.before) filter._id = { $lt: requireObjectId(req.query.before, "before") };
+    const offers = await TripOffer.find(filter)
+      .sort({ _id: -1 })
+      .limit(limit);
+    return res.json({
+      success: true,
+      offers: offers.map(toTripOfferDto),
+      pagination: {
+        limit,
+        nextCursor: offers.length === limit ? String(offers[offers.length - 1]._id) : null,
+      },
+    });
+  } catch (error) {
+    return sendError(res, error);
+  }
+};
+
+export const getTripOffer = async (req, res) => {
+  try {
+    const principal = await resolvePrincipal(req.user?._id);
+    const offerId = requireObjectId(req.params.offerId, "offerId");
+    const offer = await TripOffer.findById(offerId);
+    if (!offer) {
+      return res.status(404).json({ success: false, code: "TRIP_OFFER_NOT_FOUND" });
+    }
+    const owns =
+      (principal.role === "driver" && String(offer.driverId) === String(principal.id)) ||
+      (principal.role === "passenger" &&
+        String(offer.passengerId) === String(principal.id));
+    if (!owns) {
+      return res.status(403).json({ success: false, code: "TRIP_OFFER_FORBIDDEN" });
+    }
+    return res.json({ success: true, offer: toTripOfferDto(offer) });
+  } catch (error) {
+    return sendError(res, error);
+  }
+};
+
+export const acceptOffer = async (req, res) => {
+  try {
+    const principal = await resolvePrincipal(req.user?._id);
+    if (principal.role !== "passenger") {
+      return res.status(403).json({
+        success: false,
+        code: "PASSENGER_REQUIRED",
+        message: "Only the target passenger can accept an offer",
+      });
+    }
+    const result = await acceptTripOffer({
+      offerId: requireObjectId(req.params.offerId, "offerId"),
+      passengerId: principal.id,
+    });
+    if (result.expired) {
+      return res.status(410).json({
+        success: false,
+        code: "TRIP_OFFER_EXPIRED",
+        offer: toTripOfferDto(result.offer),
+      });
+    }
+    io.to(String(result.offer.driverId))
+      .to(String(result.offer.passengerId))
+      .emit("ride:state", {
+        rideId: String(result.ride._id),
+        offerId: String(result.offer._id),
+        status: result.ride.status,
+      });
+    io.emit("driver:availability", {
+      driverId: String(result.offer.driverId),
+      status: "Busy",
+      isAvailable: false,
+    });
+    return res.json({
+      success: true,
+      offer: toTripOfferDto(result.offer),
+      ride: result.ride,
+      wallet: result.wallet
+        ? getOfferWalletDto(result.wallet, result.offer.pointsCost)
+        : null,
+      idempotent: result.idempotent,
+    });
+  } catch (error) {
+    if (error?.code === 11000) {
+      return res.status(409).json({
+        success: false,
+        code: "ACTIVE_RIDE_CONFLICT",
+        message: "Passenger or driver already has an active ride",
+      });
+    }
+    return sendError(res, error);
+  }
+};
+
+const closeAs = (actorRole, terminalStatus, reason) => async (req, res) => {
+  try {
+    const principal = await resolvePrincipal(req.user?._id);
+    if (principal.role !== actorRole) {
+      return res.status(403).json({
+        success: false,
+        code: actorRole === "driver" ? "DRIVER_REQUIRED" : "PASSENGER_REQUIRED",
+      });
+    }
+    const result = await closeTripOffer({
+      offerId: requireObjectId(req.params.offerId, "offerId"),
+      actorId: principal.id,
+      actorRole,
+      terminalStatus,
+      reason,
+    });
+    return res.json({
+      success: true,
+      offer: toTripOfferDto(result.offer),
+      wallet: result.wallet
+        ? getOfferWalletDto(result.wallet, result.offer.pointsCost)
+        : null,
+      idempotent: result.idempotent,
+    });
+  } catch (error) {
+    return sendError(res, error);
+  }
+};
+
+export const declineOffer = closeAs(
+  "passenger",
+  "declined",
+  "Trip offer declined by passenger"
+);
+export const cancelOffer = closeAs(
+  "driver",
+  "cancelled",
+  "Trip offer cancelled by driver"
+);

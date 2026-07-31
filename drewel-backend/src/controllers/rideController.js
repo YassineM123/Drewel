@@ -16,10 +16,13 @@ import CallSession from "../models/CallSession.js";
 import User from "../models/User.js";
 import RideSafetyAction from "../models/RideSafetyAction.js";
 import { counterpartFor } from "../services/rideCommunicationPolicy.js";
+import { buildAvailableDriverFilter } from "../utils/availableDrivers.js";
 
 const ACTIVE_RIDE_STATUSES = ["accepted", "driver_arriving", "driver_arrived", "in_progress"];
 const DRIVER_TRANSITIONS = {
-  requested: ["accepted", "cancelled"],
+  // Acceptance is exclusively performed by the passenger through the
+  // transaction-backed Trip Offer endpoint so points cannot be bypassed.
+  requested: ["cancelled"],
   accepted: ["driver_arriving", "cancelled"],
   driver_arriving: ["driver_arrived", "cancelled"],
   driver_arrived: ["in_progress", "cancelled"],
@@ -42,6 +45,15 @@ const rideDto = (ride) => ({
   contactAllowed: isRideContactAllowed(ride),
   createdAt: ride.createdAt,
   updatedAt: ride.updatedAt,
+  ...(ride.status !== "contacting"
+    ? {
+        pickup: ride.pickup,
+        destination: ride.destination,
+        vehicleType: ride.vehicleType || "",
+        agreedPrice: ride.agreedPrice ?? null,
+        confirmedAt: ride.confirmedAt,
+      }
+    : {}),
 });
 
 const publicParticipantDto = (participant, role) => {
@@ -71,29 +83,203 @@ const sendError = (res, error) => res.status(error.statusCode || 500).json({
   message: error.statusCode ? error.message : "Internal server error",
 });
 
-export const createRideRequest = async (req, res) => {
+export const createDriverContact = async (req, res) => {
   try {
     const principal = await resolvePrincipal(req.user?._id);
-    if (principal.role !== "passenger") throw new CommunicationPolicyError("Only passengers can request a ride", 403, "PASSENGER_REQUIRED");
+    if (principal.role !== "passenger") throw new CommunicationPolicyError("Only passengers can contact a driver", 403, "PASSENGER_REQUIRED");
     const { driverId } = req.body || {};
     if (!mongoose.isValidObjectId(driverId)) throw new CommunicationPolicyError("Valid driverId is required", 400, "INVALID_DRIVER_ID");
     const driver = await Driver.findOne({
-      _id: driverId, isOnline: true, isApproved: true, isRestricted: false, isDeleted: { $ne: true },
-      $or: [{ status: "completed" }, { status: null, profileRequestStatus: null }],
+      _id: driverId,
+      ...buildAvailableDriverFilter(),
     }).select("_id");
     if (!driver) throw new CommunicationPolicyError("Driver is not available", 409, "DRIVER_NOT_AVAILABLE");
-    const existing = await Ride.findOne({ passengerId: principal.id, driverId, status: { $in: ["requested", ...ACTIVE_RIDE_STATUSES] } });
+    const existing = await Ride.findOne({
+      passengerId: principal.id,
+      driverId,
+      status: { $in: ["contacting", ...ACTIVE_RIDE_STATUSES] },
+    });
     if (existing) return res.status(200).json({ success: true, ride: await publicRideDto(existing), idempotent: true });
     const ride = await Ride.create({
       passengerId: principal.id,
       driverId,
+      status: "contacting",
       reference: `DRW-${Date.now().toString(36).toUpperCase()}-${crypto.randomBytes(3).toString("hex").toUpperCase()}`,
     });
-    await CommunicationAudit.create({ rideId: ride._id, action: "ride_requested", actorId: principal.id, actorRole: "passenger", outcome: "success" });
-    io.to(String(driverId)).emit("ride:requested", { rideId: String(ride._id), status: ride.status });
+    await CommunicationAudit.create({ rideId: ride._id, action: "driver_contact_created", actorId: principal.id, actorRole: "passenger", outcome: "success" });
+    io.to(String(driverId)).emit("driver:contact", { rideId: String(ride._id), status: ride.status });
     return res.status(201).json({ success: true, ride: await publicRideDto(ride) });
   } catch (error) {
-    console.error("Create ride request failed", error.message);
+    if (error?.code === 11000) {
+      const principal = await resolvePrincipal(req.user?._id);
+      const existing = await Ride.findOne({
+        passengerId: principal.id,
+        driverId: req.body?.driverId,
+        status: "contacting",
+      });
+      if (existing) {
+        return res.status(200).json({
+          success: true,
+          ride: await publicRideDto(existing),
+          idempotent: true,
+        });
+      }
+    }
+    console.error("Create driver contact failed", error.message);
+    return sendError(res, error);
+  }
+};
+
+const parseMissionPoint = (value, field) => {
+  const lat = Number(value?.lat);
+  const long = Number(value?.long);
+  const address = String(value?.address || "").trim();
+  if (
+    !Number.isFinite(lat) || lat < -90 || lat > 90 ||
+    !Number.isFinite(long) || long < -180 || long > 180 ||
+    address.length > 300
+  ) {
+    throw new CommunicationPolicyError(
+      `${field} must contain valid lat and long`,
+      400,
+      "INVALID_MISSION_LOCATION"
+    );
+  }
+  return { lat, long, address };
+};
+
+export const confirmMission = async (req, res) => {
+  try {
+    const principal = await resolvePrincipal(req.user?._id);
+    if (!["passenger", "driver"].includes(principal.role)) {
+      throw new CommunicationPolicyError("Ride participant required", 403, "RIDE_PARTICIPANT_REQUIRED");
+    }
+    if (!mongoose.isValidObjectId(req.params.rideId)) {
+      throw new CommunicationPolicyError("Invalid ride id", 400, "INVALID_RIDE_ID");
+    }
+    const pickup = parseMissionPoint(req.body?.pickup, "pickup");
+    const destination = parseMissionPoint(req.body?.destination, "destination");
+    const vehicleType = String(req.body?.vehicleType || "").trim();
+    if (vehicleType.length > 120) {
+      throw new CommunicationPolicyError("Invalid vehicle type", 400, "INVALID_VEHICLE_TYPE");
+    }
+    const agreedPrice = req.body?.price === undefined || req.body?.price === null
+      ? null
+      : Number(req.body.price);
+    if (agreedPrice !== null && (!Number.isFinite(agreedPrice) || agreedPrice < 0 || agreedPrice > 1_000_000)) {
+      throw new CommunicationPolicyError("Invalid mission price", 400, "INVALID_MISSION_PRICE");
+    }
+
+    let confirmedRide;
+    let missionCreated = false;
+    const cancelledContacts = [];
+    await mongoose.connection.transaction(async (session) => {
+      const contact = await Ride.findById(req.params.rideId).session(session);
+      if (!contact) throw new CommunicationPolicyError("Contact not found", 404, "RIDE_NOT_FOUND");
+      const isPassenger = principal.role === "passenger" && String(contact.passengerId) === String(principal.id);
+      const isDriver = principal.role === "driver" && String(contact.driverId) === String(principal.id);
+      if (!isPassenger && !isDriver) {
+        throw new CommunicationPolicyError("You are not a participant of this contact", 403, "NOT_RIDE_PARTICIPANT");
+      }
+      if (contact.status !== "contacting") {
+        if (ACTIVE_RIDE_STATUSES.includes(contact.status)) {
+          confirmedRide = contact;
+          return;
+        }
+        throw new CommunicationPolicyError("Contact cannot be confirmed", 409, "INVALID_RIDE_TRANSITION");
+      }
+      throw new CommunicationPolicyError(
+        "A contacting ride can only be confirmed by accepting its active Trip Offer",
+        409,
+        "TRIP_OFFER_REQUIRED"
+      );
+
+      const driver = await Driver.findOneAndUpdate(
+        {
+          _id: contact.driverId,
+          ...buildAvailableDriverFilter(),
+        },
+        { $set: { availabilityStatus: "Busy" } },
+        { new: true, session }
+      );
+      if (!driver) {
+        throw new CommunicationPolicyError("Driver is no longer available", 409, "DRIVER_NOT_AVAILABLE");
+      }
+      const now = new Date();
+      confirmedRide = await Ride.findOneAndUpdate(
+        { _id: contact._id, status: "contacting" },
+        {
+          $set: {
+            status: "accepted",
+            acceptedAt: now,
+            confirmedAt: now,
+            confirmedBy: principal.id,
+            pickup,
+            destination,
+            vehicleType: vehicleType || driver.vehicleType || "",
+            agreedPrice,
+          },
+        },
+        { new: true, session, runValidators: true }
+      );
+      if (!confirmedRide) {
+        throw new CommunicationPolicyError("Contact state changed concurrently", 409, "RIDE_STATE_CONFLICT");
+      }
+      missionCreated = true;
+      const otherContacts = await Ride.find({
+        _id: { $ne: contact._id },
+        status: "contacting",
+        $or: [
+          { passengerId: contact.passengerId },
+          { driverId: contact.driverId },
+        ],
+      }).select("_id passengerId driverId").session(session).lean();
+      if (otherContacts.length) {
+        await Ride.updateMany(
+          { _id: { $in: otherContacts.map((item) => item._id) }, status: "contacting" },
+          { $set: { status: "cancelled", endedAt: now, contactEndsAt: now } },
+          { session }
+        );
+        cancelledContacts.push(...otherContacts);
+      }
+      await CommunicationAudit.create([{
+        rideId: confirmedRide._id,
+        action: "mission_confirmed",
+        actorId: principal.id,
+        actorRole: principal.role,
+        outcome: "success",
+      }], { session });
+    });
+
+    io.to(String(confirmedRide.passengerId)).to(String(confirmedRide.driverId)).emit(
+      "ride:state",
+      { rideId: String(confirmedRide._id), status: confirmedRide.status }
+    );
+    io.emit("driver:availability", {
+      driverId: String(confirmedRide.driverId),
+      status: "Busy",
+      isAvailable: false,
+    });
+    for (const contact of cancelledContacts) {
+      await endActiveCallsForRide(contact._id, "contact_closed");
+      io.to(String(contact.passengerId)).to(String(contact.driverId)).emit(
+        "ride:state",
+        { rideId: String(contact._id), status: "cancelled" }
+      );
+    }
+    return res.json({
+      success: true,
+      ride: await publicRideDto(confirmedRide),
+      idempotent: !missionCreated,
+    });
+  } catch (error) {
+    if (error?.code === 11000) {
+      return sendError(res, new CommunicationPolicyError(
+        "Passenger or driver already has an active ride",
+        409,
+        "ACTIVE_RIDE_CONFLICT"
+      ));
+    }
     return sendError(res, error);
   }
 };
@@ -111,6 +297,7 @@ export const getActiveRide = async (req, res) => {
     const principal = await resolvePrincipal(req.user?._id);
     const filter = {
       $or: [
+        { status: "contacting", communicationBlockedAt: null },
         { status: { $in: ACTIVE_RIDE_STATUSES } },
         { status: "completed", contactEndsAt: { $gt: new Date() }, communicationBlockedAt: null },
       ],
@@ -138,8 +325,8 @@ export const listMyRides = async (req, res) => {
       throw new CommunicationPolicyError("Ride participant required", 403, "RIDE_PARTICIPANT_REQUIRED");
     }
     const status = String(req.query.status || "active").trim().toLowerCase();
-    if (!["requested", "active", "all"].includes(status)) {
-      throw new CommunicationPolicyError("status must be requested, active, or all", 400, "INVALID_RIDE_FILTER");
+    if (!["requested", "contacting", "active", "all"].includes(status)) {
+      throw new CommunicationPolicyError("status must be requested, contacting, active, or all", 400, "INVALID_RIDE_FILTER");
     }
     const page = Math.max(1, Number.parseInt(req.query.page || "1", 10) || 1);
     const limit = Math.min(50, Math.max(1, Number.parseInt(req.query.limit || "20", 10) || 20));
@@ -147,7 +334,9 @@ export const listMyRides = async (req, res) => {
       ? { passengerId: principal.id }
       : { driverId: principal.id };
     if (status === "requested") filter.status = "requested";
+    if (status === "contacting") filter.status = "contacting";
     if (status === "active") filter.status = { $in: ACTIVE_RIDE_STATUSES };
+    if (status === "all") filter.status = { $ne: "contacting" };
 
     const [rides, total] = await Promise.all([
       Ride.find(filter).sort({ updatedAt: -1, _id: -1 }).skip((page - 1) * limit).limit(limit),
@@ -187,6 +376,31 @@ export const transitionRide = async (req, res) => {
     );
     if (!updated) throw new CommunicationPolicyError("Ride state changed concurrently", 409, "RIDE_STATE_CONFLICT");
     if (["completed", "cancelled"].includes(nextStatus)) await endActiveCallsForRide(updated._id, `ride_${nextStatus}`);
+    if (["completed", "cancelled"].includes(nextStatus)) {
+      const currentDriver = await Driver.findById(updated.driverId)
+        .select("_id isOnline");
+      const driver = currentDriver
+        ? await Driver.findByIdAndUpdate(
+            updated.driverId,
+            {
+              $set: {
+                availabilityStatus: currentDriver.isOnline
+                  ? "Online"
+                  : "Offline",
+              },
+            },
+            { new: true }
+          ).select("_id isOnline availabilityStatus updatedAt")
+        : null;
+      if (driver) {
+        io.emit("driver:availability", {
+          driverId: String(driver._id),
+          status: driver.isOnline ? "Online" : "Offline",
+          isAvailable: driver.isOnline === true,
+          updatedAt: driver.updatedAt,
+        });
+      }
+    }
     await CommunicationAudit.create({ rideId: updated._id, action: `ride_${nextStatus}`, actorId: principal.id, actorRole: "driver", outcome: "success" });
     io.to(String(updated.passengerId)).to(String(updated.driverId)).emit("ride:state", { rideId: String(updated._id), status: updated.status });
     return res.json({ success: true, ride: await publicRideDto(updated) });
@@ -224,6 +438,19 @@ export const sendRideMessage = async (req, res) => {
   try {
     const principal = await resolvePrincipal(req.user?._id);
     const { ride, participantRole } = await assertRideParticipant(principal, req.params.rideId, { requireContact: true });
+    if (ride.status === "contacting") {
+      const driverAvailable = await Driver.exists({
+        _id: ride.driverId,
+        ...buildAvailableDriverFilter(),
+      });
+      if (!driverAvailable) {
+        throw new CommunicationPolicyError(
+          "Driver is unavailable",
+          409,
+          "DRIVER_NOT_AVAILABLE"
+        );
+      }
+    }
     const text = String(req.body?.text || "").trim();
     const clientMessageId = String(req.body?.clientMessageId || "").trim();
     if (!text || text.length > 2000 || !clientMessageId || clientMessageId.length > 100) {

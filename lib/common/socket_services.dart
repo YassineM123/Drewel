@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:socket_io_client/socket_io_client.dart' as IO;
 
 class SocketService {
@@ -6,6 +7,9 @@ class SocketService {
   Map<String, dynamic>? _pendingDriverLocation;
   void Function()? _locationTrackingReadyCallback;
   Function(dynamic)? _driversNearbyCallback;
+  DateTime? _lastConnectionErrorLogAt;
+
+  static const Duration _connectionErrorLogInterval = Duration(seconds: 30);
 
   // Initialize and connect the socket
   void connect(String url, String token) {
@@ -28,22 +32,36 @@ class SocketService {
           .setTransports(['websocket']) // Use WebSocket transport
           .disableAutoConnect() // Disable auto-connect to handle it manually
           .setAuth({'token': token}) // Pass token in headers
+          // Back off during temporary DNS/network loss instead of retrying every
+          // few seconds indefinitely. A foreground resume creates a fresh socket.
+          .enableReconnection()
+          .setReconnectionDelay(2000)
+          .setReconnectionDelayMax(30000)
+          .setRandomizationFactor(0.5)
+          .setTimeout(10000)
           .build(),
     );
 
     // IMPORTANT: Set up listeners BEFORE calling connect()
     _socket!.on('connect', (_) {
       _locationTrackingReady = false;
-      print('Connected to the WebSocket server');
+      _lastConnectionErrorLogAt = null;
+      debugPrint('Connected to the WebSocket server');
     });
 
     _socket!.on('disconnect', (_) {
       _locationTrackingReady = false;
-      print('Disconnected from the WebSocket server');
+      debugPrint('Disconnected from the WebSocket server');
     });
 
     _socket!.on('connect_error', (err) {
-      print('Connection error: $err');
+      final DateTime now = DateTime.now();
+      final DateTime? lastLogAt = _lastConnectionErrorLogAt;
+      if (lastLogAt == null ||
+          now.difference(lastLogAt) >= _connectionErrorLogInterval) {
+        _lastConnectionErrorLogAt = now;
+        debugPrint('WebSocket connection unavailable: $err');
+      }
     });
 
     // Authentication is asynchronous on the server. Waiting for this event
@@ -73,6 +91,7 @@ class SocketService {
     }
     _locationTrackingReady = false;
     _pendingDriverLocation = null;
+    _lastConnectionErrorLogAt = null;
   }
 
   // Emit an event - check _socket!.connected directly for real-time state

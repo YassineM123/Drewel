@@ -1,6 +1,6 @@
 import 'dart:async';
 
-import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -18,7 +18,7 @@ import '../../../data/services/agora_call_service.dart';
 import '../../../routes/app_pages.dart';
 import '../widgets/safety_dialog.dart';
 
-class CallStateController extends GetxService {
+class CallStateController extends GetxService with WidgetsBindingObserver {
   CallStateController({
     required ActiveRideRepository activeRideRepository,
     required CallRepository callRepository,
@@ -43,6 +43,7 @@ class CallStateController extends GetxService {
   final RxBool isBusy = false.obs;
   final RxBool isMuted = false.obs;
   final RxBool isSpeakerEnabled = false.obs;
+  final RxString contactingDriverId = ''.obs;
   final RxString userFacingError = ''.obs;
   StreamSubscription<AgoraConnectionState>? _connectionSubscription;
   Timer? _durationTimer;
@@ -69,17 +70,116 @@ class CallStateController extends GetxService {
     return 'Secure communication is unavailable for this ride status.';
   }
 
-  Future<void> requestRide(String driverId) async {
-    if (driverId.trim().isEmpty || isBusy.value || activeRide.value != null) {
-      return;
+  Future<ActiveRideModel?> _createOrGetDriverContact(String driverId) async {
+    final String normalizedId = driverId.trim();
+    if (normalizedId.isEmpty || isBusy.value) return null;
+    isBusy.value = true;
+    contactingDriverId.value = normalizedId;
+    userFacingError.value = '';
+    try {
+      final ActiveRideModel contact =
+          await _activeRideRepository.createOrGetContact(normalizedId);
+      if (!contact.canCommunicate) {
+        userFacingError.value = 'This driver is no longer available.';
+        return null;
+      }
+      activeRide.value = contact;
+      pendingRide.value = null;
+      return contact;
+    } on CommunicationApiException catch (error) {
+      userFacingError.value = error.statusCode == 409
+          ? 'This driver is no longer available.'
+          : error.message;
+      return null;
+    } finally {
+      contactingDriverId.value = '';
+      isBusy.value = false;
+    }
+  }
+
+  Future<void> openDriverChat(String driverId) async {
+    final ActiveRideModel? contact = await _createOrGetDriverContact(driverId);
+    if (contact != null) {
+      Get.toNamed(Routes.RIDE_CHAT);
+    } else {
+      _showContactError();
+    }
+  }
+
+  Future<void> initiateDriverCall(String driverId) async {
+    final ActiveRideModel? contact = await _createOrGetDriverContact(driverId);
+    if (contact != null) {
+      await initiateCall();
+    } else {
+      _showContactError();
+    }
+  }
+
+  Future<bool> confirmDrewelCall(String displayName) async {
+    final BuildContext? context = Get.context;
+    final bool arabic = context != null &&
+        Localizations.localeOf(context).languageCode.toLowerCase() == 'ar';
+    final String name = displayName.trim().isEmpty
+        ? (arabic ? 'السائق' : 'Driver')
+        : displayName.trim();
+    return await Get.dialog<bool>(
+          AlertDialog(
+            title: Text(arabic ? 'مكالمة عبر Drewel' : 'Drewel call'),
+            content: Text(
+              arabic
+                  ? 'هل تريد الاتصال بـ $name عبر Drewel؟'
+                  : 'Call $name through Drewel?',
+            ),
+            actions: <Widget>[
+              TextButton(
+                onPressed: () => Get.back<bool>(result: false),
+                child: Text(arabic ? 'إلغاء' : 'Cancel'),
+              ),
+              FilledButton(
+                onPressed: () => Get.back<bool>(result: true),
+                child: Text(arabic ? 'اتصال' : 'Call'),
+              ),
+            ],
+          ),
+        ) ??
+        false;
+  }
+
+  void _showContactError() {
+    final String message = userFacingError.value.trim();
+    if (message.isEmpty) return;
+    Get.snackbar(
+      'Drewel',
+      message,
+      snackPosition: SnackPosition.BOTTOM,
+      duration: const Duration(seconds: 3),
+    );
+  }
+
+  Future<bool> confirmMission({
+    required Map<String, dynamic> pickup,
+    required Map<String, dynamic> destination,
+    String? vehicleType,
+    double? price,
+  }) async {
+    final ActiveRideModel? contact = activeRide.value;
+    if (contact == null || contact.status != 'contacting' || isBusy.value) {
+      return false;
     }
     isBusy.value = true;
     userFacingError.value = '';
     try {
-      pendingRide.value = await _activeRideRepository.requestRide(driverId);
-      userFacingError.value = 'Ride request sent. Waiting for the driver.';
+      activeRide.value = await _activeRideRepository.confirmMission(
+        contact.id,
+        pickup: pickup,
+        destination: destination,
+        vehicleType: vehicleType,
+        price: price,
+      );
+      return true;
     } on CommunicationApiException catch (error) {
       userFacingError.value = error.message;
+      return false;
     } finally {
       isBusy.value = false;
     }
@@ -96,9 +196,27 @@ class CallStateController extends GetxService {
   @override
   Future<void> onInit() async {
     super.onInit();
+    WidgetsBinding.instance.addObserver(this);
     _agoraService.setTokenRenewalHandler(_renewAgoraToken);
     await configureSession();
     await refreshActiveRide();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.hidden ||
+        state == AppLifecycleState.paused ||
+        state == AppLifecycleState.detached) {
+      _socketService.disconnect();
+      return;
+    }
+    if (state == AppLifecycleState.resumed) {
+      // disconnect() disposes the old Socket.IO manager. Force the session
+      // setup to create a new socket and restore its event listeners.
+      _sessionToken = '';
+      unawaited(configureSession());
+      unawaited(refreshActiveRide());
+    }
   }
 
   Future<void> _renewAgoraToken() async {
@@ -132,8 +250,10 @@ class CallStateController extends GetxService {
       _socketService.connect(ApiUrlConstants.socketUrl, token);
       _socketService.off('call:state');
       _socketService.off('ride:state');
+      _socketService.off('driver:contact');
       _socketService.on('call:state', _handleCallStateEvent);
       _socketService.on('ride:state', (_) => refreshActiveRide());
+      _socketService.on('driver:contact', (_) => refreshActiveRide());
     }
   }
 
@@ -429,6 +549,7 @@ class CallStateController extends GetxService {
 
   @override
   void onClose() {
+    WidgetsBinding.instance.removeObserver(this);
     _durationTimer?.cancel();
     _outgoingPollTimer?.cancel();
     _connectionSubscription?.cancel();

@@ -18,7 +18,7 @@ const routeLayer = (router, path, method) => router.stack.find(
 );
 
 test("ride contact policy permits assigned lifecycle states and bounded completion grace", () => {
-  for (const status of ["accepted", "driver_arriving", "driver_arrived", "in_progress"]) {
+  for (const status of ["contacting", "accepted", "driver_arriving", "driver_arrived", "in_progress"]) {
     assert.equal(isRideContactAllowed({ status }), true);
   }
   assert.equal(isRideContactAllowed({ status: "requested" }), false);
@@ -135,7 +135,8 @@ test("secure call routes require JWT and expose the complete state API", () => {
 
 test("ride REST API includes active lookup and ride-scoped paginated chat", () => {
   for (const [path, method] of [
-    ["/", "post"], ["/active", "get"], ["/mine", "get"], ["/:rideId", "get"],
+    ["/contact", "post"], ["/active", "get"], ["/mine", "get"], ["/:rideId", "get"],
+    ["/:rideId/confirm", "post"],
     ["/:rideId/status", "patch"], ["/:rideId/calls", "get"],
     ["/:rideId/messages", "get"], ["/:rideId/messages", "post"],
     ["/:rideId/messages/:messageId/receipt", "patch"],
@@ -158,6 +159,16 @@ test("my rides endpoint derives ownership and bounds its public list", () => {
   assert.match(block, /Math\.min\(50/);
   assert.match(block, /Promise\.all\(rides\.map\(publicRideDto\)\)/);
   for (const pii of ["phone", "countryCode", "whatsappNumber"]) assert.equal(block.includes(pii), false);
+});
+
+test("pre-mission DTO masks exact pickup and destination until confirmation", () => {
+  const source = fs.readFileSync(new URL("../src/controllers/rideController.js", import.meta.url), "utf8");
+  const start = source.indexOf("const rideDto");
+  const end = source.indexOf("const publicParticipantDto", start);
+  const block = source.slice(start, end);
+  assert.match(block, /ride\.status !== "contacting"/);
+  assert.match(block, /pickup: ride\.pickup/);
+  assert.match(block, /destination: ride\.destination/);
 });
 
 test("admin call view is protected by JWT plus admin role", () => {

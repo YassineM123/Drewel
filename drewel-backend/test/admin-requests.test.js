@@ -124,6 +124,7 @@ test("profile transitions are independent and preserve aggregate compatibility",
   assert.equal(isAllowedProfileRequestTransition("approved", "rejected"), false);
   assert.equal(actionForTransition("not_submitted", "pending", "profile"), "submitted");
   assert.equal(actionForTransition("rejected", "pending", "profile"), "resubmitted");
+  assert.equal(actionForTransition("pending", "pending", "profile"), "resubmitted");
 
   const now = new Date("2026-07-18T10:00:00.000Z");
   const driver = { status: "approved", isApproved: true, isOnline: false };

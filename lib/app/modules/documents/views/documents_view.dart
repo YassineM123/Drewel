@@ -42,9 +42,7 @@ class DocumentsView extends GetView<DocumentsController> {
                 ),
                 buttonMargin: EdgeInsets.symmetric(horizontal: 15.px),
                 buttonColor:
-                    controller.canEditProfile && !controller.showLoading.value
-                        ? primaryColor
-                        : Colors.grey.shade500,
+                    controller.canSubmit ? primaryColor : Colors.grey.shade500,
                 showLoading: controller.showLoading.value),
             body: Column(
               mainAxisAlignment: MainAxisAlignment.end,

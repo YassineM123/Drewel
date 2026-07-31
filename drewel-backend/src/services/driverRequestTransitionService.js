@@ -1,6 +1,7 @@
 import mongoose from "mongoose";
 import Driver from "../models/Driver.js";
 import RequestAudit from "../models/RequestAudit.js";
+import { grantWelcomeBonusInSession } from "./pointsWalletService.js";
 
 export const DRIVER_STATUSES = ["pending", "approved", "rejected", "completed"];
 export const PROFILE_REQUEST_STATUSES = ["not_submitted", "pending", "approved", "rejected"];
@@ -39,7 +40,11 @@ export const actionForTransition = (oldStatus, newStatus, requestStage = "basic"
   if (requestStage === "profile" && newStatus === "pending" && oldStatus === "not_submitted") {
     return "submitted";
   }
-  if (requestStage === "profile" && newStatus === "pending" && oldStatus === "rejected") {
+  if (
+    requestStage === "profile" &&
+    newStatus === "pending" &&
+    ["pending", "rejected"].includes(oldStatus)
+  ) {
     return "resubmitted";
   }
   if (newStatus === "approved") return "approved";
@@ -120,6 +125,7 @@ export const transitionDriverRequest = async ({
   reason = "",
   requestStage = "basic",
   mutateDriver,
+  allowProfilePendingRefresh = false,
 }) => {
   const normalizedReason = String(reason || "").trim();
   if (normalizedReason.length > 1000) {
@@ -168,9 +174,15 @@ export const transitionDriverRequest = async ({
           "BASIC_REQUEST_NOT_APPROVED"
         );
       }
-      const transitionAllowed = requestStage === "profile"
-        ? isAllowedProfileRequestTransition(oldStatus, newStatus)
-        : isAllowedRequestTransition(oldStatus, newStatus);
+      const isProfilePendingRefresh =
+        allowProfilePendingRefresh === true &&
+        requestStage === "profile" &&
+        oldStatus === "pending" &&
+        newStatus === "pending";
+      const transitionAllowed = isProfilePendingRefresh ||
+        (requestStage === "profile"
+          ? isAllowedProfileRequestTransition(oldStatus, newStatus)
+          : isAllowedRequestTransition(oldStatus, newStatus));
       if (!transitionAllowed) {
         throw new RequestTransitionError(
           `Cannot transition request from ${oldStatus} to ${newStatus}`,
@@ -193,7 +205,20 @@ export const transitionDriverRequest = async ({
           driver.completedAt ||= driver.profileApprovedAt || now;
         }
       }
-      if (mutateDriver) await mutateDriver(driver, { now, session });
+      if (mutateDriver) {
+        await mutateDriver(driver, {
+          now,
+          session,
+          oldStatus,
+          isProfilePendingRefresh,
+        });
+      }
+      await grantWelcomeBonusInSession(driver, session, {
+        source:
+          requestStage === "profile"
+            ? "profile_approval"
+            : "verified_basic_reapproval",
+      });
       await driver.save({ session });
 
       await RequestAudit.create(

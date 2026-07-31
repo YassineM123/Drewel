@@ -825,8 +825,9 @@ class CommonWidgets {
     final Map<String, dynamic> responseMap = _safeResponseJsonMap(response);
     final bool hasSuccessField = responseMap.containsKey('success');
     final bool bodySuccess = responseMap['success'] == true;
-    final bool httpSuccess =
-        response != null && response.statusCode >= 200 && response.statusCode < 300;
+    final bool httpSuccess = response != null &&
+        response.statusCode >= 200 &&
+        response.statusCode < 300;
     final bool isSuccess = httpSuccess && (!hasSuccessField || bodySuccess);
 
     if (wantSnackBar) {
@@ -852,8 +853,9 @@ class CommonWidgets {
     final Map<String, dynamic> responseMap = _safeResponseJsonMap(response);
     final bool hasSuccessField = responseMap.containsKey('success');
     final bool bodySuccess = responseMap['success'] == true;
-    final bool httpSuccess =
-        response != null && response.statusCode >= 200 && response.statusCode < 300;
+    final bool httpSuccess = response != null &&
+        response.statusCode >= 200 &&
+        response.statusCode < 300;
     return httpSuccess && (!hasSuccessField || bodySuccess);
   }
 

@@ -22,6 +22,14 @@ import ApprovedRequests from "./pages/ApprovedRequests";
 import RejectedRequests from "./pages/RejectedRequests";
 import AllRequests from "./pages/AllRequests";
 import Calls from "./pages/Calls";
+import RequirePointsAccess from "./components/driverPoints/RequirePointsAccess";
+import PointsOverview from "./pages/driverPoints/PointsOverview";
+import DriverWallets from "./pages/driverPoints/DriverWallets";
+import DriverWalletDetail from "./pages/driverPoints/DriverWalletDetail";
+import PurchaseRequests from "./pages/driverPoints/PurchaseRequests";
+import PointTransactions from "./pages/driverPoints/PointTransactions";
+import PointPacks from "./pages/driverPoints/PointPacks";
+import PointsSettings from "./pages/driverPoints/PointsSettings";
 
 function App() {
   return (
@@ -51,6 +59,17 @@ function App() {
               <Route path="/notification" element={<PushNotification />} />
               <Route path="/chat" element={<ChatWrapper />} />
               <Route path="/calls" element={<Calls />} />
+              <Route element={<RequirePointsAccess />}>
+                <Route path="/driver-points" element={<PointsOverview />} />
+                <Route path="/driver-points/wallets" element={<DriverWallets />} />
+                <Route path="/driver-points/wallets/:driverId" element={<DriverWalletDetail />} />
+                <Route path="/driver-points/purchase-requests" element={<PurchaseRequests />} />
+                <Route path="/driver-points/transactions" element={<PointTransactions />} />
+              </Route>
+              <Route element={<RequirePointsAccess ownerOnly />}>
+                <Route path="/driver-points/packs" element={<PointPacks />} />
+                <Route path="/driver-points/settings" element={<PointsSettings />} />
+              </Route>
             </Route>
           </Routes>
         </Router>

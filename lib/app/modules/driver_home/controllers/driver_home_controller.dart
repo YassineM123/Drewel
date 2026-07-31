@@ -113,11 +113,15 @@ class DriverHomeController extends GetxController with WidgetsBindingObserver {
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     super.didChangeAppLifecycleState(state);
-    if (state == AppLifecycleState.paused ||
+    if (state == AppLifecycleState.hidden ||
+        state == AppLifecycleState.paused ||
         state == AppLifecycleState.detached) {
       // App is in background or closing - stop location updates
       _stopLocationUpdates();
       _stopRealtimeLocationTracking();
+      // Location tracking is foreground-only, so do not let Socket.IO retry
+      // DNS/network connections while Android has suspended the activity.
+      socketService.disconnect();
     } else if (state == AppLifecycleState.resumed) {
       // App is in foreground - resume location updates and realtime GPS tracking
       _initSocket();

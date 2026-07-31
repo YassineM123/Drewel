@@ -1,5 +1,7 @@
 import bcrypt from "bcrypt";
+import mongoose from "mongoose";
 import Driver from "../models/Driver.js";
+import Ride from "../models/Ride.js";
 import DriverLogs from "../models/Driverlogs.js";
 import Admin from "../models/Admin.js";
 import { sendResponse } from "../helpers/responseHelper.js";
@@ -9,7 +11,14 @@ import { PROFILE_PROPOSAL_FIELDS } from "../utils/adminRequestDetails.js";
 import {
   AVAILABLE_DRIVER_FIELDS,
   buildAvailableDriverFilter,
+  parseDriverDiscoveryQuery,
+  toAvailableDriverDto,
 } from "../utils/availableDrivers.js";
+import { io } from "../socket/index.js";
+import {
+  grantWelcomeBonusInSession,
+  runPointsTransaction,
+} from "../services/pointsWalletService.js";
 
 export {
   AVAILABLE_DRIVER_FIELDS,
@@ -493,18 +502,6 @@ export const updatePersonalDetails = async (req, res) => {
       });
     }
 
-    if (
-      !requesterIsAdmin &&
-      driver.profileRequestStatus === DRIVER_STATUS.PENDING
-    ) {
-      return res.status(409).send({
-        success: false,
-        message:
-          "Your profile and documents are already waiting for admin approval.",
-        code: "PROFILE_REQUEST_PENDING",
-      });
-    }
-
     const files = req.files || {};
     const logData = {};
     let responseDriver = driver;
@@ -564,18 +561,11 @@ export const updatePersonalDetails = async (req, res) => {
         }
       });
 
-      // A proposal is a complete snapshot of the currently approved profile
-      // plus this request's changes. This prevents schema defaults or stale
-      // values from erasing unchanged documents when an admin approves it.
-      const proposalSnapshot = buildProfileProposalSnapshot(
-        driver,
-        logData,
-      );
-
       responseDriver = await transitionDriverRequest({
         requestId: driver._id,
         newStatus: "pending",
         requestStage: "profile",
+        allowProfilePendingRefresh: true,
         actor: {
           _id: req.user._id,
           fullName: driver.fullName,
@@ -583,7 +573,24 @@ export const updatePersonalDetails = async (req, res) => {
           actorType: "driver",
         },
         reason: "Driver profile documents updated",
-        mutateDriver: async (currentDriver, { session }) => {
+        mutateDriver: async (currentDriver, { session, oldStatus }) => {
+          // A driver may amend Request 2 while it is waiting for review. Merge
+          // over the existing pending proposal so an unchanged pending file or
+          // field is never reverted to the older approved value.
+          const existingProposal =
+            oldStatus === DRIVER_STATUS.PENDING
+              ? await DriverLogs.findOne({
+                  driverId: currentDriver._id,
+                }).session(session)
+              : null;
+          const proposalBase = existingProposal || currentDriver;
+          const proposalSnapshot = buildProfileProposalSnapshot(
+            proposalBase,
+            logData,
+          );
+          proposalSnapshot.driverId = currentDriver._id;
+          proposalSnapshot.isApproved = false;
+
           const driverLog = await DriverLogs.findOneAndUpdate(
             { driverId: currentDriver._id },
             { $set: proposalSnapshot },
@@ -669,10 +676,26 @@ export const updateDriverDetails = async (req, res) => {
 
 export const getAvailableDrivers = async (req, res) => {
   try {
-    const drivers = await Driver.find(buildAvailableDriverFilter(req.query))
+    const options = parseDriverDiscoveryQuery(req.query);
+    if (options.maxDistanceKm !== null && (options.lat === null || options.long === null)) {
+      return res.status(400).send({
+        success: false,
+        code: "INVALID_DRIVER_FILTER",
+        message: "lat and long are required with maxDistanceKm",
+      });
+    }
+    const candidates = await Driver.find(buildAvailableDriverFilter(req.query))
       .select(AVAILABLE_DRIVER_FIELDS)
       .sort({ updatedAt: -1, _id: 1 })
+      .limit(Math.min(500, options.limit * 10))
       .lean();
+    const drivers = candidates
+      .map((driver) => toAvailableDriverDto(driver, options))
+      .filter((driver) =>
+        options.maxDistanceKm === null ||
+        (driver.distanceKm !== null && driver.distanceKm <= options.maxDistanceKm)
+      )
+      .slice(0, options.limit);
 
     return res.status(200).send({
       success: true,
@@ -680,9 +703,40 @@ export const getAvailableDrivers = async (req, res) => {
       drivers,
     });
   } catch (error) {
-    return res.status(500).send({
+    return res.status(error.statusCode || 500).send({
       success: false,
-      message: "Failed to fetch available drivers",
+      code: error.code || "DRIVER_DISCOVERY_FAILED",
+      message: error.statusCode ? error.message : "Failed to fetch available drivers",
+    });
+  }
+};
+
+export const getDriverAvailability = async (req, res) => {
+  try {
+    if (!mongoose.isValidObjectId(req.params.id)) {
+      return res.status(400).json({
+        success: false,
+        code: "INVALID_DRIVER_ID",
+        message: "Invalid driver id",
+      });
+    }
+    const driver = await Driver.findOne({
+      _id: req.params.id,
+      ...buildAvailableDriverFilter(),
+    }).select(AVAILABLE_DRIVER_FIELDS).lean();
+    if (!driver) {
+      return res.status(409).json({
+        success: false,
+        code: "DRIVER_NOT_AVAILABLE",
+        message: "Driver is not available",
+      });
+    }
+    return res.json({ success: true, driver: toAvailableDriverDto(driver) });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      code: "DRIVER_AVAILABILITY_FAILED",
+      message: "Failed to verify driver availability",
     });
   }
 };
@@ -755,6 +809,11 @@ export const addDriverDetails = async (req, res) => {
       completedAt: new Date(),
       status: DRIVER_STATUS.COMPLETED,
       isApproved: true,
+      profileRequestStatus: DRIVER_STATUS.APPROVED,
+      profileSubmittedAt: new Date(),
+      profileApprovedAt: new Date(),
+      profileApprovedBy: req.admin?._id || req.user?._id,
+      approvedBy: req.admin?._id || req.user?._id,
     };
 
     const fileFieldMap = {
@@ -788,9 +847,15 @@ export const addDriverDetails = async (req, res) => {
       driverData.idDocumentUrl = driverData.idProofFrontUrl;
     }
 
-    const newDriver = await Driver.create(driverData);
-    syncLegacyFields(newDriver);
-    await newDriver.save();
+    const newDriver = await runPointsTransaction(async (session) => {
+      const [createdDriver] = await Driver.create([driverData], { session });
+      syncLegacyFields(createdDriver);
+      await createdDriver.save({ session });
+      await grantWelcomeBonusInSession(createdDriver, session, {
+        source: "admin_created_verified_driver",
+      });
+      return createdDriver;
+    });
 
     return res.status(200).send({
       success: true,
@@ -924,9 +989,34 @@ export const updateOnlineStatus = async (req, res) => {
         message: "Only completed, active drivers can go online",
       });
     }
+    if (isOnline) {
+      const activeRide = await Ride.exists({
+        driverId: driver._id,
+        status: {
+          $in: ["accepted", "driver_arriving", "driver_arrived", "in_progress"],
+        },
+      });
+      if (activeRide) {
+        driver.isOnline = true;
+        driver.availabilityStatus = "Busy";
+        await driver.save();
+        return res.status(409).send({
+          success: false,
+          code: "DRIVER_BUSY",
+          message: "Driver is busy with an active mission",
+        });
+      }
+    }
 
     driver.isOnline = isOnline;
+    driver.availabilityStatus = isOnline ? "Online" : "Offline";
     await driver.save();
+    io.emit("driver:availability", {
+      driverId: String(driver._id),
+      status: driver.availabilityStatus,
+      isAvailable: isOnline,
+      updatedAt: driver.updatedAt,
+    });
 
     return res.status(200).send({
       success: true,
@@ -1097,6 +1187,7 @@ export const deleteDriver = async (req, res) => {
           deletedAt: new Date(),
           deletedBy: req.user?._id,
           isOnline: false,
+          availabilityStatus: "Offline",
           isRestricted: true,
         },
       },

@@ -21,10 +21,42 @@ class _DocumentsTestController extends DocumentsController {
         'vehicleType': 'Small Pickup',
       },
     });
-    cityController.text = 'Abu Dhabi';
-    typeController.text = 'Small Pickup';
+    setLoadedProfileFields(
+      city: 'Abu Dhabi',
+      vehicleType: 'Small Pickup',
+    );
     isLoadingDetails.value = false;
     loadError.value = '';
+    increment();
+  }
+}
+
+class _PendingDocumentsTestController extends DocumentsController {
+  @override
+  Future<void> callingGetDriverDetails() async {
+    driverDetail = AddDriverDetailModel.fromJson({
+      'success': true,
+      'driver': {
+        '_id': 'driver-1',
+        'status': 'approved',
+        'isApproved': true,
+        'profileRequestStatus': 'pending',
+        'city': 'Abu Dhabi',
+        'vehicleType': 'Small Pickup',
+        'driverLogs': {
+          'driverId': 'driver-1',
+          'city': 'Dubai',
+          'vehicleType': 'Large Pickup',
+          'carLicenseFrontUrl': 'https://example.test/pending-front.jpg',
+        },
+      },
+    });
+    setLoadedProfileFields(city: 'Dubai', vehicleType: 'Large Pickup');
+    isLoadingDetails.value = false;
+    loadError.value = '';
+    hasPendingApproval.value = true;
+    pendingApprovalMessage.value =
+        'Your latest changes are waiting for admin approval.';
     increment();
   }
 }
@@ -90,6 +122,30 @@ void main() {
     expect(find.text('Select City'), findsWidgets);
     expect(find.text('Upload Documents'), findsOneWidget);
     expect(find.text('Update'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('allows a pending Request 2 to be amended', (tester) async {
+    final controller = _PendingDocumentsTestController();
+    await pumpDocuments(
+      tester,
+      size: const Size(1440, 1000),
+      controller: controller,
+    );
+
+    expect(controller.isProfileRequestPending, isTrue);
+    expect(controller.canEditProfile, isTrue);
+    expect(controller.hasUnsavedChanges, isFalse);
+    expect(find.byIcon(Icons.lock_outline), findsNothing);
+    expect(
+      find.text('Your latest changes are waiting for admin approval.'),
+      findsOneWidget,
+    );
+
+    controller.cityController.text = 'Sharjah';
+    controller.increment();
+    await tester.pump();
+    expect(controller.canSubmit, isTrue);
     expect(tester.takeException(), isNull);
   });
 }

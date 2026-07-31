@@ -16,8 +16,18 @@ const adminSchema = new mongoose.Schema(
     },
     role: {
       type: String,
-      enum: ["admin", "user"],
+      enum: ["owner", "finance_admin", "admin", "user"],
       default: "user",
+    },
+    permissions: {
+      type: [String],
+      default: [],
+      select: false,
+    },
+    isActive: {
+      type: Boolean,
+      default: true,
+      index: true,
     },
     profilePicture: {
       type: String,

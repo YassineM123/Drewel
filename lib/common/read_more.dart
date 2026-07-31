@@ -10,30 +10,30 @@ enum TrimMode {
 
 class ReadMoreText extends StatefulWidget {
   const ReadMoreText(
-      this.data, {
-        super.key,
-        this.preDataText,
-        this.postDataText,
-        this.preDataTextStyle,
-        this.postDataTextStyle,
-        this.trimExpandedText = 'Show less',
-        this.trimCollapsedText = 'Read more',
-        this.colorClickableText,
-        this.trimLength = 240,
-        this.trimLines = 2,
-        this.trimMode = TrimMode.Length,
-        this.style,
-        this.textAlign,
-        this.textDirection,
-        this.locale,
-        this.textScaleFactor,
-        this.semanticsLabel,
-        this.moreStyle,
-        this.lessStyle,
-        this.delimiter = '$_kEllipsis ',
-        this.delimiterStyle,
-        this.callback,
-      });
+    this.data, {
+    super.key,
+    this.preDataText,
+    this.postDataText,
+    this.preDataTextStyle,
+    this.postDataTextStyle,
+    this.trimExpandedText = 'Show less',
+    this.trimCollapsedText = 'Read more',
+    this.colorClickableText,
+    this.trimLength = 240,
+    this.trimLines = 2,
+    this.trimMode = TrimMode.Length,
+    this.style,
+    this.textAlign,
+    this.textDirection,
+    this.locale,
+    this.textScaleFactor,
+    this.semanticsLabel,
+    this.moreStyle,
+    this.lessStyle,
+    this.delimiter = '$_kEllipsis ',
+    this.delimiterStyle,
+    this.callback,
+  });
 
   /// Used on TrimMode.Length
   final int trimLength;
@@ -131,8 +131,8 @@ class ReadMoreTextState extends State<ReadMoreText> {
     TextSpan delimiter = TextSpan(
       text: _readMore
           ? widget.trimCollapsedText.isNotEmpty
-          ? widget.delimiter
-          : ''
+              ? widget.delimiter
+              : ''
           : '',
       style: defaultDelimiterStyle,
       recognizer: TapGestureRecognizer()..onTap = _onTapLink,
@@ -235,7 +235,7 @@ class ReadMoreTextState extends State<ReadMoreText> {
                 style: effectiveTextStyle,
                 text: _readMore
                     ? widget.data.substring(0, endIndex) +
-                    (linkLongerThanLine ? _kLineSeparator : '')
+                        (linkLongerThanLine ? _kLineSeparator : '')
                     : widget.data,
                 children: <TextSpan>[delimiter, link],
               );

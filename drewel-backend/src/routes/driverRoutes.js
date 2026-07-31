@@ -18,6 +18,7 @@ import {
   getDriverVerificationStatus,
   completeDriverProfile,
   getAvailableDrivers,
+  getDriverAvailability,
 } from "../controllers/driverController.js";
 import { generateStorage } from "../utils/multerFunction.js";
 import { createRestrictedUpload, handleRestrictedUpload } from "../utils/uploadPolicy.js";
@@ -29,6 +30,7 @@ const upload = createRestrictedUpload({ storage, allowPdf: true });
 const router = express.Router();
 
 router.get("/available", requireSignIn, getAvailableDrivers);
+router.get("/:id/availability", requireSignIn, getDriverAvailability);
 router.post("/request", requireSignIn, createDriverRequest);
 router.get("/:id/status", requireSignIn, getDriverVerificationStatus);
 router.post(
