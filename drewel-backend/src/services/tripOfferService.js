@@ -15,19 +15,15 @@ import {
   toWalletDto,
 } from "./pointsWalletService.js";
 import { createPickupPin, decryptPickupPin } from "./rideTransitionService.js";
+import { buildFreshDubaiMarketplaceAvailabilityFilter } from "../utils/availableDrivers.js";
 
 const offerTtlMs = (seconds) => seconds * 1000;
 
 const driverOfferFilter = (driverId) => ({
   _id: driverId,
-  isApproved: true,
+  ...buildFreshDubaiMarketplaceAvailabilityFilter(),
   status: "completed",
   profileRequestStatus: "approved",
-  isRestricted: false,
-  isDeleted: { $ne: true },
-  isOnline: true,
-  availabilityStatus: "Online",
-  activeRideId: null,
 });
 
 export const toTripOfferDto = (offer) => ({

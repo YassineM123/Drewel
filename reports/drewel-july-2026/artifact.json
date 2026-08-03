@@ -1,0 +1,339 @@
+{
+  "surface": "report",
+  "manifest": {
+    "version": 1,
+    "surface": "report",
+    "title": "Drewel — July 2026 Product & Engineering Report",
+    "description": "An executive review of the product, platform, quality, and production-readiness work committed to Drewel during July 2026.",
+    "generatedAt": "2026-08-03T12:00:00+01:00",
+    "sources": [
+      {
+        "id": "git_history",
+        "label": "Drewel Git history — July 2026",
+        "query": {
+          "engine": "git",
+          "language": "shell",
+          "query": "git log --since=2026-07-01 --until=2026-08-01 --stat --name-status",
+          "description": "Commit history, file changes, and diffs reviewed for July 1–31, 2026.",
+          "executed_at": "2026-08-03T12:00:00+01:00",
+          "filters": [
+            "Commits dated from July 1, 2026 inclusive through August 1, 2026 exclusive",
+            "Uncommitted working-tree changes excluded from the feature report"
+          ],
+          "metric_definitions": [
+            "Commit count includes merge commits in the selected date window.",
+            "New test files are unique test files first added in commits within the selected date window."
+          ],
+          "tables_used": ["Drewel Git commit graph and repository tree"]
+        }
+      },
+      {
+        "id": "validation_results",
+        "label": "Drewel local validation run — August 3, 2026",
+        "query": {
+          "engine": "local toolchain",
+          "language": "shell",
+          "query": "npm test; npm run lint; npm run build; flutter analyze --no-fatal-infos; flutter test",
+          "description": "Backend, admin panel, and Flutter checks run against the current local working tree.",
+          "executed_at": "2026-08-03T12:00:00+01:00",
+          "filters": [
+            "Results reflect the current dirty working tree, not an isolated checkout of the July 31 commit",
+            "Seventeen backend integration tests were skipped"
+          ],
+          "metric_definitions": [
+            "Passed tests are test cases reported as passed by the relevant test runner.",
+            "Analyzer findings are Flutter info-level diagnostics tolerated by --no-fatal-infos."
+          ],
+          "tables_used": ["Backend test output", "Admin test/lint/build output", "Flutter analyze/test output"]
+        }
+      }
+    ],
+    "cards": [
+      {
+        "id": "commits_card",
+        "dataset": "headline_metrics",
+        "sourceId": "git_history",
+        "description": "Commits recorded during July, including one merge commit.",
+        "metrics": [{"label": "July commits", "field": "commits", "format": "number"}]
+      },
+      {
+        "id": "platforms_card",
+        "dataset": "headline_metrics",
+        "sourceId": "git_history",
+        "description": "Flutter mobile app, Node/MongoDB backend, and React admin panel.",
+        "metrics": [{"label": "Core applications", "field": "core_apps", "format": "number"}]
+      },
+      {
+        "id": "features_card",
+        "dataset": "headline_metrics",
+        "sourceId": "git_history",
+        "description": "Major product capability groups delivered or substantially expanded.",
+        "metrics": [{"label": "Major capability groups", "field": "feature_groups", "format": "number"}]
+      },
+      {
+        "id": "tests_card",
+        "dataset": "headline_metrics",
+        "sourceId": "git_history",
+        "description": "Unique test files first added in the July commit window, including the initial import.",
+        "metrics": [{"label": "New test files", "field": "new_test_files", "format": "number"}]
+      }
+    ],
+    "tables": [
+      {
+        "id": "timeline_table",
+        "title": "July delivery timeline",
+        "subtitle": "Eight milestone groups reconstructed from eleven commits, July 14–31, 2026.",
+        "showDescription": true,
+        "dataset": "timeline",
+        "sourceId": "git_history",
+        "density": "spacious",
+        "layout": "full",
+        "defaultSort": {"field": "order", "direction": "asc"},
+        "columns": [
+          {"field": "order", "label": "#", "type": "number"},
+          {"field": "date", "label": "Date", "type": "text"},
+          {"field": "commit", "label": "Commit", "type": "text"},
+          {"field": "delivery", "label": "Delivery", "type": "text"},
+          {"field": "impact", "label": "Product impact", "type": "text"}
+        ]
+      },
+      {
+        "id": "capabilities_table",
+        "title": "Capability expansion by product area",
+        "subtitle": "The most material user-facing and operational capabilities added during July.",
+        "showDescription": true,
+        "dataset": "capabilities",
+        "sourceId": "git_history",
+        "density": "spacious",
+        "layout": "full",
+        "defaultSort": {"field": "priority", "direction": "asc"},
+        "columns": [
+          {"field": "priority", "label": "#", "type": "number"},
+          {"field": "area", "label": "Area", "type": "text"},
+          {"field": "added", "label": "What was added", "type": "text"},
+          {"field": "business_value", "label": "Why it matters", "type": "text"}
+        ]
+      },
+      {
+        "id": "validation_table",
+        "title": "Current validation results",
+        "subtitle": "Local checks completed August 3, 2026; backend integration coverage remains partial.",
+        "showDescription": true,
+        "dataset": "validation",
+        "sourceId": "validation_results",
+        "density": "spacious",
+        "layout": "full",
+        "defaultSort": {"field": "order", "direction": "asc"},
+        "columns": [
+          {"field": "order", "label": "#", "type": "number"},
+          {"field": "surface", "label": "Surface", "type": "text"},
+          {"field": "result", "label": "Result", "type": "text"},
+          {"field": "caveat", "label": "Interpretation", "type": "text"}
+        ]
+      },
+      {
+        "id": "risk_table",
+        "title": "Production-readiness risks",
+        "subtitle": "Prioritized issues identified from the July history and current repository configuration.",
+        "showDescription": true,
+        "dataset": "risks",
+        "sourceId": "git_history",
+        "density": "spacious",
+        "layout": "full",
+        "defaultSort": {"field": "priority", "direction": "asc"},
+        "columns": [
+          {"field": "priority", "label": "Priority", "type": "number"},
+          {"field": "risk", "label": "Risk", "type": "text"},
+          {"field": "why", "label": "Why it matters", "type": "text"},
+          {"field": "action", "label": "Recommended action", "type": "text"}
+        ]
+      }
+    ],
+    "blocks": [
+      {
+        "id": "title",
+        "type": "markdown",
+        "layout": "full",
+        "body": "# Drewel — July 2026 Product & Engineering Report"
+      },
+      {
+        "id": "executive_summary",
+        "type": "markdown",
+        "layout": "full",
+        "sourceId": "git_history",
+        "body": "## Executive Summary\n\n- **July was a transformation month.** Drewel moved from a basic application baseline to a broader mobility platform spanning driver governance, secure ride communication, a points-backed marketplace, and a controlled ride lifecycle.\n- **The largest product additions were end to end.** Each major capability touched the Flutter app, Node/MongoDB backend, and React admin panel rather than remaining isolated in one interface.\n- **Quality and delivery controls improved materially.** The repository gained domain-specific tests, GitHub Actions, Dockerfiles, Render configuration, audit records, rate limits, idempotency controls, and backfill scripts.\n- **Production readiness still requires security cleanup.** Sensitive and generated artifacts entered Git history, several large commits are difficult to review or roll back, and some infrastructure controls remain incomplete."
+      },
+      {
+        "id": "headline_strip",
+        "type": "metric-strip",
+        "layout": "full",
+        "cardIds": ["commits_card", "platforms_card", "features_card", "tests_card"]
+      },
+      {
+        "id": "transformation_heading",
+        "type": "markdown",
+        "layout": "full",
+        "sourceId": "git_history",
+        "body": "## July reshaped the product, not just the codebase\n\nThe month began with a full repository baseline import on July 14. Subsequent commits stabilized authentication, chat, dashboard data, and realtime location handling before expanding into formal driver review, in-app communication, monetization, and ride operations. The practical result is a more complete mobility marketplace with operational tooling for both drivers and administrators."
+      },
+      {
+        "id": "timeline_block",
+        "type": "table",
+        "layout": "full",
+        "tableId": "timeline_table"
+      },
+      {
+        "id": "governance_heading",
+        "type": "markdown",
+        "layout": "full",
+        "sourceId": "git_history",
+        "body": "## Driver governance became auditable and operational\n\nThe new onboarding workflow separates basic verification from profile verification, controls which status changes are allowed, records rejection and approval metadata, and keeps an append-only audit history. The admin panel now exposes filtered queues and review actions, while Flutter onboarding and document screens reflect the same backend states. This reduces manual ambiguity and creates a traceable approval process."
+      },
+      {
+        "id": "communication_heading",
+        "type": "markdown",
+        "layout": "full",
+        "sourceId": "git_history",
+        "body": "## Communication moved inside the ride boundary\n\nRide-scoped messaging and Agora calls were introduced with call states, expiry handling, delivery/read receipts, reporting, blocking, and participant authorization. This is more than a UI feature: the backend now applies communication policy based on ride participation and contact windows, while the admin panel can monitor calls. The design keeps communication connected to the trip context and improves safety oversight."
+      },
+      {
+        "id": "marketplace_heading",
+        "type": "markdown",
+        "layout": "full",
+        "sourceId": "git_history",
+        "body": "## Points created a monetized driver marketplace\n\nDrivers gained wallets with separate available and reserved balances, an immutable transaction ledger, configurable packs, purchase requests, and marketplace trip offers. Offer acceptance captures reserved points; cancellation, rejection, or expiry releases them. MongoDB transactions, idempotency keys, rate limits, role-based permissions, and admin audit records provide a strong foundation for financial consistency."
+      },
+      {
+        "id": "rides_heading",
+        "type": "markdown",
+        "layout": "full",
+        "sourceId": "git_history",
+        "body": "## Active rides became a controlled operational lifecycle\n\nThe ride domain expanded from a communication container into a state machine covering driver departure, arrival, pickup confirmation, trip progress, completion, cancellation, and dispute. Pickup PIN protection, attempt lockouts, geofence validation, versioned transitions, ride audits, route lookup, refunds, and admin controls reduce both accidental and malicious state changes. Flutter gained an active-ride experience aligned to the same lifecycle."
+      },
+      {
+        "id": "capabilities_block",
+        "type": "table",
+        "layout": "full",
+        "tableId": "capabilities_table"
+      },
+      {
+        "id": "quality_heading",
+        "type": "markdown",
+        "layout": "full",
+        "sourceId": "git_history",
+        "body": "## Delivery controls caught up with feature growth\n\nGitHub Actions now checks the admin panel, backend, and Flutter application. The backend job provisions a transaction-capable MongoDB replica set; deployment assets include Dockerfiles and Render configuration. Domain tests cover driver requests, document serving, secure communication, points, admin permissions, and ride lifecycle behavior. These controls materially improve repeatability, although they do not eliminate the integration and security gaps listed later."
+      },
+      {
+        "id": "validation_intro",
+        "type": "markdown",
+        "layout": "full",
+        "sourceId": "validation_results",
+        "body": "## The current baseline passes local checks, with an integration caveat\n\nThe available local suites completed without failures across backend, admin, and Flutter. However, seventeen backend tests were skipped, including MongoDB integration, concurrency, and financial-lifecycle cases. The validation was also run against the current dirty working tree rather than a clean July 31 checkout, so it confirms the present baseline—not the exact historical release state."
+      },
+      {
+        "id": "validation_block",
+        "type": "table",
+        "layout": "full",
+        "tableId": "validation_table"
+      },
+      {
+        "id": "risk_heading",
+        "type": "markdown",
+        "layout": "full",
+        "sourceId": "git_history",
+        "body": "## Security hygiene is the most urgent follow-up\n\nA local environment file was committed and later deleted, but deletion does not remove secrets from Git history. A signing keystore, uploaded media, compiled distributions, build output, temporary files, and archives also entered the repository. Beyond repository hygiene, production hardening should address security headers, body-size limits, strict production CORS, shared rate limiting, readiness checks, and stronger JWT verification."
+      },
+      {
+        "id": "risk_block",
+        "type": "table",
+        "layout": "full",
+        "tableId": "risk_table"
+      },
+      {
+        "id": "recommendations",
+        "type": "markdown",
+        "layout": "full",
+        "body": "## Recommended Next Steps\n\n1. **Rotate and audit secrets immediately.** Treat the deleted environment file and committed signing keystore as potentially exposed until verified otherwise.\n2. **Clean repository history and tracking rules.** Remove generated builds, distributions, archives, temporary files, and user uploads from version control.\n3. **Run the full integration suite in a clean replica-set environment.** Make the skipped points, concurrency, and ride-lifecycle tests mandatory before release.\n4. **Harden the public HTTP boundary.** Add security headers, bounded JSON payloads, strict environment-driven CORS, global abuse controls, and explicit JWT issuer/audience/algorithm checks.\n5. **Improve release traceability.** Use smaller, single-purpose commits with descriptive titles and require CI success before deployment."
+      },
+      {
+        "id": "further_questions",
+        "type": "markdown",
+        "layout": "full",
+        "body": "## Further Questions\n\n- Have every secret and signing credential that appeared in Git history been rotated or proven non-production?\n- Will production MongoDB run as a replica set or on a managed service that fully supports transactions?\n- Which July capabilities have been deployed to production, and is there a tagged release mapping them to a specific commit?\n- Are points expiry, outbox delivery, call expiry, and ride cleanup jobs monitored with alerts and retry visibility?"
+      },
+      {
+        "id": "caveats",
+        "type": "markdown",
+        "layout": "full",
+        "body": "## Caveats & Assumptions\n\n- “Last month” is interpreted as July 1–31, 2026.\n- The report is based on committed Git history; current uncommitted work is excluded from the feature summary.\n- The initial July 14 commit is treated as a platform baseline rather than a single product feature because it imported thousands of source, asset, build, and generated files.\n- Commit titles are sometimes misleading, so findings were reconstructed from file-level diffs and implementation evidence.\n- Current validation results are informative but do not replace a clean historical checkout and fully enabled integration suite."
+      }
+    ]
+  },
+  "snapshot": {
+    "version": 1,
+    "generatedAt": "2026-08-03T12:00:00+01:00",
+    "status": "ready",
+    "datasets": {
+      "headline_metrics": [
+        {"commits": 11, "core_apps": 3, "feature_groups": 5, "new_test_files": 36}
+      ],
+      "timeline": [
+        {"order": 1, "date": "July 14", "commit": "efa3241", "delivery": "Platform baseline", "impact": "Imported the Flutter app, Node/MongoDB backend, React admin panel, mobile projects, assets, and deployment helpers."},
+        {"order": 2, "date": "July 14–17", "commit": "d142a93 · b9b2a65", "delivery": "Chat, auth, and dashboard stabilization", "impact": "Improved session handling, normalized conversations, safer socket identity, dashboard metrics, and realtime location behavior."},
+        {"order": 3, "date": "July 18", "commit": "8289830", "delivery": "Driver request workflow", "impact": "Added staged verification, controlled status transitions, audit history, admin review queues, and aligned Flutter onboarding."},
+        {"order": 4, "date": "July 19", "commit": "61d5d5f", "delivery": "Ride chat and in-app calls", "impact": "Added ride messages, Agora calls, receipts, communication policy, safety actions, expiry handling, and admin monitoring."},
+        {"order": 5, "date": "July 24", "commit": "14498ac", "delivery": "Documentation", "impact": "Refreshed the repository README and CSS-library documentation."},
+        {"order": 6, "date": "July 27", "commit": "c9e2ec4", "delivery": "Document and image reliability", "impact": "Hardened deployed file serving, protected document previews, profile proposal handling, and error reporting."},
+        {"order": 7, "date": "July 31", "commit": "5976757", "delivery": "Points marketplace", "impact": "Introduced driver wallets, ledger transactions, packs, purchase requests, trip offers, admin tooling, RBAC, and rate limits."},
+        {"order": 8, "date": "July 31", "commit": "aef6a75", "delivery": "Production ride lifecycle and delivery controls", "impact": "Added active-ride transitions, PIN/geofence protection, disputes/refunds, admin ride operations, CI, Docker, and Render configuration."}
+      ],
+      "capabilities": [
+        {"priority": 1, "area": "Driver governance", "added": "Two-stage verification, audit history, review queues, status transitions, document handling, and backfill support.", "business_value": "Creates a consistent, traceable path from registration to approved driver."},
+        {"priority": 2, "area": "Ride communication", "added": "Ride-scoped chat, read receipts, Agora calls, call expiry, report/block controls, and communication audits.", "business_value": "Keeps communication inside the trip context and improves safety oversight."},
+        {"priority": 3, "area": "Points marketplace", "added": "Wallets, immutable ledger, packs, purchase requests, trip offers, reserve/capture/release, admin RBAC, and audits.", "business_value": "Introduces a monetization and driver-demand mechanism with transactional controls."},
+        {"priority": 4, "area": "Ride operations", "added": "Versioned ride states, pickup PIN, geofencing, live driver location, routes, cancellation, disputes, and refunds.", "business_value": "Turns a ride into a controlled operational workflow that can be managed and audited."},
+        {"priority": 5, "area": "Delivery platform", "added": "Cross-stack tests, GitHub Actions, Dockerfiles, Render configuration, production startup rules, and migration scripts.", "business_value": "Improves release repeatability and reduces avoidable deployment regressions."}
+      ],
+      "validation": [
+        {"order": 1, "surface": "Backend", "result": "97 passed · 17 skipped · 0 failed", "caveat": "Skipped tests include transaction, concurrency, and financial-lifecycle integration scenarios."},
+        {"order": 2, "surface": "Admin panel", "result": "20 tests passed · lint passed · build passed", "caveat": "Lint still reports a sizeable legacy warning backlog."},
+        {"order": 3, "surface": "Flutter", "result": "65 tests passed · analyzer exited successfully", "caveat": "The analyzer reports 167 info-level findings tolerated by --no-fatal-infos."}
+      ],
+      "risks": [
+        {"priority": 1, "risk": "Potential secret exposure in Git history", "why": "A local environment file and signing keystore entered version control.", "action": "Rotate credentials, assess the keystore, scan history, and purge sensitive material."},
+        {"priority": 2, "risk": "Generated and user artifacts are tracked", "why": "Build output, dist files, archives, temporary scripts, and uploaded media increase size and exposure.", "action": "Remove them from tracking, strengthen ignore rules, and move uploads to managed storage."},
+        {"priority": 3, "risk": "Partial integration validation", "why": "Seventeen backend tests were skipped, including transaction and concurrency scenarios.", "action": "Run the full suite against a clean MongoDB replica set and gate releases on it."},
+        {"priority": 4, "risk": "HTTP and authentication hardening gaps", "why": "Security headers, bounded JSON bodies, strict production CORS, shared rate limiting, and JWT constraints are incomplete.", "action": "Harden the public boundary before scaling traffic or instances."},
+        {"priority": 5, "risk": "Large mixed-purpose commits", "why": "Vague and oversized commits make review, release tracing, and rollback difficult.", "action": "Adopt focused commits, descriptive titles, tagged releases, and pull-request checks."}
+      ]
+    }
+  },
+  "sources": [
+    {
+      "id": "git_history",
+      "label": "Drewel Git history — July 2026",
+      "query": {
+        "engine": "git",
+        "language": "shell",
+        "query": "git log --since=2026-07-01 --until=2026-08-01 --stat --name-status",
+        "description": "Commit history, file changes, and diffs reviewed for July 1–31, 2026.",
+        "executed_at": "2026-08-03T12:00:00+01:00",
+        "filters": ["Committed July work only; uncommitted changes excluded"],
+        "tables_used": ["Drewel Git commit graph and repository tree"]
+      }
+    },
+    {
+      "id": "validation_results",
+      "label": "Drewel local validation run — August 3, 2026",
+      "query": {
+        "engine": "local toolchain",
+        "language": "shell",
+        "query": "npm test; npm run lint; npm run build; flutter analyze --no-fatal-infos; flutter test",
+        "description": "Current backend, admin panel, and Flutter validation results.",
+        "executed_at": "2026-08-03T12:00:00+01:00",
+        "filters": ["Dirty working tree", "Seventeen backend integration tests skipped"],
+        "tables_used": ["Backend test output", "Admin test/lint/build output", "Flutter analyze/test output"]
+      }
+    }
+  ]
+}

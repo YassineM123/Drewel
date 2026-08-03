@@ -16,6 +16,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:http/http.dart' as http;
 import '../../../../common/colors.dart';
 import '../../../../common/common_widgets.dart';
+import '../../../../common/gps_fix.dart';
 import '../../../../common/socket_services.dart';
 import '../../../../common/text_styles.dart';
 import '../../../data/apis/api_constants/api_key_constants.dart';
@@ -55,6 +56,8 @@ class DriverHomeController extends GetxController with WidgetsBindingObserver {
   DateTime? _lastDriverLocationApiUpdateAt;
   bool _isUpdatingDriverLocation = false;
   bool _hasDriverLocation = false;
+  DateTime? _driverPositionRecordedAt;
+  double? _driverPositionAccuracyM;
 
   bool get _isDriverOnline => !isGoOnline.value;
 
@@ -178,18 +181,23 @@ class DriverHomeController extends GetxController with WidgetsBindingObserver {
   void _emitCurrentLocation() {
     if (!_hasDriverLocation) return;
     if (_driverId == null || _driverId!.isEmpty) return;
+    final DateTime? recordedAt = _driverPositionRecordedAt;
+    final double? accuracyM = _driverPositionAccuracyM;
+    if (recordedAt == null || accuracyM == null) return;
     // SocketService retains the latest fix while disconnected/authenticating
     // and flushes it as soon as location tracking is ready.
     socketService.emitDriverLocationUpdate({
       'driverId': _driverId,
-      'lat': lat.value,
-      'long': lon.value,
+      ...buildGpsFixPayload(
+        latitude: lat.value,
+        longitude: lon.value,
+        recordedAt: recordedAt,
+        accuracyM: accuracyM,
+      ),
       'fullName': _driverName ?? '',
       'vehicleType': _vehicleType ?? '',
       'city': _city ?? '',
     });
-
-    print('Emitted driver location: ${lat.value}, ${lon.value}');
   }
 
   void _startRealtimeLocationTracking() {
@@ -234,6 +242,8 @@ class DriverHomeController extends GetxController with WidgetsBindingObserver {
     lon.value = position.longitude;
     mapPosition = LatLng(position.latitude, position.longitude);
     _hasDriverLocation = true;
+    _driverPositionRecordedAt = position.timestamp;
+    _driverPositionAccuracyM = position.accuracy;
 
     if (animateCamera && xController != null) {
       xController!.animateCamera(
@@ -479,9 +489,6 @@ class DriverHomeController extends GetxController with WidgetsBindingObserver {
       TextPosition(offset: prediction.description?.length ?? 0),
     );
 
-    print('Selected place: ${prediction.description}');
-    print('Prediction JSON: ${prediction.toJson()}');
-
     if (prediction.placeId != null) {
       final placeId = prediction.placeId!;
       final url =
@@ -497,8 +504,6 @@ class DriverHomeController extends GetxController with WidgetsBindingObserver {
           final latValue = location["lat"];
           final lngValue = location["lng"];
           final selectedMapLocation = LatLng(latValue, lngValue);
-
-          print("Lat: $latValue, Lng: $lngValue");
 
           // Animate camera to selected location
           if (xController != null) {
@@ -524,10 +529,17 @@ class DriverHomeController extends GetxController with WidgetsBindingObserver {
 
   Future<bool> callingUpdateDriverLocation({bool showError = true}) async {
     try {
-      Map<String, dynamic> bodyParams = {
-        ApiKeyConstants.lat: lat.value,
-        ApiKeyConstants.long: lon.value,
-      };
+      final DateTime? recordedAt = _driverPositionRecordedAt;
+      final double? accuracyM = _driverPositionAccuracyM;
+      if (!_hasDriverLocation || recordedAt == null || accuracyM == null) {
+        return false;
+      }
+      final Map<String, dynamic> bodyParams = buildGpsFixPayload(
+        latitude: lat.value,
+        longitude: lon.value,
+        recordedAt: recordedAt,
+        accuracyM: accuracyM,
+      );
       SimpleResponseModel? simpleResponseModel =
           await ApiMethods.driverUpdateLocationApi(bodyParams: bodyParams);
       if (simpleResponseModel != null &&

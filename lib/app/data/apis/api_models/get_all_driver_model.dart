@@ -1,12 +1,16 @@
+import '../../../../common/gps_fix.dart';
+
 class DriverListModel {
   bool? success;
+  String? code;
   String? message;
   List<Drivers>? drivers;
 
-  DriverListModel({this.success, this.message, this.drivers});
+  DriverListModel({this.success, this.code, this.message, this.drivers});
 
   DriverListModel.fromJson(Map<String, dynamic> json) {
     success = json['success'];
+    code = json['code']?.toString();
     message = json['message'];
     if (json['drivers'] != null) {
       drivers = <Drivers>[];
@@ -19,6 +23,7 @@ class DriverListModel {
   Map<String, dynamic> toJson() {
     final Map<String, dynamic> data = <String, dynamic>{};
     data['success'] = success;
+    data['code'] = code;
     data['message'] = message;
     if (drivers != null) {
       data['drivers'] = drivers!.map((v) => v.toJson()).toList();
@@ -41,6 +46,8 @@ class Drivers {
   String? updatedAt;
   String? profileImageUrl;
   String? city;
+  String? currentServiceArea;
+  DateTime? locationUpdatedAt;
   bool? isOnline;
   var latitude;
   var longitude;
@@ -72,6 +79,8 @@ class Drivers {
       this.updatedAt,
       this.profileImageUrl,
       this.city,
+      this.currentServiceArea,
+      this.locationUpdatedAt,
       this.isOnline,
       this.latitude,
       this.longitude,
@@ -107,6 +116,13 @@ class Drivers {
     updatedAt = json['updatedAt'];
     profileImageUrl = json['profileImageUrl'];
     city = json['city'];
+    currentServiceArea = (json['currentServiceArea'] ??
+            json['serviceArea'] ??
+            json['locationCity'])
+        ?.toString();
+    locationUpdatedAt = _asDateTime(
+      json['locationUpdatedAt'] ?? json['locationTimestamp'],
+    );
     final String rawStatus =
         (json['availabilityStatus'] ?? json['status'] ?? '').toString();
     isOnline = json['isOnline'] == true ||
@@ -157,6 +173,8 @@ class Drivers {
     data['updatedAt'] = updatedAt;
     data['profileImageUrl'] = profileImageUrl;
     data['city'] = city;
+    data['currentServiceArea'] = currentServiceArea;
+    data['locationUpdatedAt'] = locationUpdatedAt?.toUtc().toIso8601String();
     data['isOnline'] = isOnline;
     data['latitude'] = latitude;
     data['longitude'] = longitude;
@@ -181,6 +199,19 @@ class Drivers {
   bool get isOnlineAndAvailable =>
       availabilityStatus == 'online' && isAvailable;
 
+  bool hasFreshLocation({
+    required DateTime now,
+    Duration maxAge = const Duration(seconds: 45),
+    Duration maxFutureSkew = const Duration(seconds: 30),
+  }) {
+    return isGpsTimestampFresh(
+      locationUpdatedAt,
+      now: now,
+      maxAge: maxAge,
+      maxFutureSkew: maxFutureSkew,
+    );
+  }
+
   bool get canChat =>
       availabilityStatus == 'online' ||
       (availabilityStatus == 'busy' && isAvailable);
@@ -190,6 +221,11 @@ class Drivers {
   static double? _asDouble(dynamic value) {
     if (value is num) return value.toDouble();
     return double.tryParse(value?.toString() ?? '');
+  }
+
+  static DateTime? _asDateTime(dynamic value) {
+    if (value == null) return null;
+    return DateTime.tryParse(value.toString())?.toUtc();
   }
 
   static String _normalizeAvailability(

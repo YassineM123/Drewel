@@ -22,6 +22,8 @@ test("realtime location commands provide success and structured error acknowledg
     source,
     /socket\.on\("driver-location-update",[\s\S]*?acknowledgeSocketEvent\(acknowledge,\s*\{\s*ok:\s*true,[\s\S]*?driverId:[\s\S]*?updatedAt:/
   );
+  assert.match(source, /driver-location-update[\s\S]*?accuracyM[\s\S]*?recordedAt/);
+  assert.match(source, /buildDriverLocationUpdate\(\{ lat, long, accuracyM, recordedAt \}\)/);
   assert.match(
     source,
     /socket\.on\("join-city-room",[\s\S]*?acknowledgeSocketEvent\(acknowledge,\s*\{\s*ok:\s*true,\s*count:/
@@ -90,4 +92,28 @@ test("map driver marker identity is based on driver id, not list position", () =
 
   assert.doesNotMatch(source, /MarkerId\(['"]driver_\$i['"]\)/);
   assert.match(source, /MarkerId\([\s\S]{0,250}driver\.sId/);
+});
+
+test("Find Now waits for client GPS and never enables a cross-city fallback", () => {
+  const source = readProjectFile(
+    "lib/app/modules/user_home/controllers/user_home_controller.dart"
+  );
+  const socketSource = readProjectFile("lib/common/socket_services.dart");
+
+  assert.match(
+    source,
+    /_initializeDiscovery\(\)[\s\S]*?await checkPermission\(\)[\s\S]*?if \(!hasLocation\)[\s\S]*?return;[\s\S]*?await callingGetAllDriverListApi\(\)/
+  );
+  assert.match(
+    source,
+    /getAllDriverListApi\([\s\S]*?city:\s*parameter\[ApiKeyConstants\.city\][\s\S]*?latitude:\s*isUserLocationLoaded\.value[\s\S]*?longitude:\s*isUserLocationLoaded\.value/
+  );
+  assert.match(
+    source,
+    /emitJoinCityRoom\([\s\S]*?latitude:\s*isUserLocationLoaded\.value[\s\S]*?longitude:\s*isUserLocationLoaded\.value/
+  );
+  assert.match(socketSource, /if \(latitude != null\) 'lat': latitude/);
+  assert.match(socketSource, /if \(longitude != null\) 'long': longitude/);
+  assert.doesNotMatch(source, /regionalDriverFallback|regionalDriverMessage/);
+  assert.doesNotMatch(source, /city:\s*''/);
 });

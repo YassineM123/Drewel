@@ -1,6 +1,7 @@
 import mongoose from "mongoose";
 import colors from "colors";
 import dns from "node:dns";
+import { ensureMarketplaceDriverIndexes } from "./models/Driver.js";
 
 export const parseMongoDnsServers = (value = "") =>
   String(value)
@@ -64,6 +65,7 @@ async function connectDB() {
     }
 
     await mongoose.connect(uri, connectOptions);
+    await ensureMarketplaceDriverIndexes();
 
     mongoose.connection.on("connected", () => {
       console.log("Connected to DB");

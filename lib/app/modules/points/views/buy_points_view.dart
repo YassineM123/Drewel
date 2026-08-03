@@ -53,9 +53,14 @@ class BuyPointsView extends GetView<DriverPointsController> {
                       (pack) => _PointPackCard(
                         pack: pack,
                         loading: controller.isCreatingPurchaseRequest.value,
-                        onRequest: () => _request(context, pack),
+                        onRequest: () => _requestPack(context, pack),
                       ),
                     ),
+                  const SizedBox(height: 20),
+                  _CustomAmountCard(
+                    loading: controller.isCreatingPurchaseRequest.value,
+                    onRequest: (points) => _requestCustom(context, points),
+                  ),
                   const SizedBox(height: 24),
                   Text(
                     'points.requests'.tr,
@@ -77,8 +82,17 @@ class BuyPointsView extends GetView<DriverPointsController> {
         ),
       );
 
-  Future<void> _request(BuildContext context, PointPack pack) async {
-    final request = await controller.requestPack(pack);
+  Future<void> _requestPack(BuildContext context, PointPack pack) =>
+      _handleRequest(context, controller.requestPack(pack));
+
+  Future<void> _requestCustom(BuildContext context, int points) =>
+      _handleRequest(context, controller.requestCustomPoints(points));
+
+  Future<void> _handleRequest(
+    BuildContext context,
+    Future<PointPurchaseRequest?> pending,
+  ) async {
+    final request = await pending;
     if (!context.mounted) return;
     if (request == null) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -227,6 +241,91 @@ class _MessageCard extends StatelessWidget {
         child: Padding(
           padding: const EdgeInsets.all(20),
           child: Center(child: Text(message)),
+        ),
+      );
+}
+
+class _CustomAmountCard extends StatefulWidget {
+  const _CustomAmountCard({required this.loading, required this.onRequest});
+
+  final bool loading;
+  final ValueChanged<int> onRequest;
+
+  @override
+  State<_CustomAmountCard> createState() => _CustomAmountCardState();
+}
+
+class _CustomAmountCardState extends State<_CustomAmountCard> {
+  final TextEditingController _controller = TextEditingController();
+  String? _error;
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _submit() {
+    final int? points = int.tryParse(_controller.text.trim());
+    if (points == null || points <= 0) {
+      setState(() => _error = 'points.custom_amount_invalid'.tr);
+      return;
+    }
+    setState(() => _error = null);
+    widget.onRequest(points);
+  }
+
+  @override
+  Widget build(BuildContext context) => Card(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              const CircleAvatar(
+                backgroundColor: Color(0x1FBE1B2C),
+                child: Icon(Icons.edit_rounded, color: primaryColor),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    Text(
+                      'points.custom_amount'.tr,
+                      style: const TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 8),
+                    TextField(
+                      key: const Key('custom-points-input'),
+                      controller: _controller,
+                      keyboardType: TextInputType.number,
+                      decoration: InputDecoration(
+                        labelText: 'points.custom_amount_label'.tr,
+                        hintText: 'points.custom_amount_hint'.tr,
+                        errorText: _error,
+                        isDense: true,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 12),
+              SizedBox(
+                height: 48,
+                child: FilledButton(
+                  key: const Key('request-custom-points'),
+                  onPressed: widget.loading ? null : _submit,
+                  child: widget.loading
+                      ? const SizedBox.square(
+                          dimension: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : Text('points.request'.tr),
+                ),
+              ),
+            ],
+          ),
         ),
       );
 }

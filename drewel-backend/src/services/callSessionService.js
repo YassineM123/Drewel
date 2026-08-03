@@ -4,7 +4,7 @@ import CommunicationAudit from "../models/CommunicationAudit.js";
 import { assertRideParticipant, counterpartFor } from "./rideCommunicationPolicy.js";
 import { buildAgoraToken, generateAgoraChannelName, generateAgoraUid } from "./agoraTokenService.js";
 import Driver from "../models/Driver.js";
-import { buildAvailableDriverFilter } from "../utils/availableDrivers.js";
+import { buildFreshDubaiMarketplaceAvailabilityFilter } from "../utils/availableDrivers.js";
 
 export class CallStateError extends Error {
   constructor(message, statusCode = 409, code = "INVALID_CALL_STATE") {
@@ -46,7 +46,7 @@ export const initiateCall = async ({ principal, rideId, idempotencyKey = "" }) =
   if (ride.status === "contacting") {
     const availableDriver = await Driver.exists({
       _id: ride.driverId,
-      ...buildAvailableDriverFilter(),
+      ...buildFreshDubaiMarketplaceAvailabilityFilter(),
     });
     if (!availableDriver) {
       throw new CallStateError("Driver is unavailable", 409, "DRIVER_NOT_AVAILABLE");

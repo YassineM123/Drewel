@@ -1,5 +1,20 @@
 import mongoose from "mongoose";
 
+const geoPointSchema = new mongoose.Schema(
+  {
+    type: { type: String, enum: ["Point"], required: true },
+    coordinates: {
+      type: [Number],
+      required: true,
+      validate: {
+        validator: (value) => Array.isArray(value) && value.length === 2,
+        message: "currentLocation coordinates must be [longitude, latitude]",
+      },
+    },
+  },
+  { _id: false }
+);
+
 const driverSchema = new mongoose.Schema(
   {
     countryCode: {
@@ -122,6 +137,10 @@ const driverSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+    currentLocation: { type: geoPointSchema, default: undefined },
+    locationUpdatedAt: { type: Date, default: null, index: true },
+    locationAccuracyM: { type: Number, default: null, min: 0 },
+    currentServiceArea: { type: String, enum: ["dubai", null], default: null, index: true },
     availabilityStatus: {
       type: String,
       enum: ["Online", "Busy", "Offline"],
@@ -268,5 +287,32 @@ driverSchema.index({ status: 1, approvedBy: 1, approvedAt: -1 });
 driverSchema.index({ profileRequestStatus: 1, profileSubmittedAt: -1, _id: -1 });
 driverSchema.index({ profileRequestStatus: 1, profileApprovedBy: 1, profileApprovedAt: -1 });
 driverSchema.index({ isOnline: 1, availabilityStatus: 1, city: 1, vehicleType: 1 });
+driverSchema.index(
+  { currentLocation: "2dsphere" },
+  { sparse: true, name: "currentLocation_2dsphere" }
+);
+driverSchema.index(
+  { currentServiceArea: 1, isOnline: 1, availabilityStatus: 1, locationUpdatedAt: -1 },
+  { name: "marketplace_availability" }
+);
 
-export default mongoose.model("Driver", driverSchema);
+const Driver = mongoose.model("Driver", driverSchema);
+
+export const ensureMarketplaceDriverIndexes = async () => {
+  await Driver.collection.createIndex(
+    { currentLocation: "2dsphere" },
+    { sparse: true, name: "currentLocation_2dsphere" }
+  );
+  await Driver.collection.createIndex(
+    { currentServiceArea: 1, isOnline: 1, availabilityStatus: 1, locationUpdatedAt: -1 },
+    { name: "marketplace_availability" }
+  );
+  const indexes = await Driver.collection.indexes();
+  for (const required of ["currentLocation_2dsphere", "marketplace_availability"]) {
+    if (!indexes.some((index) => index.name === required)) {
+      throw new Error(`Required marketplace index is missing: ${required}`);
+    }
+  }
+};
+
+export default Driver;

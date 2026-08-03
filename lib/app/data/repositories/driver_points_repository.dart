@@ -8,7 +8,8 @@ abstract class DriverPointsRepository {
   Future<List<PointPack>> getPacks();
   Future<List<PointPurchaseRequest>> getPurchaseRequests();
   Future<PointPurchaseRequest> createPurchaseRequest({
-    required String packId,
+    String? packId,
+    int? points,
     required String clientRequestId,
   });
   Future<TripOffer> sendOffer({
@@ -86,13 +87,19 @@ class ApiDriverPointsRepository implements DriverPointsRepository {
 
   @override
   Future<PointPurchaseRequest> createPurchaseRequest({
-    required String packId,
+    String? packId,
+    int? points,
     required String clientRequestId,
   }) async {
+    assert(
+      (packId != null) != (points != null),
+      'Exactly one of packId or points must be provided',
+    );
     final response = await _api.post(
       '${ApiUrlConstants.baseUrl}driver/points/purchase-requests',
       <String, dynamic>{
-        'requestedPackId': packId,
+        if (packId != null) 'requestedPackId': packId,
+        if (points != null) 'requestedPoints': points,
         'clientRequestId': clientRequestId,
       },
     );

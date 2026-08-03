@@ -99,6 +99,24 @@ void main() {
     expect(controller.purchaseRequests.single.reference, isNotEmpty);
   });
 
+  test('custom point amount request is persisted and never changes wallet',
+      () async {
+    final repository = FakePointsRepository();
+    final controller = DriverPointsController(
+      repository: repository,
+      realtime: FakePointsRealtime(),
+    )..applyWallet(testWallet(available: 80, version: 4));
+
+    final request = await controller.requestCustomPoints(350);
+
+    expect(request?.status, 'pending');
+    expect(repository.purchaseCalls, 1);
+    expect(repository.lastPurchasePackId, isNull);
+    expect(repository.lastPurchasePoints, 350);
+    expect(controller.wallet.value?.availablePoints, 80);
+    expect(controller.purchaseRequests.single.reference, isNotEmpty);
+  });
+
   test('new socket version refreshes once and duplicate event is ignored',
       () async {
     final repository = FakePointsRepository(

@@ -224,15 +224,27 @@ class SocketService {
       on('customer-location', callback);
 
   /// User joins a room to receive driver updates for a specific city
-  /// Data: { city, vehicleType? }
-  void emitJoinCityRoom(String city, {String? vehicleType}) => emit(
-        'join-city-room',
-        {
-          'city': city,
-          if (vehicleType != null && vehicleType.trim().isNotEmpty)
-            'vehicleType': vehicleType,
-        },
-      );
+  /// Data: { city, vehicleType?, lat?, long? }
+  void emitJoinCityRoom(
+    String city, {
+    String? vehicleType,
+    double? latitude,
+    double? longitude,
+    void Function(dynamic response)? onAck,
+  }) {
+    final Map<String, dynamic> payload = <String, dynamic>{
+      'city': city,
+      if (vehicleType != null && vehicleType.trim().isNotEmpty)
+        'vehicleType': vehicleType,
+      if (latitude != null) 'lat': latitude,
+      if (longitude != null) 'long': longitude,
+    };
+    if (onAck == null) {
+      emit('join-city-room', payload);
+    } else {
+      emitWithAck('join-city-room', payload, onAck);
+    }
+  }
 
   /// User leaves city room
   void emitLeaveCityRoom(String city) =>

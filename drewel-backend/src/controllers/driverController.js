@@ -10,10 +10,18 @@ import { transitionDriverRequest } from "../services/driverRequestTransitionServ
 import { PROFILE_PROPOSAL_FIELDS } from "../utils/adminRequestDetails.js";
 import {
   AVAILABLE_DRIVER_FIELDS,
+  buildDubaiDiscoveryAggregation,
   buildAvailableDriverFilter,
+  buildFreshDubaiMarketplaceAvailabilityFilter,
   parseDriverDiscoveryQuery,
   toAvailableDriverDto,
 } from "../utils/availableDrivers.js";
+import {
+  buildDriverLocationUpdate,
+  DUBAI_SERVICE_AREA,
+  serviceAreaForCoordinates,
+  validateCoordinates,
+} from "../utils/dubaiLocation.js";
 import { io } from "../socket/index.js";
 import {
   grantWelcomeBonusInSession,
@@ -677,25 +685,25 @@ export const updateDriverDetails = async (req, res) => {
 export const getAvailableDrivers = async (req, res) => {
   try {
     const options = parseDriverDiscoveryQuery(req.query);
-    if (options.maxDistanceKm !== null && (options.lat === null || options.long === null)) {
+    if (options.lat === null || options.long === null) {
       return res.status(400).send({
         success: false,
-        code: "INVALID_DRIVER_FILTER",
-        message: "lat and long are required with maxDistanceKm",
+        code: "LOCATION_REQUIRED",
+        message: "lat and long are required for driver discovery",
       });
     }
-    const candidates = await Driver.find(buildAvailableDriverFilter(req.query))
-      .select(AVAILABLE_DRIVER_FIELDS)
-      .sort({ updatedAt: -1, _id: 1 })
-      .limit(Math.min(500, options.limit * 10))
-      .lean();
-    const drivers = candidates
-      .map((driver) => toAvailableDriverDto(driver, options))
-      .filter((driver) =>
-        options.maxDistanceKm === null ||
-        (driver.distanceKm !== null && driver.distanceKm <= options.maxDistanceKm)
-      )
-      .slice(0, options.limit);
+    validateCoordinates(options.lat, options.long);
+    if (serviceAreaForCoordinates(options.lat, options.long) !== DUBAI_SERVICE_AREA) {
+      return res.status(422).send({
+        success: false,
+        code: "OUTSIDE_SERVICE_AREA",
+        message: "Find Now is currently available only inside Dubai",
+      });
+    }
+    const candidates = await Driver.aggregate(
+      buildDubaiDiscoveryAggregation(req.query, options)
+    );
+    const drivers = candidates.map((driver) => toAvailableDriverDto(driver, options));
 
     return res.status(200).send({
       success: true,
@@ -722,7 +730,7 @@ export const getDriverAvailability = async (req, res) => {
     }
     const driver = await Driver.findOne({
       _id: req.params.id,
-      ...buildAvailableDriverFilter(),
+      ...buildFreshDubaiMarketplaceAvailabilityFilter(),
     }).select(AVAILABLE_DRIVER_FIELDS).lean();
     if (!driver) {
       return res.status(409).json({
@@ -1048,13 +1056,7 @@ export const updateOnlineStatus = async (req, res) => {
 
 export const updateDriverLocation = async (req, res) => {
   try {
-    const { lat, long } = req.body;
-    if (typeof lat !== "number" || typeof long !== "number") {
-      return res.status(400).send({
-        success: false,
-        message: "lat and long must be numbers",
-      });
-    }
+    const locationUpdate = buildDriverLocationUpdate(req.body || {});
 
     const driver = await Driver.findById(req.user._id);
     if (!driver) {
@@ -1063,20 +1065,25 @@ export const updateDriverLocation = async (req, res) => {
         message: "Driver not found",
       });
     }
-    driver.lat = lat;
-    driver.long = long;
+    Object.assign(driver, locationUpdate);
     await driver.save();
 
     return res.status(200).send({
       success: true,
       message: "Driver location updated successfully",
-      driver,
+      location: {
+        lat: driver.lat,
+        long: driver.long,
+        accuracyM: driver.locationAccuracyM,
+        updatedAt: driver.locationUpdatedAt,
+        serviceArea: driver.currentServiceArea,
+      },
     });
   } catch (error) {
-    return res.status(500).send({
+    return res.status(error.statusCode || 500).send({
       success: false,
-      message: "Failed to update driver location",
-      error: error.message,
+      code: error.code || "DRIVER_LOCATION_UPDATE_FAILED",
+      message: error.statusCode ? error.message : "Failed to update driver location",
     });
   }
 };

@@ -34,7 +34,7 @@ class MarketplaceDriverCard extends StatelessWidget {
       'busy' => const Color(0xFFE08A00),
       _ => Colors.grey,
     };
-    final double? displayedDistance = driver.distanceKm ?? distanceKm;
+    final double? displayedDistance = distanceKm ?? driver.distanceKm;
     final String vehicle = <String?>[driver.vehicleType, driver.vehicleModel]
         .where((String? value) => value?.trim().isNotEmpty == true)
         .join(' · ');

@@ -17,7 +17,7 @@ import User from "../models/User.js";
 import RideSafetyAction from "../models/RideSafetyAction.js";
 import RideAudit from "../models/RideAudit.js";
 import { counterpartFor } from "../services/rideCommunicationPolicy.js";
-import { buildAvailableDriverFilter } from "../utils/availableDrivers.js";
+import { buildFreshDubaiMarketplaceAvailabilityFilter } from "../utils/availableDrivers.js";
 import {
   RideTransitionError,
   decryptPickupPin,
@@ -119,7 +119,7 @@ export const createDriverContact = async (req, res) => {
     if (!mongoose.isValidObjectId(driverId)) throw new CommunicationPolicyError("Valid driverId is required", 400, "INVALID_DRIVER_ID");
     const driver = await Driver.findOne({
       _id: driverId,
-      ...buildAvailableDriverFilter(),
+      ...buildFreshDubaiMarketplaceAvailabilityFilter(),
     }).select("_id");
     if (!driver) throw new CommunicationPolicyError("Driver is not available", 409, "DRIVER_NOT_AVAILABLE");
     const existing = await Ride.findOne({
@@ -225,7 +225,7 @@ export const confirmMission = async (req, res) => {
       const driver = await Driver.findOneAndUpdate(
         {
           _id: contact.driverId,
-          ...buildAvailableDriverFilter(),
+          ...buildFreshDubaiMarketplaceAvailabilityFilter(),
         },
         { $set: { availabilityStatus: "Busy" } },
         { new: true, session }
@@ -530,7 +530,7 @@ export const sendRideMessage = async (req, res) => {
     if (ride.status === "contacting") {
       const driverAvailable = await Driver.exists({
         _id: ride.driverId,
-        ...buildAvailableDriverFilter(),
+        ...buildFreshDubaiMarketplaceAvailabilityFilter(),
       });
       if (!driverAvailable) {
         throw new CommunicationPolicyError(

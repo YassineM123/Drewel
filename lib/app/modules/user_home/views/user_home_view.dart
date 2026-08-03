@@ -502,28 +502,6 @@ class _UserHomeViewState extends State<UserHomeView> {
                               StringConstants.chooseTheDriver,
                               style: MyTextStyle.titleStyle18bb,
                             ),
-                            if (controller
-                                .regionalDriverMessage.value.isNotEmpty) ...[
-                              SizedBox(height: 6.px),
-                              Container(
-                                width: double.infinity,
-                                padding: EdgeInsets.symmetric(
-                                  horizontal: 12.px,
-                                  vertical: 8.px,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: primaryColor.withValues(alpha: 0.08),
-                                  borderRadius: BorderRadius.circular(12.px),
-                                ),
-                                child: Text(
-                                  controller.regionalDriverMessage.value,
-                                  textAlign: TextAlign.center,
-                                  style: MyTextStyle.titleStyle12b.copyWith(
-                                    color: Colors.grey[700],
-                                  ),
-                                ),
-                              ),
-                            ],
                             SizedBox(height: 10.px),
                           ],
                         );
@@ -997,7 +975,7 @@ class _UserHomeViewState extends State<UserHomeView> {
         ),
         if (!isDriversLoading && isServiceUnavailable)
           TextButton.icon(
-            onPressed: () => controller.callingGetAllDriverListApi(),
+            onPressed: controller.retryDriverDiscovery,
             icon: const Icon(Icons.refresh),
             label: const Text('Retry'),
           ),

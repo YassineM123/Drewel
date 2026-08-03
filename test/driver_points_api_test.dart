@@ -149,4 +149,36 @@ void main() {
     expect(capturedBody.containsKey('paymentReference'), isFalse);
     expect(capturedBody.containsKey('pointsToCredit'), isFalse);
   });
+
+  test('purchase request sends only custom points and client reference',
+      () async {
+    late Map<String, dynamic> capturedBody;
+    final repository = ApiDriverPointsRepository(CommunicationApiClient(
+      client: MockClient((request) async {
+        capturedBody = jsonDecode(request.body) as Map<String, dynamic>;
+        return http.Response(
+          jsonEncode(<String, dynamic>{
+            'success': true,
+            'request': <String, dynamic>{
+              '_id': 'request-2',
+              'clientRequestId': 'purchase-client-456',
+              'status': 'pending',
+              'requestedPoints': 350,
+            },
+          }),
+          201,
+        );
+      }),
+    ));
+
+    final request = await repository.createPurchaseRequest(
+      points: 350,
+      clientRequestId: 'purchase-client-456',
+    );
+
+    expect(request.reference, 'purchase-client-456');
+    expect(request.points, 350);
+    expect(capturedBody['requestedPoints'], 350);
+    expect(capturedBody.containsKey('requestedPackId'), isFalse);
+  });
 }

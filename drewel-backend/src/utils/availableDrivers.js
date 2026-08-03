@@ -1,5 +1,12 @@
+import {
+  DUBAI_SERVICE_AREA,
+  getDriverLocationFutureSkewMs,
+  getDriverLocationMaxAgeMs,
+  getMarketplaceLocationMaxAccuracyM,
+} from "./dubaiLocation.js";
+
 export const AVAILABLE_DRIVER_FIELDS =
-  "firstName lastName fullName profileImageUrl city vehicleType vehicleModel registration registrationVisible rating priceEstimate lat long isOnline availabilityStatus status updatedAt";
+  "firstName lastName fullName profileImageUrl city vehicleType vehicleModel registration registrationVisible rating priceEstimate lat long currentLocation currentServiceArea locationUpdatedAt isOnline availabilityStatus status updatedAt";
 
 const escapeRegex = (value) =>
   String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -12,7 +19,8 @@ const exactCaseInsensitiveMatch = (value) => {
 export const buildAvailableDriverFilter = (query = {}) => {
   const filter = {
     isOnline: true,
-    availabilityStatus: { $ne: "Busy" },
+    availabilityStatus: "Online",
+    activeRideId: null,
     isApproved: true,
     isRestricted: false,
     isDeleted: { $ne: true },
@@ -41,6 +49,24 @@ export const buildAvailableDriverFilter = (query = {}) => {
   }
 
   return filter;
+};
+
+export const buildFreshDubaiMarketplaceAvailabilityFilter = (
+  query = {},
+  now = new Date()
+) => {
+  const filter = buildAvailableDriverFilter(query);
+  delete filter.city;
+  return {
+    ...filter,
+    currentServiceArea: DUBAI_SERVICE_AREA,
+    "currentLocation.type": "Point",
+    locationUpdatedAt: {
+      $gte: new Date(now.getTime() - getDriverLocationMaxAgeMs()),
+      $lte: new Date(now.getTime() + getDriverLocationFutureSkewMs()),
+    },
+    locationAccuracyM: { $gte: 0, $lte: getMarketplaceLocationMaxAccuracyM() },
+  };
 };
 
 export const parseDriverDiscoveryQuery = (query = {}) => {
@@ -78,6 +104,25 @@ export const parseDriverDiscoveryQuery = (query = {}) => {
   };
 };
 
+export const buildDubaiDiscoveryAggregation = (query, options, now = new Date()) => {
+  const filter = buildFreshDubaiMarketplaceAvailabilityFilter(query, now);
+  return [
+    {
+      $geoNear: {
+        near: { type: "Point", coordinates: [options.long, options.lat] },
+        key: "currentLocation",
+        distanceField: "distanceMeters",
+        spherical: true,
+        query: filter,
+        ...(options.maxDistanceKm !== null ? { maxDistance: options.maxDistanceKm * 1000 } : {}),
+      },
+    },
+    { $sort: { distanceMeters: 1, _id: 1 } },
+    { $limit: options.limit },
+    { $project: Object.fromEntries(AVAILABLE_DRIVER_FIELDS.split(/\s+/).map((field) => [field, 1]).concat([["distanceMeters", 1]])) },
+  ];
+};
+
 export const distanceKmBetween = (lat1, long1, lat2, long2) => {
   const radians = (degrees) => (degrees * Math.PI) / 180;
   const dLat = radians(lat2 - lat1);
@@ -93,7 +138,9 @@ export const toAvailableDriverDto = (driver, origin = {}) => {
   const value = typeof driver?.toObject === "function" ? driver.toObject() : driver;
   const hasOrigin = Number.isFinite(origin.lat) && Number.isFinite(origin.long);
   const hasDriverLocation = Number.isFinite(value?.lat) && Number.isFinite(value?.long);
-  const distanceKm = hasOrigin && hasDriverLocation
+  const aggregateDistance = Number(value?.distanceMeters);
+  const isAvailable = value?.isOnline === true && value?.availabilityStatus === "Online";
+  const distanceKm = Number.isFinite(aggregateDistance) ? aggregateDistance / 1000 : hasOrigin && hasDriverLocation
     ? distanceKmBetween(origin.lat, origin.long, value.lat, value.long)
     : null;
   return {
@@ -102,6 +149,7 @@ export const toAvailableDriverDto = (driver, origin = {}) => {
     fullName: value.fullName || [value.firstName, value.lastName].filter(Boolean).join(" ").trim(),
     profileImageUrl: value.profileImageUrl || "",
     city: value.city || "",
+    currentServiceArea: value.currentServiceArea || null,
     vehicleType: value.vehicleType || "",
     vehicleModel: value.vehicleModel || "",
     registration: value.registrationVisible ? value.registration || "" : null,
@@ -109,14 +157,11 @@ export const toAvailableDriverDto = (driver, origin = {}) => {
     priceEstimate: Number.isFinite(value.priceEstimate) ? value.priceEstimate : null,
     lat: value.lat,
     long: value.long,
-    status: value.availabilityStatus === "Busy"
-      ? "Busy"
-      : value.isOnline ? "Online" : "Offline",
-    availabilityStatus: value.availabilityStatus === "Busy"
-      ? "Busy"
-      : value.isOnline ? "Online" : "Offline",
-    isAvailable: value.isOnline === true && value.availabilityStatus !== "Busy",
+    status: value.availabilityStatus === "Busy" ? "Busy" : isAvailable ? "Online" : "Offline",
+    availabilityStatus: value.availabilityStatus === "Busy" ? "Busy" : isAvailable ? "Online" : "Offline",
+    isAvailable,
     distanceKm: distanceKm === null ? null : Math.round(distanceKm * 10) / 10,
     updatedAt: value.updatedAt,
+    locationUpdatedAt: value.locationUpdatedAt,
   };
 };

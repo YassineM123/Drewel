@@ -197,19 +197,18 @@ test("controller preserves the shared available-driver filter contract", () => {
   assert.equal(buildAvailableDriverFilter, buildSharedAvailableDriverFilter);
 });
 
-test("socket discovery mirrors vehicle-wide REST availability and supports leaving rooms", () => {
+test("socket discovery uses Dubai composite rooms and geospatial initial results", () => {
   const source = readFileSync(
     new URL("../src/socket/index.js", import.meta.url),
     "utf8"
   );
 
-  assert.match(source, /socket\.join\(normalizeVehicleRoom\(vehicleType\)\)/);
-  assert.match(source, /buildAvailableDriverFilter\(\{\s*vehicleType,/);
-  assert.doesNotMatch(
-    source,
-    /buildAvailableDriverFilter\(\{\s*city: trimmedCity,\s*vehicleType,/
-  );
+  assert.match(source, /discoveryRoom\(DUBAI_SERVICE_AREA, vehicleType\)/);
+  assert.match(source, /buildDubaiDiscoveryAggregation\(\{ vehicleType \}, options\)/);
+  assert.match(source, /serviceAreaForCoordinates\(lat, long\)/);
+  assert.doesNotMatch(source, /socket\.join\(normalizeVehicleRoom/);
   assert.match(source, /socket\.on\("leave-city-room"/);
+  assert.match(source, /socket\.data\.discoveryRooms\s*=\s*\[\]/);
 });
 
 test("socket location tracking exposes post-auth readiness and event acknowledgements", () => {
@@ -324,5 +323,38 @@ test("MongoDB SRV DNS override reports invalid resolver configuration", () => {
   assert.throws(
     () => configureMongoSrvDns("mongodb+srv://cluster.example", "not-an-ip", adapter),
     /Invalid MONGO_DNS_SERVERS configuration/
+  );
+});
+
+test("startup creates and verifies required marketplace geospatial indexes", () => {
+  const connectionSource = readFileSync(
+    new URL("../src/connection.js", import.meta.url),
+    "utf8"
+  );
+  const driverSource = readFileSync(
+    new URL("../src/models/Driver.js", import.meta.url),
+    "utf8"
+  );
+  assert.match(connectionSource, /await ensureMarketplaceDriverIndexes\(\)/);
+  assert.match(driverSource, /createIndex\([\s\S]*?currentLocation:\s*"2dsphere"/);
+  assert.match(driverSource, /indexes\(\)[\s\S]*?Required marketplace index is missing/);
+});
+
+test("driver action-time availability paths reuse fresh Dubai GPS eligibility", () => {
+  for (const relativePath of [
+    "../src/controllers/rideController.js",
+    "../src/services/tripOfferService.js",
+    "../src/services/callSessionService.js",
+  ]) {
+    const source = readFileSync(new URL(relativePath, import.meta.url), "utf8");
+    assert.match(source, /buildFreshDubaiMarketplaceAvailabilityFilter\(\)/);
+  }
+  const driverSource = readFileSync(
+    new URL("../src/controllers/driverController.js", import.meta.url),
+    "utf8"
+  );
+  assert.match(
+    driverSource,
+    /getDriverAvailability[\s\S]*?buildFreshDubaiMarketplaceAvailabilityFilter\(\)/
   );
 });

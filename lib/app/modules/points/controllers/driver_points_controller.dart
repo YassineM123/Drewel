@@ -259,17 +259,28 @@ class DriverPointsController extends GetxController
     }
   }
 
-  Future<PointPurchaseRequest?> requestPack(PointPack pack) async {
+  Future<PointPurchaseRequest?> requestPack(PointPack pack) =>
+      _requestPurchase(retryKey: 'pack:${pack.id}', packId: pack.id);
+
+  Future<PointPurchaseRequest?> requestCustomPoints(int points) =>
+      _requestPurchase(retryKey: 'custom:$points', points: points);
+
+  Future<PointPurchaseRequest?> _requestPurchase({
+    required String retryKey,
+    String? packId,
+    int? points,
+  }) async {
     if (isCreatingPurchaseRequest.value) return null;
     isCreatingPurchaseRequest.value = true;
     final retryId =
-        _purchaseRetryIds.putIfAbsent(pack.id, () => _newClientId('purchase'));
+        _purchaseRetryIds.putIfAbsent(retryKey, () => _newClientId('purchase'));
     try {
       final request = await _repository.createPurchaseRequest(
-        packId: pack.id,
+        packId: packId,
+        points: points,
         clientRequestId: retryId,
       );
-      _purchaseRetryIds.remove(pack.id);
+      _purchaseRetryIds.remove(retryKey);
       purchaseRequests.removeWhere((item) => item.id == request.id);
       purchaseRequests.insert(0, request);
       return request;

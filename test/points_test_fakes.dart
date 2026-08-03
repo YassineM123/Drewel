@@ -44,6 +44,8 @@ class FakePointsRepository implements DriverPointsRepository {
   int walletCalls = 0;
   int offerCalls = 0;
   int purchaseCalls = 0;
+  String? lastPurchasePackId;
+  int? lastPurchasePoints;
 
   @override
   Future<DriverPointsWallet> getWallet() async {
@@ -101,10 +103,13 @@ class FakePointsRepository implements DriverPointsRepository {
 
   @override
   Future<PointPurchaseRequest> createPurchaseRequest({
-    required String packId,
+    String? packId,
+    int? points,
     required String clientRequestId,
   }) async {
     purchaseCalls++;
+    lastPurchasePackId = packId;
+    lastPurchasePoints = points;
     return purchaseHandler?.call() ??
         PointPurchaseRequest(
           id: 'request-1',
