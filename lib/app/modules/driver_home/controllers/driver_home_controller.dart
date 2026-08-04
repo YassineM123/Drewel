@@ -58,6 +58,7 @@ class DriverHomeController extends GetxController with WidgetsBindingObserver {
   bool _hasDriverLocation = false;
   DateTime? _driverPositionRecordedAt;
   double? _driverPositionAccuracyM;
+  bool _isRefreshingLocationHeartbeat = false;
 
   bool get _isDriverOnline => !isGoOnline.value;
 
@@ -157,17 +158,52 @@ class DriverHomeController extends GetxController with WidgetsBindingObserver {
   void _startLocationUpdates() {
     _stopLocationUpdates(); // Stop any existing timer
 
-    // Emit location immediately
-    _emitCurrentLocation();
+    // Obtain a fresh measurement immediately. Replaying the last movement fix
+    // would let a stationary driver's discovery timestamp expire.
+    unawaited(_refreshLocationHeartbeat());
 
-    // Then emit every 10 seconds
+    // Then obtain and emit a fresh GPS fix every 10 seconds.
     _locationUpdateTimer = Timer.periodic(
       const Duration(seconds: _locationUpdateIntervalSeconds),
-      (_) => _emitCurrentLocation(),
+      (_) => unawaited(_refreshLocationHeartbeat()),
     );
 
     print(
         'Started location updates - emitting every $_locationUpdateIntervalSeconds seconds');
+  }
+
+  Future<void> _refreshLocationHeartbeat() async {
+    if (!_isDriverOnline || _isRefreshingLocationHeartbeat) return;
+    _isRefreshingLocationHeartbeat = true;
+    try {
+      if (!await Geolocator.isLocationServiceEnabled()) return;
+
+      final LocationPermission permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied ||
+          permission == LocationPermission.deniedForever) {
+        return;
+      }
+
+      final Position position = await Geolocator.getCurrentPosition(
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.bestForNavigation,
+          timeLimit: Duration(seconds: 8),
+        ),
+      );
+      if (!_isDriverOnline) return;
+
+      await _applyDriverPosition(
+        position,
+        emitRealtimeOnMovement: false,
+      );
+      // Emit even when the coordinates did not change: the new measurement
+      // timestamp keeps a stationary online driver discoverable on the map.
+      _emitCurrentLocation();
+    } catch (error) {
+      debugPrint('Driver location heartbeat failed: $error');
+    } finally {
+      _isRefreshingLocationHeartbeat = false;
+    }
   }
 
   /// Stop periodic location updates
@@ -234,6 +270,7 @@ class DriverHomeController extends GetxController with WidgetsBindingObserver {
     bool syncToServer = false,
     bool forceServerSync = false,
     bool updateAddress = false,
+    bool emitRealtimeOnMovement = true,
   }) async {
     final bool hasPositionChanged =
         lat.value != position.latitude || lon.value != position.longitude;
@@ -265,7 +302,7 @@ class DriverHomeController extends GetxController with WidgetsBindingObserver {
       // Push an accepted GPS movement immediately. The periodic timer remains
       // as a heartbeat, while SocketService queues the newest fix until the
       // authenticated realtime channel is ready.
-      if (_isDriverOnline) {
+      if (_isDriverOnline && emitRealtimeOnMovement) {
         _emitCurrentLocation();
       }
       increment();
@@ -564,10 +601,48 @@ class DriverHomeController extends GetxController with WidgetsBindingObserver {
 
   Future<void> callingUpdateDriverOnlineStatus() async {
     try {
+      final bool goingOnline = isGoOnline.value;
       Map<String, dynamic> bodyParams = {
-        ApiKeyConstants.isOnline: isGoOnline.value,
+        ApiKeyConstants.isOnline: goingOnline,
       };
       showLoading.value = true;
+
+      if (goingOnline) {
+        if (!await Geolocator.isLocationServiceEnabled()) {
+          CommonWidgets.snackBarView(
+              title: 'Turn on precise location before going online.');
+          return;
+        }
+
+        LocationPermission permission = await Geolocator.checkPermission();
+        if (permission == LocationPermission.denied) {
+          permission = await Geolocator.requestPermission();
+        }
+        if (permission == LocationPermission.denied ||
+            permission == LocationPermission.deniedForever) {
+          CommonWidgets.snackBarView(
+              title: 'Location permission is required to go online.');
+          return;
+        }
+
+        final Position position = await Geolocator.getCurrentPosition(
+          locationSettings: const LocationSettings(
+            accuracy: LocationAccuracy.bestForNavigation,
+            timeLimit: Duration(seconds: 12),
+          ),
+        );
+        await _applyDriverPosition(
+          position,
+          emitRealtimeOnMovement: false,
+        );
+        bodyParams.addAll(buildGpsFixPayload(
+          latitude: position.latitude,
+          longitude: position.longitude,
+          recordedAt: position.timestamp,
+          accuracyM: position.accuracy,
+        ));
+      }
+
       SimpleResponseModel? simpleResponseModel =
           await ApiMethods.driverUpdateOnlineStatusApi(bodyParams: bodyParams);
       if (simpleResponseModel != null &&
@@ -587,13 +662,15 @@ class DriverHomeController extends GetxController with WidgetsBindingObserver {
         }
       } else {
         CommonWidgets.snackBarView(
-            title:
-                simpleResponseModel?.message ?? 'Current location Failed ...');
+            title: simpleResponseModel?.message ??
+                'Unable to update online status.');
       }
     } catch (e) {
-      CommonWidgets.snackBarView(title: 'Somethings wrong...');
+      CommonWidgets.snackBarView(
+          title: 'Unable to get a fresh GPS location. Please try again.');
+    } finally {
+      showLoading.value = false;
     }
-    showLoading.value = false;
   }
 
   Future<void> callingGetDriverDetails() async {

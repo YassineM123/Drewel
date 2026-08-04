@@ -17,6 +17,13 @@ class MyHttp {
   static const int _minMultipartTimeoutSeconds = 60;
   static const int _maxMultipartTimeoutSeconds = 300;
 
+  static String _webFetchFailureMessage(String url) {
+    final String origin = Uri.base.origin;
+    return "Couldn't reach the server at ${Uri.parse(url).origin}. "
+        "It may be offline, or if you're calling it from a new origin "
+        "($origin), that origin may need to be added to the backend's CORS allow-list.";
+  }
+
   static String _guessFileName(String path, {String fallback = 'upload.jpg'}) {
     if (path.trim().isEmpty) return fallback;
     final String withoutQuery = path.split('?').first;
@@ -230,11 +237,10 @@ class MyHttp {
         if (kIsWeb && e.toString().contains('Failed to fetch')) {
           if (kDebugMode) {
             print(
-                "EXCEPTION:: Possible web CORS block for origin ${Uri.base.origin} on $url");
+                "EXCEPTION:: Web fetch failed for origin ${Uri.base.origin} on $url");
           }
           CommonWidgets.snackBarView(
-            title:
-                'Web request blocked. Use localhost:5173 or update backend CORS.',
+            title: _webFetchFailureMessage(url),
           );
         }
         return null;
@@ -563,8 +569,7 @@ class MyHttp {
             (e.toString().contains('Failed to fetch') ||
                 e.toString().contains('XMLHttpRequest error'))) {
           CommonWidgets.snackBarView(
-            title:
-                'Web upload blocked. Run web on localhost:5173 or allow this origin in backend CORS.',
+            title: _webFetchFailureMessage(url),
           );
         }
         return null;

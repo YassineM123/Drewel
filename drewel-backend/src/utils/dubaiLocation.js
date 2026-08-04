@@ -1,16 +1,21 @@
 import { readFileSync } from "node:fs";
 
-export const DUBAI_SERVICE_AREA = "dubai";
+export const UAE_SERVICE_AREA = "uae";
+// Compatibility export for existing consumers while the module is renamed in
+// a later cleanup. It now represents the UAE-wide marketplace boundary.
+export const DUBAI_SERVICE_AREA = UAE_SERVICE_AREA;
 
-const dubaiBoundaryFeature = JSON.parse(readFileSync(
-  new URL("../data/dubai-adm1.geojson", import.meta.url),
+const uaeBoundaryCollection = JSON.parse(readFileSync(
+  new URL("../data/uae-adm0.geojson", import.meta.url),
   "utf8"
 ));
-if (dubaiBoundaryFeature?.properties?.shapeID !== "86790563B34058819691262" ||
-    dubaiBoundaryFeature?.geometry?.type !== "MultiPolygon") {
-  throw new Error("Pinned Dubai ADM1 boundary is invalid");
+const uaeBoundaryFeature = uaeBoundaryCollection?.features?.[0];
+if (uaeBoundaryFeature?.properties?.shapeID !== "71949806B80265631352184" ||
+    uaeBoundaryFeature?.geometry?.type !== "MultiPolygon") {
+  throw new Error("Pinned UAE ADM0 boundary is invalid");
 }
-export const DUBAI_SERVICE_MULTIPOLYGON = dubaiBoundaryFeature.geometry.coordinates;
+export const UAE_SERVICE_MULTIPOLYGON = uaeBoundaryFeature.geometry.coordinates;
+export const DUBAI_SERVICE_MULTIPOLYGON = UAE_SERVICE_MULTIPOLYGON;
 
 const runtimeNumber = (name, fallback, min, max) => {
   const value = Number(process.env[name]);
@@ -80,7 +85,7 @@ const distanceToSegmentMeters = (long, lat, [long1, lat1], [long2, lat2]) => {
   return Math.hypot(x1 + t * dx, y1 + t * dy);
 };
 
-export const distanceToDubaiBoundaryMeters = (long, lat) => {
+export const distanceToUaeBoundaryMeters = (long, lat) => {
   let minimum = Number.POSITIVE_INFINITY;
   for (const polygon of DUBAI_SERVICE_MULTIPOLYGON) {
     for (const ring of polygon) {
@@ -95,10 +100,12 @@ export const distanceToDubaiBoundaryMeters = (long, lat) => {
 export const serviceAreaForCoordinates = (lat, long, accuracyM = 0) => {
   validateCoordinates(lat, long);
   if (!pointInMultiPolygon(long, lat)) return null;
-  return accuracyM > 0 && distanceToDubaiBoundaryMeters(long, lat) <= accuracyM
+  return accuracyM > 0 && distanceToUaeBoundaryMeters(long, lat) <= accuracyM
     ? null
-    : DUBAI_SERVICE_AREA;
+    : UAE_SERVICE_AREA;
 };
+
+export const distanceToDubaiBoundaryMeters = distanceToUaeBoundaryMeters;
 
 const validateRecordedAt = (recordedAt, now) => {
   if (recordedAt === undefined || recordedAt === null || recordedAt === "") {

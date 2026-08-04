@@ -225,10 +225,10 @@ class UserHomeController extends GetxController
 
   /// Get the location to use for distance calculations (selected location if set, else user GPS)
   LatLng get referenceLocation {
-    if (isUserLocationLoaded.value) {
-      return userLocation;
-    } else if (isSelectedLocationSet.value) {
+    if (isSelectedLocationSet.value) {
       return selectedLocation;
+    } else if (isUserLocationLoaded.value) {
+      return userLocation;
     }
     return currentMapCenter;
   }
@@ -416,11 +416,8 @@ class UserHomeController extends GetxController
     Drivers driver, {
     DateTime? now,
   }) {
-    final String requestedCity =
-        _normalizeCity(parameter[ApiKeyConstants.city]);
     final String serviceArea = _normalizeCity(driver.currentServiceArea);
-    return requestedCity.isNotEmpty &&
-        serviceArea == requestedCity &&
+    return (serviceArea == 'uae' || serviceArea == 'dubai') &&
         driver.isOnlineAndAvailable &&
         driver.hasFreshLocation(
           now: now ?? DateTime.now(),
@@ -450,7 +447,7 @@ class UserHomeController extends GetxController
 
   void _prepareVehicleDiscoveryResults(List<Drivers> drivers) {
     final LatLng origin =
-        isUserLocationLoaded.value ? userLocation : _selectedCityCenter;
+        hasReferenceLocation ? referenceLocation : _selectedCityCenter;
     final DateTime now = DateTime.now();
     final List<Drivers> validDrivers = drivers
         .where((Drivers driver) =>
@@ -561,10 +558,10 @@ class UserHomeController extends GetxController
       return true;
     }).toList();
 
-    // GPS is the authoritative discovery origin. The city center is used only
-    // while location permission is unavailable.
+    // The explicitly selected place is the discovery origin. Device GPS is
+    // used only when the user has not selected a place.
     final LatLng sortFromPoint =
-        isUserLocationLoaded.value ? userLocation : _selectedCityCenter;
+        hasReferenceLocation ? referenceLocation : _selectedCityCenter;
 
     for (final Drivers driver in visibleDriversList) {
       _updateDriverDistance(driver, sortFromPoint);
@@ -723,11 +720,13 @@ class UserHomeController extends GetxController
   }
 
   Future<void> _initializeDiscovery() async {
-    final bool hasLocation = await checkPermission();
-    if (!_canUpdateView) return;
-    if (!hasLocation) {
-      _setLocationRequiredState();
-      return;
+    if (!hasReferenceLocation) {
+      final bool hasLocation = await checkPermission();
+      if (!_canUpdateView) return;
+      if (!hasLocation) {
+        _setLocationRequiredState();
+        return;
+      }
     }
     final DriverDiscoveryOutcome outcome = await callingGetAllDriverListApi();
     if (!_canUpdateView) return;
@@ -862,8 +861,8 @@ class UserHomeController extends GetxController
       socketService.emitJoinCityRoom(
         _currentCity!,
         vehicleType: selectedVehicleType,
-        latitude: isUserLocationLoaded.value ? userLat.value : null,
-        longitude: isUserLocationLoaded.value ? userLng.value : null,
+        latitude: hasReferenceLocation ? referenceLocation.latitude : null,
+        longitude: hasReferenceLocation ? referenceLocation.longitude : null,
         onAck: _handleDiscoveryRoomAck,
       );
       print('Joined city room: $_currentCity');
@@ -880,7 +879,7 @@ class UserHomeController extends GetxController
         (payload?['error'] ?? payload?['code'] ?? '').toString().toUpperCase();
     if (code == 'OUTSIDE_SERVICE_AREA') {
       _setLocationRequiredState(
-        'Find Now is currently available only inside Dubai.',
+        'Find Now is available only inside the UAE.',
       );
     } else if (code == 'INVALID_COORDINATES' || code == 'LOCATION_REQUIRED') {
       _setLocationRequiredState(
@@ -1241,11 +1240,11 @@ class UserHomeController extends GetxController
   }
 
   void setSelectedCityLocation(LatLng latLong, String city) {
-    mapPosition = LatLng(
-        LocalData().cityLatLongList[
-            int.parse(parameter[ApiKeyConstants.index] ?? '0')]['lat'],
-        LocalData().cityLatLongList[
-            int.parse(parameter[ApiKeyConstants.index] ?? '0')]['lon']);
+    mapPosition = latLong;
+    selectedLocationLat.value = latLong.latitude;
+    selectedLocationLng.value = latLong.longitude;
+    selectedLocationAddress.value = city;
+    isSelectedLocationSet.value = true;
     // xController!.animateCamera(
     //     CameraUpdate.newCameraPosition(CameraPosition(
     //       target: mapPosition,
@@ -1263,6 +1262,14 @@ class UserHomeController extends GetxController
     selectedDriverId = driversList[index].sId;
     _updateSelectedDriverDistance();
     updateDriverMarkers();
+    final LatLng? driverPosition = _driverPosition(driversList[index]);
+    if (driverPosition != null) {
+      unawaited(_animateCamera(
+        CameraUpdate.newCameraPosition(
+          CameraPosition(target: driverPosition, zoom: 16),
+        ),
+      ));
+    }
     increment();
   }
 
@@ -1771,8 +1778,8 @@ class UserHomeController extends GetxController
         city: parameter[ApiKeyConstants.city] ?? '',
         vType: parameter[ApiKeyConstants.vehicleType] ?? '',
         availability: 'online',
-        latitude: isUserLocationLoaded.value ? userLat.value : null,
-        longitude: isUserLocationLoaded.value ? userLng.value : null,
+        latitude: hasReferenceLocation ? referenceLocation.latitude : null,
+        longitude: hasReferenceLocation ? referenceLocation.longitude : null,
         checkResponse: (int status) => responseStatus = status,
       );
       if (!_canUpdateView) return DriverDiscoveryOutcome.failed;
@@ -1799,7 +1806,7 @@ class UserHomeController extends GetxController
           _setLocationRequiredState(
             driverListModel?.message ??
                 (outcome == DriverDiscoveryOutcome.outsideServiceArea
-                    ? 'Find Now is currently available only inside Dubai.'
+                    ? 'Find Now is available only inside the UAE.'
                     : 'A fresh precise GPS location is required.'),
           );
         } else if (responseStatus == 401) {

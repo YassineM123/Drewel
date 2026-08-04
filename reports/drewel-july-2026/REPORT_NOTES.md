@@ -10,5 +10,6 @@
   - Recommended next steps: `Recommended Next Steps` block.
   - Further questions: `Further Questions` block.
   - Caveats and assumptions: `Caveats & Assumptions` block.
-- Visual choice: charts were omitted because the available dates are sparse milestones and the 327,820-line initial import would distort a quantitative trend. Exact timeline and capability tables communicate the evidence more faithfully.
+- Visual choice: a grouped bar chart compares passed and skipped local tests by application surface. A commit-volume trend was omitted because the dates are sparse milestones and the 327,820-line initial import would distort the delivery story.
+- Chart map: validation section; question = passed versus skipped test execution by surface; family = categorical comparison; type = grouped vertical bar; fields = surface, passed, skipped; takeaway = local checks passed but backend integration coverage is incomplete; palette = blue for passed and orange for skipped; delivery = portable HTML and PDF.
 - Validation caveat: current test results come from the dirty working tree, not an isolated July 31 checkout.

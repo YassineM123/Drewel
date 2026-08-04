@@ -140,7 +140,7 @@ const driverSchema = new mongoose.Schema(
     currentLocation: { type: geoPointSchema, default: undefined },
     locationUpdatedAt: { type: Date, default: null, index: true },
     locationAccuracyM: { type: Number, default: null, min: 0 },
-    currentServiceArea: { type: String, enum: ["dubai", null], default: null, index: true },
+    currentServiceArea: { type: String, enum: ["uae", "dubai", null], default: null, index: true },
     availabilityStatus: {
       type: String,
       enum: ["Online", "Busy", "Offline"],

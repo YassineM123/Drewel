@@ -73,16 +73,42 @@ test("mobile sockets back off during network loss and stop while backgrounded", 
   );
 });
 
-test("accepted driver GPS movement is pushed immediately as well as by heartbeat", () => {
+test("accepted driver GPS movement is pushed immediately and stationary heartbeats use fresh fixes", () => {
   const source = readProjectFile(
     "lib/app/modules/driver_home/controllers/driver_home_controller.dart"
   );
 
-  assert.match(source, /Timer\.periodic\([\s\S]*?_emitCurrentLocation\(\)/);
+  assert.match(source, /Timer\.periodic\([\s\S]*?_refreshLocationHeartbeat\(\)/);
   assert.match(
     source,
-    /if \(hasPositionChanged\) \{[\s\S]*?if \(_isDriverOnline\) \{[\s\S]*?_emitCurrentLocation\(\)/
+    /_refreshLocationHeartbeat\(\)[\s\S]*?Geolocator\.getCurrentPosition\([\s\S]*?_applyDriverPosition\([\s\S]*?_emitCurrentLocation\(\)/
   );
+  assert.match(source, /emitRealtimeOnMovement:\s*false/);
+  assert.match(
+    source,
+    /if \(hasPositionChanged\) \{[\s\S]*?if \(_isDriverOnline && emitRealtimeOnMovement\) \{[\s\S]*?_emitCurrentLocation\(\)/
+  );
+});
+
+test("new clients go online with GPS while legacy clients remain hidden until a fresh fix", () => {
+  const driverSource = readProjectFile("drewel-backend/src/controllers/driverController.js");
+  const mobileSource = readProjectFile(
+    "lib/app/modules/driver_home/controllers/driver_home_controller.dart"
+  );
+  const adminSource = readProjectFile("drewel-backend/src/controllers/adminController.js");
+  const dashboardSource = readProjectFile("drewel-backend/src/controllers/userController.js");
+
+  assert.match(
+    driverSource,
+    /updateOnlineStatus[\s\S]*?hasLocationPayload[\s\S]*?if \(isOnline && hasLocationPayload\)[\s\S]*?buildDriverLocationUpdate\(req\.body \|\| \{\}\)[\s\S]*?currentServiceArea !== DUBAI_SERVICE_AREA/
+  );
+  assert.match(driverSource, /isOnline && !locationUpdate[\s\S]*?LOCATION_PENDING/);
+  assert.match(
+    mobileSource,
+    /callingUpdateDriverOnlineStatus\(\)[\s\S]*?Geolocator\.getCurrentPosition\([\s\S]*?buildGpsFixPayload\([\s\S]*?driverUpdateOnlineStatusApi/
+  );
+  assert.match(adminSource, /Driver\.find\(\{[\s\S]*?buildFreshDubaiMarketplaceAvailabilityFilter\(\)/);
+  assert.match(dashboardSource, /Driver\.countDocuments\(buildFreshDubaiMarketplaceAvailabilityFilter\(\)\)/);
 });
 
 test("map driver marker identity is based on driver id, not list position", () => {
@@ -94,7 +120,7 @@ test("map driver marker identity is based on driver id, not list position", () =
   assert.match(source, /MarkerId\([\s\S]{0,250}driver\.sId/);
 });
 
-test("Find Now waits for client GPS and never enables a cross-city fallback", () => {
+test("Find Now uses the selected UAE place for REST and realtime discovery", () => {
   const source = readProjectFile(
     "lib/app/modules/user_home/controllers/user_home_controller.dart"
   );
@@ -102,15 +128,19 @@ test("Find Now waits for client GPS and never enables a cross-city fallback", ()
 
   assert.match(
     source,
-    /_initializeDiscovery\(\)[\s\S]*?await checkPermission\(\)[\s\S]*?if \(!hasLocation\)[\s\S]*?return;[\s\S]*?await callingGetAllDriverListApi\(\)/
+    /_initializeDiscovery\(\)[\s\S]*?if \(!hasReferenceLocation\)[\s\S]*?await checkPermission\(\)[\s\S]*?await callingGetAllDriverListApi\(\)/
   );
   assert.match(
     source,
-    /getAllDriverListApi\([\s\S]*?city:\s*parameter\[ApiKeyConstants\.city\][\s\S]*?latitude:\s*isUserLocationLoaded\.value[\s\S]*?longitude:\s*isUserLocationLoaded\.value/
+    /getAllDriverListApi\([\s\S]*?city:\s*parameter\[ApiKeyConstants\.city\][\s\S]*?latitude:\s*hasReferenceLocation\s*\?\s*referenceLocation\.latitude\s*:\s*null[\s\S]*?longitude:\s*hasReferenceLocation\s*\?\s*referenceLocation\.longitude\s*:\s*null/
   );
   assert.match(
     source,
-    /emitJoinCityRoom\([\s\S]*?latitude:\s*isUserLocationLoaded\.value[\s\S]*?longitude:\s*isUserLocationLoaded\.value/
+    /emitJoinCityRoom\([\s\S]*?latitude:\s*hasReferenceLocation\s*\?\s*referenceLocation\.latitude\s*:\s*null[\s\S]*?longitude:\s*hasReferenceLocation\s*\?\s*referenceLocation\.longitude\s*:\s*null/
+  );
+  assert.match(
+    source,
+    /setSelectedCityLocation\(LatLng latLong, String city\)[\s\S]*?selectedLocationLat\.value = latLong\.latitude[\s\S]*?selectedLocationLng\.value = latLong\.longitude[\s\S]*?isSelectedLocationSet\.value = true/
   );
   assert.match(socketSource, /if \(latitude != null\) 'lat': latitude/);
   assert.match(socketSource, /if \(longitude != null\) 'long': longitude/);

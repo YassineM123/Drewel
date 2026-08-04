@@ -697,7 +697,7 @@ export const getAvailableDrivers = async (req, res) => {
       return res.status(422).send({
         success: false,
         code: "OUTSIDE_SERVICE_AREA",
-        message: "Find Now is currently available only inside Dubai",
+        message: "Find Now is available only inside the UAE",
       });
     }
     const candidates = await Driver.aggregate(
@@ -997,6 +997,23 @@ export const updateOnlineStatus = async (req, res) => {
         message: "Only completed, active drivers can go online",
       });
     }
+
+    const locationFields = ["lat", "long", "accuracyM", "recordedAt"];
+    const hasLocationPayload = locationFields.some(
+      (field) => req.body?.[field] !== undefined
+    );
+    let locationUpdate = null;
+    if (isOnline && hasLocationPayload) {
+      locationUpdate = buildDriverLocationUpdate(req.body || {});
+      if (locationUpdate.currentServiceArea !== DUBAI_SERVICE_AREA) {
+        return res.status(422).send({
+          success: false,
+          code: "OUTSIDE_SERVICE_AREA",
+          message: "Drivers can only go online with a fresh GPS fix inside the UAE",
+        });
+      }
+    }
+
     const activeRide = driver.activeRideId || await Ride.exists({
       driverId: driver._id,
       status: {
@@ -1013,6 +1030,7 @@ export const updateOnlineStatus = async (req, res) => {
       },
     });
     if (activeRide) {
+      if (locationUpdate) Object.assign(driver, locationUpdate);
       driver.isOnline = isOnline;
       driver.availabilityStatus = "Busy";
       await driver.save();
@@ -1030,6 +1048,7 @@ export const updateOnlineStatus = async (req, res) => {
       });
     }
 
+    if (locationUpdate) Object.assign(driver, locationUpdate);
     driver.isOnline = isOnline;
     driver.availabilityStatus = isOnline ? "Online" : "Offline";
     await driver.save();
@@ -1042,14 +1061,21 @@ export const updateOnlineStatus = async (req, res) => {
 
     return res.status(200).send({
       success: true,
-      message: `Driver status updated to ${isOnline ? "online" : "offline"}`,
+      ...(
+        isOnline && !locationUpdate
+          ? {
+              code: "LOCATION_PENDING",
+              message: "Online mode enabled; waiting for a fresh GPS fix before map discovery",
+            }
+          : { message: `Driver status updated to ${isOnline ? "online" : "offline"}` }
+      ),
       driver,
     });
   } catch (error) {
-    return res.status(500).send({
+    return res.status(error.statusCode || 500).send({
       success: false,
-      message: "Failed to update driver status",
-      error: error.message,
+      code: error.code || "DRIVER_STATUS_UPDATE_FAILED",
+      message: error.statusCode ? error.message : "Failed to update driver status",
     });
   }
 };
@@ -1091,9 +1117,7 @@ export const updateDriverLocation = async (req, res) => {
 export const getAllOnlineDrivers = async (req, res) => {
   try {
     const drivers = await Driver.find({
-      isOnline: true,
-      isApproved: true,
-      isRestricted: false,
+      ...buildFreshDubaiMarketplaceAvailabilityFilter(),
     })
       .select("firstName lastName fullName phone whatsappNumber isOnline isApproved status")
       .sort({ updatedAt: -1, _id: 1 })

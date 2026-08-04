@@ -979,7 +979,7 @@ class _UserHomeViewState extends State<UserHomeView> {
             icon: const Icon(Icons.refresh),
             label: const Text('Retry'),
           ),
-        const Spacer(),
+        const SizedBox(height: 8),
         Align(
           alignment: Alignment.bottomCenter,
           child: SizedBox(

@@ -14,6 +14,7 @@
           "engine": "git",
           "language": "shell",
           "query": "git log --since=2026-07-01 --until=2026-08-01 --stat --name-status",
+          "sql": "SELECT * FROM (VALUES ('metric','commits','11'), ('metric','core_apps','3'), ('metric','feature_groups','5'), ('metric','new_test_files','36'), ('milestone','2026-07-14','Platform baseline'), ('milestone','2026-07-14_to_2026-07-17','Chat, auth, and dashboard stabilization'), ('milestone','2026-07-18','Driver request workflow'), ('milestone','2026-07-19','Ride chat and in-app calls'), ('milestone','2026-07-24','Documentation'), ('milestone','2026-07-27','Document and image reliability'), ('milestone','2026-07-31','Points marketplace'), ('milestone','2026-07-31','Production ride lifecycle and delivery controls')) AS reviewed_git_evidence(record_type, evidence_key, evidence_value)",
           "description": "Commit history, file changes, and diffs reviewed for July 1–31, 2026.",
           "executed_at": "2026-08-03T12:00:00+01:00",
           "filters": [
@@ -34,6 +35,7 @@
           "engine": "local toolchain",
           "language": "shell",
           "query": "npm test; npm run lint; npm run build; flutter analyze --no-fatal-infos; flutter test",
+          "sql": "SELECT * FROM (VALUES ('Backend','Passed',97), ('Backend','Skipped',17), ('Backend','Failed',0), ('Admin panel','Passed',20), ('Admin panel','Skipped',0), ('Admin panel','Failed',0), ('Flutter','Passed',65), ('Flutter','Skipped',0), ('Flutter','Failed',0)) AS reviewed_validation(surface, outcome, test_count)",
           "description": "Backend, admin panel, and Flutter checks run against the current local working tree.",
           "executed_at": "2026-08-03T12:00:00+01:00",
           "filters": [
@@ -78,6 +80,36 @@
         "metrics": [{"label": "New test files", "field": "new_test_files", "format": "number"}]
       }
     ],
+    "charts": [
+      {
+        "id": "validation_chart",
+        "title": "Test outcomes by application surface",
+        "subtitle": "Local validation on August 3, 2026; counts are test cases and are not directly comparable as coverage measures.",
+        "showDescription": true,
+        "intent": "comparison",
+        "question": "How many tests passed or were skipped across the backend, admin panel, and Flutter app?",
+        "rationale": "A grouped bar chart makes the backend's skipped integration coverage visible while preserving the successful checks across all three surfaces.",
+        "type": "bar",
+        "dataset": "validation_chart_data",
+        "sourceId": "validation_results",
+        "encodings": {
+          "x": {"field": "surface", "type": "nominal", "label": "Application surface"},
+          "y": {"field": "count", "type": "quantitative", "aggregate": "none", "format": "number", "label": "Test cases"},
+          "color": {"field": "outcome", "type": "nominal", "label": "Outcome"},
+          "tooltip": [
+            {"field": "surface", "type": "nominal", "label": "Application surface"},
+            {"field": "outcome", "type": "nominal", "label": "Outcome"},
+            {"field": "count", "type": "quantitative", "format": "number", "label": "Test cases"},
+            {"field": "context", "type": "text", "label": "Context"}
+          ]
+        },
+        "valueFormat": "number",
+        "layout": "full",
+        "palette": {"kind": "categorical"},
+        "maxRows": 6,
+        "emptyState": "Validation results are unavailable."
+      }
+    ],
     "tables": [
       {
         "id": "timeline_table",
@@ -88,13 +120,10 @@
         "sourceId": "git_history",
         "density": "spacious",
         "layout": "full",
-        "defaultSort": {"field": "order", "direction": "asc"},
+        "defaultSort": {"field": "date", "direction": "asc"},
         "columns": [
-          {"field": "order", "label": "#", "type": "number"},
           {"field": "date", "label": "Date", "type": "text"},
-          {"field": "commit", "label": "Commit", "type": "text"},
-          {"field": "delivery", "label": "Delivery", "type": "text"},
-          {"field": "impact", "label": "Product impact", "type": "text"}
+          {"field": "delivery", "label": "Delivery milestone", "type": "text"}
         ]
       },
       {
@@ -106,12 +135,10 @@
         "sourceId": "git_history",
         "density": "spacious",
         "layout": "full",
-        "defaultSort": {"field": "priority", "direction": "asc"},
+        "defaultSort": {"field": "area", "direction": "asc"},
         "columns": [
-          {"field": "priority", "label": "#", "type": "number"},
           {"field": "area", "label": "Area", "type": "text"},
-          {"field": "added", "label": "What was added", "type": "text"},
-          {"field": "business_value", "label": "Why it matters", "type": "text"}
+          {"field": "added", "label": "What changed and why it matters", "type": "text"}
         ]
       },
       {
@@ -123,12 +150,10 @@
         "sourceId": "validation_results",
         "density": "spacious",
         "layout": "full",
-        "defaultSort": {"field": "order", "direction": "asc"},
+        "defaultSort": {"field": "surface", "direction": "asc"},
         "columns": [
-          {"field": "order", "label": "#", "type": "number"},
           {"field": "surface", "label": "Surface", "type": "text"},
-          {"field": "result", "label": "Result", "type": "text"},
-          {"field": "caveat", "label": "Interpretation", "type": "text"}
+          {"field": "result", "label": "Validation result", "type": "text"}
         ]
       },
       {
@@ -140,11 +165,9 @@
         "sourceId": "git_history",
         "density": "spacious",
         "layout": "full",
-        "defaultSort": {"field": "priority", "direction": "asc"},
+        "defaultSort": {"field": "risk", "direction": "asc"},
         "columns": [
-          {"field": "priority", "label": "Priority", "type": "number"},
           {"field": "risk", "label": "Risk", "type": "text"},
-          {"field": "why", "label": "Why it matters", "type": "text"},
           {"field": "action", "label": "Recommended action", "type": "text"}
         ]
       }
@@ -212,9 +235,10 @@
       },
       {
         "id": "capabilities_block",
-        "type": "table",
+        "type": "markdown",
         "layout": "full",
-        "tableId": "capabilities_table"
+        "sourceId": "git_history",
+        "body": "### Capability summary\n\n- **Driver governance:** Two-stage verification, audit history, controlled status changes, and document review created a traceable route from registration to approval.\n- **Ride communication:** Ride chat, receipts, Agora calls, expiry handling, safety controls, and audits moved contact inside the trip context.\n- **Points marketplace:** Wallets, ledger transactions, packs, purchase requests, offers, RBAC, and audits introduced monetization with transactional safeguards.\n- **Ride operations:** Versioned states, pickup PIN, geofencing, live location, routes, cancellation, disputes, and refunds created a controlled trip workflow.\n- **Delivery platform:** Cross-stack tests, GitHub Actions, Dockerfiles, Render configuration, startup rules, and migration scripts improved release repeatability."
       },
       {
         "id": "quality_heading",
@@ -231,6 +255,12 @@
         "body": "## The current baseline passes local checks, with an integration caveat\n\nThe available local suites completed without failures across backend, admin, and Flutter. However, seventeen backend tests were skipped, including MongoDB integration, concurrency, and financial-lifecycle cases. The validation was also run against the current dirty working tree rather than a clean July 31 checkout, so it confirms the present baseline—not the exact historical release state."
       },
       {
+        "id": "validation_chart_block",
+        "type": "chart",
+        "layout": "full",
+        "chartId": "validation_chart"
+      },
+      {
         "id": "validation_block",
         "type": "table",
         "layout": "full",
@@ -245,9 +275,10 @@
       },
       {
         "id": "risk_block",
-        "type": "table",
+        "type": "markdown",
         "layout": "full",
-        "tableId": "risk_table"
+        "sourceId": "git_history",
+        "body": "### Priority risks\n\n- **Potential secret exposure:** Rotate credentials, assess the signing keystore, scan Git history, and purge sensitive material.\n- **Generated and user artifacts are tracked:** Remove builds, distributions, archives, temporary files, and uploaded media from version control.\n- **Integration validation is partial:** Run the full backend suite against a clean MongoDB replica set and make it a release gate.\n- **HTTP and authentication hardening is incomplete:** Add security headers, bounded payloads, strict production CORS, shared rate limiting, and stronger JWT constraints.\n- **Large mixed-purpose commits weaken traceability:** Adopt focused commits, descriptive titles, tagged releases, and pull-request checks."
       },
       {
         "id": "recommendations",
@@ -288,16 +319,24 @@
         {"order": 8, "date": "July 31", "commit": "aef6a75", "delivery": "Production ride lifecycle and delivery controls", "impact": "Added active-ride transitions, PIN/geofence protection, disputes/refunds, admin ride operations, CI, Docker, and Render configuration."}
       ],
       "capabilities": [
-        {"priority": 1, "area": "Driver governance", "added": "Two-stage verification, audit history, review queues, status transitions, document handling, and backfill support.", "business_value": "Creates a consistent, traceable path from registration to approved driver."},
-        {"priority": 2, "area": "Ride communication", "added": "Ride-scoped chat, read receipts, Agora calls, call expiry, report/block controls, and communication audits.", "business_value": "Keeps communication inside the trip context and improves safety oversight."},
-        {"priority": 3, "area": "Points marketplace", "added": "Wallets, immutable ledger, packs, purchase requests, trip offers, reserve/capture/release, admin RBAC, and audits.", "business_value": "Introduces a monetization and driver-demand mechanism with transactional controls."},
-        {"priority": 4, "area": "Ride operations", "added": "Versioned ride states, pickup PIN, geofencing, live driver location, routes, cancellation, disputes, and refunds.", "business_value": "Turns a ride into a controlled operational workflow that can be managed and audited."},
-        {"priority": 5, "area": "Delivery platform", "added": "Cross-stack tests, GitHub Actions, Dockerfiles, Render configuration, production startup rules, and migration scripts.", "business_value": "Improves release repeatability and reduces avoidable deployment regressions."}
+        {"priority": 1, "area": "Driver governance", "added": "Two-stage verification, audit history, review queues, controlled status changes, and document handling create a traceable path from registration to approval."},
+        {"priority": 2, "area": "Ride communication", "added": "Ride chat, receipts, Agora calls, expiry, report/block controls, and communication audits keep contact inside the trip context."},
+        {"priority": 3, "area": "Points marketplace", "added": "Wallets, immutable ledger, packs, purchase requests, trip offers, RBAC, and audits introduce monetization with transactional safeguards."},
+        {"priority": 4, "area": "Ride operations", "added": "Versioned ride states, pickup PIN, geofencing, live location, routes, cancellation, disputes, and refunds create a controlled trip workflow."},
+        {"priority": 5, "area": "Delivery platform", "added": "Cross-stack tests, GitHub Actions, Dockerfiles, Render configuration, startup rules, and migration scripts improve release repeatability."}
       ],
       "validation": [
         {"order": 1, "surface": "Backend", "result": "97 passed · 17 skipped · 0 failed", "caveat": "Skipped tests include transaction, concurrency, and financial-lifecycle integration scenarios."},
         {"order": 2, "surface": "Admin panel", "result": "20 tests passed · lint passed · build passed", "caveat": "Lint still reports a sizeable legacy warning backlog."},
         {"order": 3, "surface": "Flutter", "result": "65 tests passed · analyzer exited successfully", "caveat": "The analyzer reports 167 info-level findings tolerated by --no-fatal-infos."}
+      ],
+      "validation_chart_data": [
+        {"surface": "Backend", "outcome": "Passed", "count": 97, "failed": 0, "context": "MongoDB integration and concurrency tests were skipped"},
+        {"surface": "Backend", "outcome": "Skipped", "count": 17, "failed": 0, "context": "MongoDB integration and concurrency tests were skipped"},
+        {"surface": "Admin panel", "outcome": "Passed", "count": 20, "failed": 0, "context": "Lint and production build also completed"},
+        {"surface": "Admin panel", "outcome": "Skipped", "count": 0, "failed": 0, "context": "Lint and production build also completed"},
+        {"surface": "Flutter", "outcome": "Passed", "count": 65, "failed": 0, "context": "Analyzer completed with 167 tolerated info-level findings"},
+        {"surface": "Flutter", "outcome": "Skipped", "count": 0, "failed": 0, "context": "Analyzer completed with 167 tolerated info-level findings"}
       ],
       "risks": [
         {"priority": 1, "risk": "Potential secret exposure in Git history", "why": "A local environment file and signing keystore entered version control.", "action": "Rotate credentials, assess the keystore, scan history, and purge sensitive material."},
@@ -316,6 +355,7 @@
         "engine": "git",
         "language": "shell",
         "query": "git log --since=2026-07-01 --until=2026-08-01 --stat --name-status",
+        "sql": "SELECT * FROM (VALUES ('metric','commits','11'), ('metric','core_apps','3'), ('metric','feature_groups','5'), ('metric','new_test_files','36'), ('milestone','2026-07-14','Platform baseline'), ('milestone','2026-07-14_to_2026-07-17','Chat, auth, and dashboard stabilization'), ('milestone','2026-07-18','Driver request workflow'), ('milestone','2026-07-19','Ride chat and in-app calls'), ('milestone','2026-07-24','Documentation'), ('milestone','2026-07-27','Document and image reliability'), ('milestone','2026-07-31','Points marketplace'), ('milestone','2026-07-31','Production ride lifecycle and delivery controls')) AS reviewed_git_evidence(record_type, evidence_key, evidence_value)",
         "description": "Commit history, file changes, and diffs reviewed for July 1–31, 2026.",
         "executed_at": "2026-08-03T12:00:00+01:00",
         "filters": ["Committed July work only; uncommitted changes excluded"],
@@ -329,6 +369,7 @@
         "engine": "local toolchain",
         "language": "shell",
         "query": "npm test; npm run lint; npm run build; flutter analyze --no-fatal-infos; flutter test",
+        "sql": "SELECT * FROM (VALUES ('Backend','Passed',97), ('Backend','Skipped',17), ('Backend','Failed',0), ('Admin panel','Passed',20), ('Admin panel','Skipped',0), ('Admin panel','Failed',0), ('Flutter','Passed',65), ('Flutter','Skipped',0), ('Flutter','Failed',0)) AS reviewed_validation(surface, outcome, test_count)",
         "description": "Current backend, admin panel, and Flutter validation results.",
         "executed_at": "2026-08-03T12:00:00+01:00",
         "filters": ["Dirty working tree", "Seventeen backend integration tests skipped"],

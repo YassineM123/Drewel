@@ -12,8 +12,8 @@ import {
 import {
   buildDriverLocationUpdate,
   discoveryRoom,
-  DUBAI_SERVICE_AREA,
-  DUBAI_SERVICE_MULTIPOLYGON,
+  UAE_SERVICE_AREA,
+  UAE_SERVICE_MULTIPOLYGON,
   getDriverLocationFutureSkewMs,
   getDriverLocationMaxFixAgeMs,
   getMarketplaceLocationMaxAccuracyM,
@@ -22,12 +22,22 @@ import {
   validateCoordinates,
 } from "../src/utils/dubaiLocation.js";
 
-test("pinned Dubai MultiPolygon includes Dubai and Hatta but excludes Sharjah", () => {
-  assert.equal(DUBAI_SERVICE_MULTIPOLYGON.length, 9);
-  assert.equal(serviceAreaForCoordinates(25.2048, 55.2708), DUBAI_SERVICE_AREA);
-  assert.equal(serviceAreaForCoordinates(24.8, 56.12), DUBAI_SERVICE_AREA);
-  assert.equal(serviceAreaForCoordinates(25.337, 55.391), null); // Al Majaz
-  assert.equal(serviceAreaForCoordinates(25.326, 55.369), null); // Al Khan
+test("pinned UAE MultiPolygon includes every supported city and excludes neighboring countries", () => {
+  assert.equal(UAE_SERVICE_MULTIPOLYGON.length, 46);
+  for (const [lat, long] of [
+    [24.4539, 54.3773], // Abu Dhabi
+    [25.2048, 55.2708], // Dubai
+    [25.3562, 55.4272], // Sharjah
+    [25.4052, 55.5136], // Ajman
+    [24.2232, 55.7229], // Al Ain
+    [25.8007, 55.9762], // Ras Al Khaimah
+    [25.5508, 55.5524], // Umm Al Quwain
+    [25.1221, 56.3345], // Fujairah
+  ]) {
+    assert.equal(serviceAreaForCoordinates(lat, long), UAE_SERVICE_AREA);
+  }
+  assert.equal(serviceAreaForCoordinates(23.588, 58.3829), null); // Muscat
+  assert.equal(serviceAreaForCoordinates(25.2854, 51.531), null); // Doha
   assert.equal(pointInPolygon(55.2708, 25.2048), true);
   assert.throws(() => validateCoordinates(91, 55), /valid GPS/);
 });
@@ -45,7 +55,7 @@ test("driver GPS updates dual-write GeoJSON in longitude-latitude order", () => 
     coordinates: [55.2708, 25.2048],
   });
   assert.equal(update.locationUpdatedAt.getTime(), now.getTime());
-  assert.equal(update.currentServiceArea, "dubai");
+  assert.equal(update.currentServiceArea, "uae");
   assert.equal(update.locationAccuracyM, 8);
   assert.throws(
     () => buildDriverLocationUpdate({
@@ -109,7 +119,7 @@ test("marketplace accuracy is required, bounded at runtime, and boundary uncerta
     }, now),
     (error) => error.code === "INVALID_LOCATION_ACCURACY"
   );
-  assert.equal(serviceAreaForCoordinates(24.7534103, 55.7391785, 5), null);
+  assert.equal(serviceAreaForCoordinates(24.092714276043068, 52.453150217708412, 5), null);
 });
 
 test("location policy environment values are resolved at call time", () => {
@@ -132,10 +142,10 @@ test("available drivers require exact Online status and no active ride", () => {
   assert.equal(filter.activeRideId, null);
 });
 
-test("action-time marketplace predicate requires fresh accurate Dubai GPS", () => {
+test("action-time marketplace predicate requires fresh accurate UAE GPS", () => {
   const now = new Date("2026-08-03T12:00:00.000Z");
   const filter = buildFreshDubaiMarketplaceAvailabilityFilter({}, now);
-  assert.equal(filter.currentServiceArea, "dubai");
+  assert.equal(filter.currentServiceArea, "uae");
   assert.equal(filter["currentLocation.type"], "Point");
   assert.ok(filter.locationUpdatedAt.$gte < now);
   assert.ok(filter.locationUpdatedAt.$lte > now);
@@ -145,7 +155,7 @@ test("action-time marketplace predicate requires fresh accurate Dubai GPS", () =
   });
 });
 
-test("Dubai discovery aggregation filters freshness and sorts before limiting", () => {
+test("UAE discovery aggregation filters freshness and sorts before limiting", () => {
   const now = new Date("2026-08-03T12:00:00.000Z");
   const options = parseDriverDiscoveryQuery({
     lat: "25.2048",
@@ -156,7 +166,7 @@ test("Dubai discovery aggregation filters freshness and sorts before limiting", 
   const pipeline = buildDubaiDiscoveryAggregation({ vehicleType: "Small Pickup" }, options, now);
   assert.deepEqual(pipeline[0].$geoNear.near.coordinates, [55.2708, 25.2048]);
   assert.equal(pipeline[0].$geoNear.maxDistance, 25_000);
-  assert.equal(pipeline[0].$geoNear.query.currentServiceArea, "dubai");
+  assert.equal(pipeline[0].$geoNear.query.currentServiceArea, "uae");
   assert.ok(pipeline[0].$geoNear.query.locationUpdatedAt.$gte < now);
   assert.deepEqual(pipeline[1], { $sort: { distanceMeters: 1, _id: 1 } });
   assert.deepEqual(pipeline[2], { $limit: 10 });
@@ -165,15 +175,15 @@ test("Dubai discovery aggregation filters freshness and sorts before limiting", 
 test("public location DTO exposes service area and database distance without private data", () => {
   const dto = toAvailableDriverDto({
     _id: "driver-1",
-    fullName: "Dubai Driver",
+    fullName: "UAE Driver",
     phone: "secret",
-    currentServiceArea: "dubai",
+    currentServiceArea: "uae",
     distanceMeters: 1234,
     isOnline: true,
     availabilityStatus: "Online",
   });
   assert.equal(dto.distanceKm, 1.2);
-  assert.equal(dto.currentServiceArea, "dubai");
+  assert.equal(dto.currentServiceArea, "uae");
   assert.equal(Object.hasOwn(dto, "phone"), false);
   const inconsistent = toAvailableDriverDto({
     _id: "driver-2",
@@ -189,5 +199,5 @@ test("Driver schema declares sparse 2dsphere location index", () => {
   assert.ok(locationIndex);
   assert.equal(locationIndex[1].sparse, true);
   assert.equal(locationIndex[1].name, "currentLocation_2dsphere");
-  assert.equal(discoveryRoom("dubai", " Small Pickup "), "discovery:dubai:small pickup");
+  assert.equal(discoveryRoom("uae", " Small Pickup "), "discovery:uae:small pickup");
 });
