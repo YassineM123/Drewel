@@ -1,6 +1,12 @@
 class ApiUrlConstants {
-  static const String _defaultApiBaseUrl = 'https://admin-dreewel.com/api/';
-  static const String _defaultSocketUrl = 'https://admin-dreewel.com';
+  static String _defaultApiBaseUrl() {
+    return 'https://admin-dreewel.com/api/';
+  }
+
+  static String _defaultSocketUrl() {
+    return 'https://admin-dreewel.com';
+  }
+
   static const String supportAdminId = String.fromEnvironment(
     'SUPPORT_ADMIN_ID',
     defaultValue: '6861224ceac0edaf19ffa056',
@@ -8,11 +14,11 @@ class ApiUrlConstants {
 
   static const String _configuredApiBaseUrl = String.fromEnvironment(
     'API_BASE_URL',
-    defaultValue: _defaultApiBaseUrl,
+    defaultValue: '',
   );
   static const String _configuredSocketUrl = String.fromEnvironment(
     'SOCKET_URL',
-    defaultValue: _defaultSocketUrl,
+    defaultValue: '',
   );
 
   static String _withTrailingSlash(String value) {
@@ -27,8 +33,16 @@ class ApiUrlConstants {
         : trimmed;
   }
 
-  static String get baseUrl => _withTrailingSlash(_configuredApiBaseUrl);
-  static String get socketUrl => _withoutTrailingSlash(_configuredSocketUrl);
+  static String get baseUrl => _withTrailingSlash(
+        _configuredApiBaseUrl.isNotEmpty
+            ? _configuredApiBaseUrl
+            : _defaultApiBaseUrl(),
+      );
+  static String get socketUrl => _withoutTrailingSlash(
+        _configuredSocketUrl.isNotEmpty
+            ? _configuredSocketUrl
+            : _defaultSocketUrl(),
+      );
   static String get baseUrlForGetMethodParams => Uri.parse(baseUrl).authority;
 
   static String get endPointOfLogin => '${baseUrl}users/login';

@@ -162,7 +162,7 @@ export const getOnlineDrivers = async (_req, res) => {
       ...buildFreshDubaiMarketplaceAvailabilityFilter(),
     })
       .select(
-        "firstName lastName fullName phone whatsappNumber isOnline isApproved status"
+        "firstName lastName fullName phone whatsappNumber isOnline isApproved status lat long vehicleType vehicleModel registration locationUpdatedAt availabilityStatus"
       )
       .sort({ updatedAt: -1, _id: 1 })
       .lean();
@@ -185,6 +185,43 @@ export const getOnlineDrivers = async (_req, res) => {
     return res.status(500).json({
       success: false,
       message: "Failed to fetch online drivers",
+    });
+  }
+};
+
+export const getDriversWithLocation = async (_req, res) => {
+  try {
+    const drivers = await Driver.find({
+      isApproved: true,
+      isDeleted: { $ne: true },
+      isRestricted: { $ne: true },
+      lat: { $ne: 0 },
+      long: { $ne: 0 },
+    })
+      .select(
+        "firstName lastName fullName phone whatsappNumber isOnline isApproved status lat long vehicleType vehicleModel registration locationUpdatedAt availabilityStatus"
+      )
+      .sort({ locationUpdatedAt: -1, _id: 1 })
+      .lean();
+
+    const normalized = drivers.map((driver) => ({
+      ...driver,
+      fullName:
+        driver.fullName ||
+        [driver.firstName, driver.lastName].filter(Boolean).join(" ").trim(),
+      status: deriveLegacyStatus(driver),
+    }));
+
+    return res.status(200).json({
+      success: true,
+      message: "Drivers with location fetched successfully",
+      drivers: normalized,
+    });
+  } catch (error) {
+    console.error("Failed to fetch drivers with location:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to fetch drivers with location",
     });
   }
 };

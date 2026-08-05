@@ -8,6 +8,10 @@ services:
     envVars:
       - key: NODE_ENV
         value: production
+      - key: PUBLIC_API_URL
+        value: https://drewel-backend.onrender.com
+      - key: ALLOWED_ORIGINS
+        value: https://drewel-admin-panel.onrender.com,https://admin-dreewel.com,https://www.admin-dreewel.com
       - key: PORT
         value: 10000
       - key: HOST

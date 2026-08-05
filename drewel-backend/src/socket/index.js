@@ -77,6 +77,7 @@ const io = new Server(server, {
 
 const onlineUser = new Set();
 const driverSocketCounts = new Map();
+const ADMIN_TRACKING_ROOM = "admin-driver-tracking";
 io.on("connection", async (socket) => {
   const token = socket.handshake.auth.token;
 
@@ -206,6 +207,22 @@ io.on("connection", async (socket) => {
             });
           }
         }
+
+        // ✅ 1b. Broadcast realtime position to ADMIN tracking panel
+        io.to(ADMIN_TRACKING_ROOM).emit("driver:location", {
+          driverId: updatedDriver._id.toString(),
+          lat: updatedDriver.lat,
+          long: updatedDriver.long,
+          locationAccuracyM: updatedDriver.locationAccuracyM,
+          locationUpdatedAt: updatedDriver.locationUpdatedAt,
+          availabilityStatus: updatedDriver.availabilityStatus,
+          isOnline: updatedDriver.isOnline,
+          vehicleType: updatedDriver.vehicleType,
+          vehicleModel: updatedDriver.vehicleModel,
+          fullName:
+            updatedDriver.fullName ||
+            [updatedDriver.firstName, updatedDriver.lastName].filter(Boolean).join(" ").trim(),
+        });
 
         // ✅ 2. Send ACK to DRIVER
         socket.emit("driver-location-updated", updatedDriver);
@@ -379,6 +396,21 @@ io.on("connection", async (socket) => {
       } catch (error) {
         console.error("Error updating isUpdate status:", error);
       }
+    });
+
+    // Admin realtime tracking of all driver positions. The admin map joins
+    // this room once per connection to receive every driver:location update.
+    socket.on("driver-map:track", async ({ on = true } = {}, acknowledge) => {
+      if (!authenticatedAdmin) {
+        acknowledgeSocketEvent(acknowledge, { ok: false, error: "ADMIN_REQUIRED" });
+        return;
+      }
+      if (on) {
+        socket.join(ADMIN_TRACKING_ROOM);
+      } else {
+        socket.leave(ADMIN_TRACKING_ROOM);
+      }
+      acknowledgeSocketEvent(acknowledge, { ok: true, tracking: Boolean(on) });
     });
 
     // socket.on("global-message-page", async (groupId) => {

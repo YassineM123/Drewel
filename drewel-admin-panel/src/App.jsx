@@ -17,6 +17,7 @@ import EditDriver from "./pages/EditDriver";
 import Sponsor from "./pages/Sponsor";
 import ChatWrapper from "./components/chat/ChatWrapper";
 import OnlineDrivers from "./pages/OnlineDrivers";
+import DriverMap from "./pages/DriverMap";
 import PendingRequests from "./pages/PendingRequests";
 import ApprovedRequests from "./pages/ApprovedRequests";
 import RejectedRequests from "./pages/RejectedRequests";
@@ -46,6 +47,7 @@ function App() {
               <Route path="/sponsor" element={<Sponsor/>}/>
               <Route path="/drivers" element={<Drivers />} />
               <Route path="/onlineDrivers" element={<OnlineDrivers />} />
+              <Route path="/driver-map" element={<DriverMap />} />
               <Route path="/requests/pending" element={<PendingRequests />} />
               <Route path="/requests/approved" element={<ApprovedRequests />} />
               <Route path="/requests/rejected" element={<RejectedRequests />} />

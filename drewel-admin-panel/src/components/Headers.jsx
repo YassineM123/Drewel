@@ -188,6 +188,15 @@ const Headers = ({ setIsSideBarOpen }) => {
             </NavLink>
           </li>
           <li>
+            <NavLink className="app-menu__item" to="/driver-map">
+              <i
+                className="app-menu__icon mx-3 fa-sharp fa-light fa-map-location-dot pr-1"
+                style={{ fontWeight: "700" }}
+              ></i>
+              <span className="app-menu__label">Driver Live Map</span>
+            </NavLink>
+          </li>
+          <li>
             <NavLink className="app-menu__item" to="/drivers">
               <i
                 className="app-menu__icon mx-3 fa-sharp fa-light fa-users pr-1"

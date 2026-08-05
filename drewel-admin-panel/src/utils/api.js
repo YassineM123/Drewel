@@ -153,6 +153,22 @@ export const getOnlineDriverList = async () => {
     }
 };
 
+export const getDriversWithLocation = async () => {
+    const authTokenExist = localStorage.getItem("authToken");
+    if (!authTokenExist) {
+        throw new Error("Auth token does not exist in localStorage.");
+    }
+    const response = await apiClient.get(`${API_URL}/admin/drivers/location`, {
+        headers: {
+            Authorization: `Bearer ${authTokenExist}`,
+        },
+    });
+    if (!response.data?.success || !Array.isArray(response.data?.drivers)) {
+        throw new Error(response.data?.message || "Invalid drivers location response.");
+    }
+    return response.data.drivers;
+};
+
 
 export const getClubList = async () => {
     const authTokenExist = localStorage.getItem("authToken");

@@ -5,6 +5,7 @@ import {
   getDriversForReview,
   getDriverReviewDetails,
   getOnlineDrivers,
+  getDriversWithLocation,
 } from '../controllers/adminController.js';
 import {
   approveAdminRequest,
@@ -38,6 +39,7 @@ router.post("/register", requireSignIn, isAdmin, registerAdmin);
 router.post('/login',loginAdmin);
 router.get('/dashboard',requireSignIn,isAdmin,dashBoardData)
 router.get('/drivers/online', requireSignIn, isAdmin, getOnlineDrivers);
+router.get('/drivers/location', requireSignIn, isAdmin, getDriversWithLocation);
 router.get('/drivers', requireSignIn, isAdmin, getDriversForReview);
 router.get('/driver/:id', requireSignIn, isAdmin, getDriverReviewDetails);
 router.get('/requests', requireSignIn, isAdmin, getAdminRequests);
