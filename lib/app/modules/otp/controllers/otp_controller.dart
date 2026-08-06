@@ -1,4 +1,9 @@
+import 'dart:async';
+
 import 'package:drewel/app/data/apis/api_constants/api_key_constants.dart';
+import 'package:drewel/app/data/apis/api_models/get_send_otp_model.dart'
+    hide User;
+import 'package:drewel/app/data/apis/api_models/get_simple_response_model.dart';
 import 'package:drewel/app/data/apis/api_models/get_login_model.dart';
 import 'package:drewel/app/data/constants/string_constants.dart';
 import 'package:drewel/app/routes/app_pages.dart';
@@ -13,17 +18,39 @@ import '../../../../common/common_widgets.dart';
 import '../../../data/apis/api_methods/api_methods.dart';
 
 class OtpController extends GetxController {
-  TextEditingController pin = TextEditingController();
+  final TextEditingController pin = TextEditingController();
   final showLoading = false.obs;
+  final resendLoading = false.obs;
+  final resendSeconds = 30.obs;
+  final otpError = ''.obs;
+  Timer? _resendTimer;
   Map<String, String?> parameter = Get.parameters;
   final count = 0.obs;
   bool get isWhatsappLogin => parameter[ApiKeyConstants.isWhatsapp] == 'true';
   int get otpLength => isWhatsappLogin ? 6 : 4;
+  bool get canResend => resendSeconds.value <= 0 && !resendLoading.value;
 
   void _log(String message) {
     if (kDebugMode) {
       debugPrint('[OtpController] $message');
     }
+  }
+
+  @override
+  void onInit() {
+    super.onInit();
+    pin.addListener(() {
+      if (otpError.value.isNotEmpty) otpError.value = '';
+      increment();
+    });
+    _startResendTimer();
+  }
+
+  @override
+  void onClose() {
+    _resendTimer?.cancel();
+    pin.dispose();
+    super.onClose();
   }
 
   String _normalizeType(String? type) {
@@ -69,6 +96,71 @@ class OtpController extends GetxController {
 
   void increment() => count.value++;
 
+  void _startResendTimer({int seconds = 30}) {
+    _resendTimer?.cancel();
+    resendSeconds.value = seconds;
+    _resendTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (resendSeconds.value <= 0) {
+        timer.cancel();
+        return;
+      }
+      resendSeconds.value--;
+    });
+  }
+
+  Future<void> resendOtp() async {
+    if (!canResend) return;
+    resendLoading.value = true;
+    otpError.value = '';
+    try {
+      final String selectedType = await _resolveSelectedType();
+      if (isWhatsappLogin) {
+        final SimpleResponseModel? response =
+            await ApiMethods.sendOtpWhatsAppApi(bodyParams: <String, String>{
+          ApiKeyConstants.phone: parameter[ApiKeyConstants.phone] ?? '',
+          ApiKeyConstants.countryCode:
+              parameter[ApiKeyConstants.countryCode] ?? '',
+          ApiKeyConstants.type: selectedType,
+        });
+        if (response?.success == true) {
+          pin.clear();
+          _startResendTimer();
+          CommonWidgets.snackBarView(
+            title: response?.message ?? 'A new OTP has been sent.',
+            success: true,
+          );
+        } else {
+          otpError.value = response?.message ?? 'Unable to resend OTP.';
+        }
+      } else {
+        final SendOtpModel? response = await ApiMethods.sendOtpApi(
+          bodyParams: <String, dynamic>{
+            ApiKeyConstants.phone: parameter[ApiKeyConstants.phone] ?? '',
+            ApiKeyConstants.countryCode:
+                parameter[ApiKeyConstants.countryCode] ?? '',
+            ApiKeyConstants.type: selectedType,
+          },
+        );
+        if (response?.success == true) {
+          pin.clear();
+          _startResendTimer();
+          CommonWidgets.snackBarView(
+            title: response?.message ?? 'A new OTP has been sent.',
+            success: true,
+          );
+        } else {
+          otpError.value = response?.message ?? 'Unable to resend OTP.';
+        }
+      }
+    } catch (e) {
+      otpError.value = e.toString().trim().isNotEmpty
+          ? e.toString()
+          : 'Unable to resend OTP.';
+    } finally {
+      resendLoading.value = false;
+    }
+  }
+
   Future<void> clickOnNextButton(BuildContext context) async {
     final String otp = pin.text.trim();
     if (otp.isNotEmpty) {
@@ -76,14 +168,14 @@ class OtpController extends GetxController {
           'Verify OTP clicked. flow=${isWhatsappLogin ? 'whatsapp' : 'normal'}, enteredOtpLength=${otp.length}, expectedOtpLength=$otpLength');
       if (otp.length != otpLength) {
         _log('OTP length mismatch. Verification aborted.');
-        CommonWidgets.snackBarView(
-            title: isWhatsappLogin
-                ? StringConstants.otpMustBe6Digits
-                : StringConstants.otpMustBe4Digits);
+        otpError.value = isWhatsappLogin
+            ? StringConstants.otpMustBe6Digits
+            : StringConstants.otpMustBe4Digits;
         return;
       }
       try {
         showLoading.value = true;
+        otpError.value = '';
         final String selectedType = await _resolveSelectedType();
         _log('Proceeding OTP verification with selectedType=$selectedType');
         late LoginModel? loginModel;
@@ -144,17 +236,16 @@ class OtpController extends GetxController {
           }
         } else {
           _log('OTP verify failed. message=${loginModel?.message}');
-          CommonWidgets.snackBarView(
-              title: loginModel?.message ?? 'Otp Verified Failed ...');
+          otpError.value = loginModel?.message ?? 'Otp Verified Failed ...';
         }
       } catch (e) {
         showLoading.value = false;
         _log('OTP verify exception: $e');
-        CommonWidgets.snackBarView(title: 'Something is wrong...');
+        otpError.value = 'Something is wrong...';
       }
       showLoading.value = false;
     } else {
-      CommonWidgets.snackBarView(title: 'Please enter otp ...');
+      otpError.value = 'Please enter otp ...';
     }
   }
 

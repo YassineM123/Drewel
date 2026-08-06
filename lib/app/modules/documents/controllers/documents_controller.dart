@@ -1,3 +1,4 @@
+import 'dart:typed_data';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
@@ -78,7 +79,23 @@ class DocumentsController extends GetxController {
       canEditProfile &&
       !isLoadingDetails.value &&
       !showLoading.value &&
-      hasUnsavedChanges;
+      hasUnsavedChanges &&
+      missingRequiredDocuments.isEmpty;
+
+  List<String> get missingRequiredDocuments {
+    final List<String> missing = <String>[];
+    for (int index = 0; index < fileNameList.length; index++) {
+      final bool needsBack = isBackRequired(index);
+      if (needsBack) {
+        missing.add(fileNameList[index]['name'].toString());
+        continue;
+      }
+      if (!isDocumentPresent(index)) {
+        missing.add(fileNameList[index]['name'].toString());
+      }
+    }
+    return missing;
+  }
 
   String get profileLockMessage {
     final driver = driverDetail?.driver;
@@ -192,6 +209,12 @@ class DocumentsController extends GetxController {
         title: 'The selected image could not be read. Please choose another.',
       );
     }
+  }
+
+  void clearSelectedDocument(int index) {
+    selectedFile[index] = null;
+    selectedPreviewBytes[index] = null;
+    increment();
   }
 
   bool isDocumentPresent(int index) =>
@@ -653,5 +676,12 @@ class DocumentsController extends GetxController {
     cityController.dispose();
     typeController.dispose();
     super.onClose();
+  }
+
+  String previewStateMessage(int index) {
+    if (selectedFile[index] != null) return 'Selected';
+    if (documentUrl[index].trim().isNotEmpty) return 'Uploaded';
+    if (isBackRequired(index)) return 'Required';
+    return 'Optional';
   }
 }

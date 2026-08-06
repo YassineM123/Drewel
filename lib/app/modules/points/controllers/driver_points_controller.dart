@@ -74,6 +74,10 @@ class DriverPointsController extends GetxController
   final RxBool isSendingOffer = false.obs;
   final RxBool isCreatingPurchaseRequest = false.obs;
   final RxBool isSocketConnected = false.obs;
+  final RxBool isLoadingPacks = false.obs;
+  final RxBool isLoadingPurchaseRequests = false.obs;
+  final RxString packsError = ''.obs;
+  final RxString purchaseRequestsError = ''.obs;
 
   Future<bool>? _walletRefresh;
   Timer? _fallbackTimer;
@@ -190,18 +194,29 @@ class DriverPointsController extends GetxController
   }
 
   Future<void> refreshPacks() async {
+    isLoadingPacks.value = true;
+    packsError.value = '';
     try {
       packs.assignAll(await _repository.getPacks());
     } catch (error) {
-      debugPrint('Point pack refresh failed: ${error.runtimeType}');
+      packsError.value = 'Unable to load point packs. Pull to retry.';
+      debugPrint('Point pack refresh failed: $error');
+    } finally {
+      isLoadingPacks.value = false;
     }
   }
 
   Future<void> refreshPurchaseRequests() async {
+    isLoadingPurchaseRequests.value = true;
+    purchaseRequestsError.value = '';
     try {
       purchaseRequests.assignAll(await _repository.getPurchaseRequests());
     } catch (error) {
-      debugPrint('Purchase request refresh failed: ${error.runtimeType}');
+      purchaseRequestsError.value =
+          'Unable to load previous purchase requests. Pull to retry.';
+      debugPrint('Purchase request refresh failed: $error');
+    } finally {
+      isLoadingPurchaseRequests.value = false;
     }
   }
 

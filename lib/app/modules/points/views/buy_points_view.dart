@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 
 import '../../../../common/colors.dart';
+import '../../../../common/responsive_primary_button.dart';
 import '../../../data/apis/api_models/driver_points_models.dart';
 import '../../../routes/app_pages.dart';
 import '../controllers/driver_points_controller.dart';
@@ -17,7 +18,13 @@ class BuyPointsView extends GetView<DriverPointsController> {
             () => RefreshIndicator(
               onRefresh: controller.refreshAll,
               child: ListView(
-                padding: const EdgeInsets.all(16),
+                physics: const AlwaysScrollableScrollPhysics(),
+                padding: EdgeInsets.fromLTRB(
+                  16,
+                  16,
+                  16,
+                  16 + MediaQuery.of(context).padding.bottom,
+                ),
                 children: <Widget>[
                   Card(
                     color: primaryColor,
@@ -46,8 +53,21 @@ class BuyPointsView extends GetView<DriverPointsController> {
                         ),
                   ),
                   const SizedBox(height: 8),
-                  if (controller.packs.isEmpty)
-                    _MessageCard(message: 'points.no_packs'.tr)
+                  if (controller.isLoadingPacks.value &&
+                      controller.packs.isEmpty)
+                    const _LoadingCard()
+                  else if (controller.packsError.value.isNotEmpty &&
+                      controller.packs.isEmpty)
+                    _ErrorCard(
+                      message: controller.packsError.value,
+                      onRetry: controller.refreshPacks,
+                    )
+                  else if (controller.packs.isEmpty)
+                    _MessageCard(
+                      message: controller.packsError.value.isNotEmpty
+                          ? controller.packsError.value
+                          : 'points.no_packs'.tr,
+                    )
                   else
                     ...controller.packs.map(
                       (pack) => _PointPackCard(
@@ -69,8 +89,21 @@ class BuyPointsView extends GetView<DriverPointsController> {
                         ),
                   ),
                   const SizedBox(height: 8),
-                  if (controller.purchaseRequests.isEmpty)
-                    _MessageCard(message: 'points.no_history'.tr)
+                  if (controller.isLoadingPurchaseRequests.value &&
+                      controller.purchaseRequests.isEmpty)
+                    const _LoadingCard()
+                  else if (controller.purchaseRequestsError.value.isNotEmpty &&
+                      controller.purchaseRequests.isEmpty)
+                    _ErrorCard(
+                      message: controller.purchaseRequestsError.value,
+                      onRetry: controller.refreshPurchaseRequests,
+                    )
+                  else if (controller.purchaseRequests.isEmpty)
+                    _MessageCard(
+                      message: controller.purchaseRequestsError.value.isNotEmpty
+                          ? controller.purchaseRequestsError.value
+                          : 'points.no_history'.tr,
+                    )
                   else
                     ...controller.purchaseRequests.map(
                       (request) => _PurchaseRequestTile(request: request),
@@ -150,44 +183,68 @@ class _PointPackCard extends StatelessWidget {
   Widget build(BuildContext context) => Card(
         child: Padding(
           padding: const EdgeInsets.all(16),
-          child: Row(
-            children: <Widget>[
-              const CircleAvatar(
-                backgroundColor: Color(0x1FBE1B2C),
-                child: Icon(Icons.toll_rounded, color: primaryColor),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
+          child: LayoutBuilder(
+            builder: (BuildContext context, BoxConstraints constraints) {
+              final bool compact = constraints.maxWidth < 420;
+              final Widget info = Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: <Widget>[
                     Text(
                       pack.name,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
                       style: const TextStyle(fontWeight: FontWeight.bold),
                     ),
                     Text('${pack.points} ${'points.available'.tr}'),
                     Text('${pack.price.toStringAsFixed(2)} ${pack.currency}'),
                   ],
                 ),
-              ),
-              Semantics(
-                button: true,
-                label: '${'points.request'.tr}: ${pack.name}',
-                child: SizedBox(
-                  height: 48,
-                  child: FilledButton(
-                    key: Key('request-pack-${pack.id}'),
-                    onPressed: loading ? null : onRequest,
-                    child: loading
-                        ? const SizedBox.square(
-                            dimension: 18,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : Text('points.request'.tr),
+              );
+
+              final Widget action = ResponsivePrimaryButton(
+                key: Key('request-pack-${pack.id}'),
+                semanticLabel: '${'points.request'.tr}: ${pack.name}',
+                onPressed: loading ? null : onRequest,
+                isLoading: loading,
+                child: Text('points.request'.tr),
+              );
+
+              if (compact) {
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: <Widget>[
+                        const CircleAvatar(
+                          backgroundColor: Color(0x1FBE1B2C),
+                          child: Icon(Icons.toll_rounded, color: primaryColor),
+                        ),
+                        const SizedBox(width: 12),
+                        info,
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    action,
+                  ],
+                );
+              }
+
+              return Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: <Widget>[
+                  const CircleAvatar(
+                    backgroundColor: Color(0x1FBE1B2C),
+                    child: Icon(Icons.toll_rounded, color: primaryColor),
                   ),
-                ),
-              ),
-            ],
+                  const SizedBox(width: 12),
+                  info,
+                  const SizedBox(width: 12),
+                  SizedBox(width: 160, child: action),
+                ],
+              );
+            },
           ),
         ),
       );
@@ -279,50 +336,103 @@ class _CustomAmountCardState extends State<_CustomAmountCard> {
   Widget build(BuildContext context) => Card(
         child: Padding(
           padding: const EdgeInsets.all(16),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: <Widget>[
-              const CircleAvatar(
-                backgroundColor: Color(0x1FBE1B2C),
-                child: Icon(Icons.edit_rounded, color: primaryColor),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
+          child: LayoutBuilder(
+            builder: (BuildContext context, BoxConstraints constraints) {
+              final bool compact = constraints.maxWidth < 420;
+              final Widget form = Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  Text(
+                    'points.custom_amount'.tr,
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 8),
+                  TextField(
+                    key: const Key('custom-points-input'),
+                    controller: _controller,
+                    keyboardType: TextInputType.number,
+                    decoration: InputDecoration(
+                      labelText: 'points.custom_amount_label'.tr,
+                      hintText: 'points.custom_amount_hint'.tr,
+                      errorText: _error,
+                      isDense: true,
+                    ),
+                  ),
+                ],
+              );
+
+              final Widget button = ResponsivePrimaryButton(
+                key: const Key('request-custom-points'),
+                onPressed: widget.loading ? null : _submit,
+                isLoading: widget.loading,
+                child: Text('points.request'.tr),
+                semanticLabel: 'points.request'.tr,
+              );
+
+              if (compact) {
+                return Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: <Widget>[
-                    Text(
-                      'points.custom_amount'.tr,
-                      style: const TextStyle(fontWeight: FontWeight.bold),
+                    const CircleAvatar(
+                      backgroundColor: Color(0x1FBE1B2C),
+                      child: Icon(Icons.edit_rounded, color: primaryColor),
                     ),
-                    const SizedBox(height: 8),
-                    TextField(
-                      key: const Key('custom-points-input'),
-                      controller: _controller,
-                      keyboardType: TextInputType.number,
-                      decoration: InputDecoration(
-                        labelText: 'points.custom_amount_label'.tr,
-                        hintText: 'points.custom_amount_hint'.tr,
-                        errorText: _error,
-                        isDense: true,
-                      ),
-                    ),
+                    const SizedBox(height: 12),
+                    form,
+                    const SizedBox(height: 12),
+                    button,
                   ],
-                ),
-              ),
-              const SizedBox(width: 12),
-              SizedBox(
-                height: 48,
-                child: FilledButton(
-                  key: const Key('request-custom-points'),
-                  onPressed: widget.loading ? null : _submit,
-                  child: widget.loading
-                      ? const SizedBox.square(
-                          dimension: 18,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : Text('points.request'.tr),
-                ),
+                );
+              }
+
+              return Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  const CircleAvatar(
+                    backgroundColor: Color(0x1FBE1B2C),
+                    child: Icon(Icons.edit_rounded, color: primaryColor),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(child: form),
+                  const SizedBox(width: 12),
+                  SizedBox(width: 160, child: button),
+                ],
+              );
+            },
+          ),
+        ),
+      );
+}
+
+class _LoadingCard extends StatelessWidget {
+  const _LoadingCard();
+
+  @override
+  Widget build(BuildContext context) => const Card(
+        child: Padding(
+          padding: EdgeInsets.all(20),
+          child: Center(child: CircularProgressIndicator()),
+        ),
+      );
+}
+
+class _ErrorCard extends StatelessWidget {
+  const _ErrorCard({required this.message, required this.onRetry});
+
+  final String message;
+  final Future<void> Function() onRetry;
+
+  @override
+  Widget build(BuildContext context) => Card(
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            children: <Widget>[
+              Text(message, textAlign: TextAlign.center),
+              const SizedBox(height: 12),
+              FilledButton(
+                onPressed: onRetry,
+                child: Text('points.retry'.tr),
               ),
             ],
           ),

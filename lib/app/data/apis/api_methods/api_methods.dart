@@ -124,10 +124,29 @@ class ApiMethods {
         checkResponse: checkResponse,
         wantSnackBar: false);
     if (response != null) {
-      sendOtpModel = SendOtpModel.fromJson(jsonDecode(response.body));
+      final Map<String, dynamic>? decoded = _tryDecodeMap(response.body);
+      sendOtpModel = decoded != null ? SendOtpModel.fromJson(decoded) : null;
       return sendOtpModel;
     }
     return null;
+  }
+
+  static LoginModel _asLoginModel(
+    http.Response? response,
+    String fallbackMessage,
+  ) {
+    final Map<String, dynamic>? decoded = _tryDecodeMap(response?.body ?? '');
+    if (decoded != null) return LoginModel.fromJson(decoded);
+
+    final String body = (response?.body ?? '').trim();
+    return LoginModel(
+      success: false,
+      message: body.isNotEmpty
+          ? body
+          : response != null
+              ? '$fallbackMessage (HTTP ${response.statusCode})'
+              : fallbackMessage,
+    );
   }
 
   /// Send whatsapp otp api.....
@@ -144,8 +163,9 @@ class ApiMethods {
       returnResponseOnError: true,
     );
     if (response != null) {
+      final Map<String, dynamic>? decoded = _tryDecodeMap(response.body);
       simpleResponseModel =
-          SimpleResponseModel.fromJson(jsonDecode(response.body));
+          decoded != null ? SimpleResponseModel.fromJson(decoded) : null;
       return simpleResponseModel;
     }
     return null;
@@ -161,9 +181,10 @@ class ApiMethods {
       bodyParams: bodyParams,
       url: ApiUrlConstants.endPointOfOtpVerify,
       checkResponse: checkResponse,
+      returnResponseOnError: true,
     );
     if (response != null) {
-      loginModel = LoginModel.fromJson(jsonDecode(response.body));
+      loginModel = _asLoginModel(response, 'Failed to verify OTP');
       return loginModel;
     }
     return null;
@@ -179,9 +200,10 @@ class ApiMethods {
       bodyParams: bodyParams,
       url: ApiUrlConstants.endPointOfVerifyOtpWhatsapp,
       checkResponse: checkResponse,
+      returnResponseOnError: true,
     );
     if (response != null) {
-      loginModel = LoginModel.fromJson(jsonDecode(response.body));
+      loginModel = _asLoginModel(response, 'Failed to verify WhatsApp OTP');
       return loginModel;
     }
     return null;
