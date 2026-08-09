@@ -16,6 +16,12 @@ class MyHttp {
   static final http.Client _client = ApiInterceptorClient();
   static const int _minMultipartTimeoutSeconds = 60;
   static const int _maxMultipartTimeoutSeconds = 300;
+  static const Duration _requestTimeout = Duration(seconds: 20);
+
+  static String _timeoutFailureMessage(String url) {
+    return "The server at ${Uri.parse(url).origin} didn't respond in time. "
+        "It may be offline or unreachable.";
+  }
 
   static String _webFetchFailureMessage(String url) {
     final String origin = Uri.base.origin;
@@ -103,10 +109,12 @@ class MyHttp {
     }
 
     try {
-      http.Response? response = await _client.get(
-        Uri.parse(url),
-        headers: authorization,
-      );
+      http.Response? response = await _client
+          .get(
+            Uri.parse(url),
+            headers: authorization,
+          )
+          .timeout(_requestTimeout);
       if (kDebugMode) print("HTTP GET completed: ${response.statusCode}");
       if (await CommonWidgets.responseCheckForGetMethod(response: response)) {
         checkResponse?.call(response.statusCode);
@@ -118,8 +126,15 @@ class MyHttp {
         }
         return null;
       }
+    } on TimeoutException catch (e) {
+      if (kDebugMode) print("EXCEPTION:: GET timed out $e");
+      CommonWidgets.snackBarView(title: _timeoutFailureMessage(url));
+      return null;
     } catch (e) {
       if (kDebugMode) print("EXCEPTION:: Server Down $e");
+      if (kIsWeb && e.toString().contains('Failed to fetch')) {
+        CommonWidgets.snackBarView(title: _webFetchFailureMessage(url));
+      }
       return null;
     }
   }
@@ -192,11 +207,13 @@ class MyHttp {
     }
     if (await CommonWidgets.internetConnectionCheckerMethod()) {
       Future<http.Response?> doPost(http.Client client) async {
-        final response = await client.post(
-          Uri.parse(url),
-          body: jsonEncode(bodyParams ?? <String, dynamic>{}),
-          headers: authorization,
-        );
+        final response = await client
+            .post(
+              Uri.parse(url),
+              body: jsonEncode(bodyParams ?? <String, dynamic>{}),
+              headers: authorization,
+            )
+            .timeout(_requestTimeout);
         if (kDebugMode) print("CALLING:: ${response.statusCode}");
         if (kDebugMode) print("HTTP POST response received");
         if (await CommonWidgets.responseCheckForPostMethod(
@@ -232,6 +249,10 @@ class MyHttp {
           }
           return null;
         }
+      } on TimeoutException catch (e) {
+        if (kDebugMode) print("EXCEPTION:: POST timed out $e");
+        CommonWidgets.snackBarView(title: _timeoutFailureMessage(url));
+        return null;
       } catch (e) {
         if (kDebugMode) print("EXCEPTION:: Server Down $e");
         if (kIsWeb && e.toString().contains('Failed to fetch')) {
@@ -269,10 +290,12 @@ class MyHttp {
     }
     if (await CommonWidgets.internetConnectionCheckerMethod()) {
       try {
-        http.Response? response = await _client.delete(
-          Uri.parse(url),
-          headers: authorization,
-        );
+        http.Response? response = await _client
+            .delete(
+              Uri.parse(url),
+              headers: authorization,
+            )
+            .timeout(_requestTimeout);
         if (kDebugMode) print("HTTP DELETE completed: ${response.statusCode}");
         if (await CommonWidgets.responseCheckForPostMethod(
             response: response)) {
@@ -285,8 +308,15 @@ class MyHttp {
           }
           return null;
         }
+      } on TimeoutException catch (e) {
+        if (kDebugMode) print("EXCEPTION:: DELETE timed out $e");
+        CommonWidgets.snackBarView(title: _timeoutFailureMessage(url));
+        return null;
       } catch (e) {
         if (kDebugMode) print("EXCEPTION:: Server Down $e");
+        if (kIsWeb && e.toString().contains('Failed to fetch')) {
+          CommonWidgets.snackBarView(title: _webFetchFailureMessage(url));
+        }
         return null;
       }
     } else {

@@ -284,11 +284,11 @@ class DocumentsView extends GetView<DocumentsController> {
                 isLoading: controller.showLoading.value,
                 backgroundColor:
                     controller.canSubmit ? primaryColor : Colors.grey.shade500,
+                semanticLabel: StringConstants.update,
                 child: Text(
                   StringConstants.update,
                   style: MyTextStyle.titleStyle16bw,
                 ),
-                semanticLabel: StringConstants.update,
               ),
             ),
           ),
@@ -394,7 +394,7 @@ class _DocumentPreview extends StatelessWidget {
           Positioned(
             top: 8.px,
             right: 8.px,
-            child: _StatusChip(label: 'Ready'),
+            child: const _StatusChip(label: 'Ready'),
           ),
         ],
       );

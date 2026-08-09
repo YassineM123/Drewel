@@ -365,8 +365,8 @@ class _CustomAmountCardState extends State<_CustomAmountCard> {
                 key: const Key('request-custom-points'),
                 onPressed: widget.loading ? null : _submit,
                 isLoading: widget.loading,
-                child: Text('points.request'.tr),
                 semanticLabel: 'points.request'.tr,
+                child: Text('points.request'.tr),
               );
 
               if (compact) {

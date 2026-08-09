@@ -60,8 +60,7 @@ class OtpView extends GetView<OtpController> {
                             ),
                           ),
                           SizedBox(height: 18.px),
-                          Expanded(
-                            child: Container(
+                          Container(
                               width: double.infinity,
                               padding: EdgeInsets.symmetric(
                                 horizontal: 20.px,
@@ -138,7 +137,7 @@ class OtpView extends GetView<OtpController> {
                                       ),
                                     ],
                                   ),
-                                  const Spacer(),
+                                  SizedBox(height: 24.px),
                                   ResponsivePrimaryButton(
                                     onPressed: isOtpComplete &&
                                             !controller.showLoading.value
@@ -146,16 +145,15 @@ class OtpView extends GetView<OtpController> {
                                             .clickOnNextButton(context)
                                         : null,
                                     isLoading: controller.showLoading.value,
+                                    semanticLabel: StringConstants.verifyNow,
                                     child: Text(
                                       StringConstants.verifyNow,
                                       style: MyTextStyle.titleStyle16bw,
                                     ),
-                                    semanticLabel: StringConstants.verifyNow,
                                   ),
                                 ],
                               ),
                             ),
-                          ),
                         ],
                       ),
                     ),
