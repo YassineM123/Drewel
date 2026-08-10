@@ -133,6 +133,14 @@ const driverSchema = new mongoose.Schema(
       type: Number,
       default: 0,
     },
+    heading: {
+      type: Number,
+      default: null,
+    },
+    speed: {
+      type: Number,
+      default: null,
+    },
     isOnline: {
       type: Boolean,
       default: false,

@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import { canonicalLabelKey } from "./canonicalLabels.js";
 
 export const UAE_SERVICE_AREA = "uae";
 export const TUNISIA_TEST_SERVICE_AREA = "tunisia-test";
@@ -152,21 +153,11 @@ export const distanceToUaeBoundaryMeters = (long, lat) => {
   return minimum;
 };
 
-export const serviceAreaForCoordinates = (lat, long, accuracyM = 0, context = {}) => {
+// Geofencing removed: the marketplace is worldwide, so any valid GPS fix
+// belongs to the single UAE_SERVICE_AREA bucket used by discovery/matching.
+export const serviceAreaForCoordinates = (lat, long) => {
   validateCoordinates(lat, long);
-  if (pointInMultiPolygon(long, lat)) {
-    return accuracyM > 0 && distanceToUaeBoundaryMeters(long, lat) <= accuracyM
-      ? null
-      : UAE_SERVICE_AREA;
-  }
-  if (isTunisiaTestActorAllowed(context.actorId, context.actorType) &&
-      // This is an allowlisted QA marketplace. Browser/desktop geolocation
-      // often reports coarse accuracy, so uncertainty must not push an
-      // otherwise valid Tunisia point outside the test geofence.
-      isInsideTunisiaTestGeofence(lat, long)) {
-    return TUNISIA_TEST_SERVICE_AREA;
-  }
-  return null;
+  return UAE_SERVICE_AREA;
 };
 
 export const distanceToDubaiBoundaryMeters = distanceToUaeBoundaryMeters;
@@ -202,7 +193,7 @@ const validateRecordedAt = (recordedAt, now) => {
 };
 
 export const buildDriverLocationUpdate = (
-  { lat, long, accuracyM, recordedAt },
+  { lat, long, accuracyM, recordedAt, heading, speed },
   now = new Date(),
   context = {}
 ) => {
@@ -235,6 +226,8 @@ export const buildDriverLocationUpdate = (
   return {
     lat,
     long,
+    ...(Number.isFinite(Number(heading)) ? { heading: Number(heading) } : {}),
+    ...(Number.isFinite(Number(speed)) ? { speed: Number(speed) } : {}),
     currentLocation: { type: "Point", coordinates: [long, lat] },
     // Discovery freshness follows the GPS measurement, not heartbeat receipt.
     // Re-sending a cached fix therefore cannot keep a driver discoverable.
@@ -245,6 +238,6 @@ export const buildDriverLocationUpdate = (
 };
 
 export const discoveryRoom = (serviceArea, vehicleType) => {
-  const vehicle = String(vehicleType || "all").trim().toLowerCase() || "all";
+  const vehicle = canonicalLabelKey(vehicleType) || "all";
   return `discovery:${serviceArea}:${vehicle}`;
 };

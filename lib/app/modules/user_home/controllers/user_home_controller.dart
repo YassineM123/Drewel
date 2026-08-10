@@ -20,6 +20,7 @@ import 'dart:ui' as ui;
 import 'dart:io';
 import '../../../../common/colors.dart';
 import '../../../../common/common_widgets.dart';
+import '../../../../common/vehicle_assets.dart';
 import '../../../../common/text_styles.dart';
 import '../../../data/apis/api_constants/api_key_constants.dart';
 import '../../../data/apis/api_methods/api_methods.dart';
@@ -45,6 +46,13 @@ class UserHomeController extends GetxController
   /// Google Places autocomplete suggestions
   final RxList<Prediction> placeSuggestions = <Prediction>[].obs;
   Timer? _placesDebounce;
+  int _placeSearchRequestId = 0;
+
+  /// Location search UX state
+  final isPlacesLoading = false.obs;
+  final placesSearchError = ''.obs;
+  final isFetchingUserLocation = false.obs;
+  static const int _placeSearchDebounceMs = 400;
   Timer? _driverPollingTimer;
   StreamSubscription<Position>? _userPositionSubscription;
   Timer? _userLocationFreshnessTimer;
@@ -83,6 +91,12 @@ class UserHomeController extends GetxController
   BitmapDescriptor driverMarker = BitmapDescriptor.defaultMarker;
   BitmapDescriptor selectedDriverMarker = BitmapDescriptor.defaultMarker;
   BitmapDescriptor userLocationMarker = BitmapDescriptor.defaultMarker;
+  final Map<String, BitmapDescriptor> _vehicleMarkerCache =
+      <String, BitmapDescriptor>{};
+  final Map<String, BitmapDescriptor> _selectedVehicleMarkerCache =
+      <String, BitmapDescriptor>{};
+  final Map<String, Timer> _vehicleMarkerAnimationTimers =
+      <String, Timer>{};
 
   // Socket service for real-time driver location updates
   final SocketService socketService = SocketService();
@@ -129,6 +143,8 @@ class UserHomeController extends GetxController
   // Selected vehicle type for filtering
   String get selectedVehicleType =>
       parameter[ApiKeyConstants.vehicleType] ?? '';
+  String get selectedVehicleTypeKey =>
+      canonicalVehicleTypeKey(selectedVehicleType);
   String get selectedMarketplaceCity => AppConfig.tunisiaTestMode
       ? AppConfig.marketplaceRegionLabel
       : parameter[ApiKeyConstants.city] ?? '';
@@ -222,6 +238,137 @@ class UserHomeController extends GetxController
     increment(); // Trigger a rebuild
   }
 
+  Future<BitmapDescriptor> _loadMarkerBitmap(
+    String assetPath, {
+    int width = 96,
+  }) async {
+    final ByteData data = await rootBundle.load(assetPath);
+    final ui.Codec codec = await ui.instantiateImageCodec(
+      data.buffer.asUint8List(),
+      targetWidth: width,
+    );
+    final ui.FrameInfo frame = await codec.getNextFrame();
+    final ByteData? bytes =
+        await frame.image.toByteData(format: ui.ImageByteFormat.png);
+    if (bytes == null) return BitmapDescriptor.defaultMarker;
+    return BitmapDescriptor.fromBytes(bytes.buffer.asUint8List());
+  }
+
+  Future<void> _preloadVehicleMarkerIcons() async {
+    final List<String> assetPaths = <String>{
+      ...allDriversList.map((Drivers driver) => vehicleMarkerAssetPath(
+            driver.vehicleTypeKey ?? driver.vehicleType,
+          )),
+      ...visibleDriversList.map((Drivers driver) => vehicleMarkerAssetPath(
+            driver.vehicleTypeKey ?? driver.vehicleType,
+          )),
+    }.toList(growable: false);
+
+    for (final String assetPath in assetPaths) {
+      if (_vehicleMarkerCache.containsKey(assetPath)) continue;
+      try {
+        _vehicleMarkerCache[assetPath] = await _loadMarkerBitmap(assetPath);
+        _selectedVehicleMarkerCache[assetPath] =
+            await _loadMarkerBitmap(assetPath, width: 118);
+      } catch (error) {
+        debugPrint('Failed to preload vehicle marker $assetPath: $error');
+      }
+    }
+    if (_canUpdateView) {
+      updateDriverMarkers();
+      increment();
+    }
+  }
+
+  BitmapDescriptor _vehicleMarkerIconSync(
+    Drivers driver, {
+    required bool selected,
+  }) {
+    final String assetPath =
+        vehicleMarkerAssetPath(driver.vehicleTypeKey ?? driver.vehicleType);
+    final BitmapDescriptor? cached = (selected
+            ? _selectedVehicleMarkerCache[assetPath]
+            : _vehicleMarkerCache[assetPath]);
+    return cached ?? (selected ? selectedDriverMarker : driverMarker);
+  }
+
+  double _driverMarkerRotation(Drivers driver) {
+    final double? heading = driver.heading;
+    if (heading == null || !heading.isFinite) return 0;
+    // The existing vehicle assets are drawn front-facing in the marker sheet.
+    return heading % 360;
+  }
+
+  double _shortestAngleDelta(double from, double to) {
+    final double normalizedFrom = from % 360;
+    final double normalizedTo = to % 360;
+    double delta = normalizedTo - normalizedFrom;
+    if (delta > 180) delta -= 360;
+    if (delta < -180) delta += 360;
+    return delta;
+  }
+
+  void _animateDriverMarkerTransition({
+    required String driverId,
+    required LatLng from,
+    required LatLng to,
+    double? fromHeading,
+    double? toHeading,
+  }) {
+    _vehicleMarkerAnimationTimers[driverId]?.cancel();
+    final int index = allDriversList.indexWhere((Drivers d) => d.sId == driverId);
+    if (index < 0) return;
+
+    const Duration duration = Duration(milliseconds: 900);
+    const int steps = 18;
+    final Duration stepDuration =
+        Duration(milliseconds: duration.inMilliseconds ~/ steps);
+    int step = 0;
+    _vehicleMarkerAnimationTimers[driverId] =
+        Timer.periodic(stepDuration, (Timer timer) {
+      if (!_canUpdateView) {
+        timer.cancel();
+        _vehicleMarkerAnimationTimers.remove(driverId);
+        return;
+      }
+
+      step += 1;
+      final double t = step / steps;
+      final double eased = t * t * (3 - 2 * t);
+      final double latValue =
+          from.latitude + (to.latitude - from.latitude) * eased;
+      final double longValue =
+          from.longitude + (to.longitude - from.longitude) * eased;
+      final double headingValue = (fromHeading != null && toHeading != null)
+          ? (fromHeading + _shortestAngleDelta(fromHeading, toHeading) * eased)
+          : (toHeading ?? fromHeading ?? 0);
+
+      allDriversList[index].lat = latValue;
+      allDriversList[index].long = longValue;
+      if (headingValue.isFinite) allDriversList[index].heading = headingValue;
+      updateDriverMarkers();
+      increment();
+
+      if (step >= steps) {
+        timer.cancel();
+        _vehicleMarkerAnimationTimers.remove(driverId);
+        allDriversList[index].lat = to.latitude;
+        allDriversList[index].long = to.longitude;
+        if (toHeading != null && toHeading.isFinite) {
+          allDriversList[index].heading = toHeading;
+        }
+        filterDriversByVisibleBounds();
+      }
+    });
+  }
+
+  void _clearVehicleMarkerAnimations() {
+    for (final Timer timer in _vehicleMarkerAnimationTimers.values) {
+      timer.cancel();
+    }
+    _vehicleMarkerAnimationTimers.clear();
+  }
+
   /// Get user's current location as LatLng
   LatLng get userLocation => LatLng(userLat.value, userLng.value);
 
@@ -256,6 +403,50 @@ class UserHomeController extends GetxController
         ),
       ));
     }
+    increment();
+  }
+
+  /// Locate the user for the crosshair button: fetch GPS when missing and
+  /// centre the map on the obtained position. Permission-denied is handled by
+  /// the existing permission dialog; an unavailable GPS fix gets a toast.
+  Future<void> handleGoToUserLocation() async {
+    if (isUserLocationLoaded.value) {
+      _centerOnUserLocation();
+      return;
+    }
+    if (isFetchingUserLocation.value) return;
+    isFetchingUserLocation.value = true;
+    increment();
+    try {
+      await getCurrentLocation(showPermissionDialog: true);
+    } finally {
+      isFetchingUserLocation.value = false;
+      if (_canUpdateView) increment();
+    }
+    if (!_canUpdateView) return;
+    if (isUserLocationLoaded.value) {
+      _centerOnUserLocation();
+      return;
+    }
+    final LocationPermission permission = await Geolocator.checkPermission();
+    if (!_canUpdateView) return;
+    if (permission == LocationPermission.whileInUse ||
+        permission == LocationPermission.always) {
+      CommonWidgets.snackBarView(
+        title: 'Unable to get your location. Check GPS and try again.',
+        success: false,
+      );
+    }
+  }
+
+  void _centerOnUserLocation() {
+    if (!isUserLocationLoaded.value) return;
+    mapPosition = userLocation;
+    unawaited(_animateCamera(
+      CameraUpdate.newCameraPosition(
+        CameraPosition(target: userLocation, zoom: 14),
+      ),
+    ));
     increment();
   }
 
@@ -528,10 +719,6 @@ class UserHomeController extends GetxController
     }
   }
 
-  /// Filter and sort drivers based on visible map bounds and vehicle type
-  String _normalizeVehicleType(String value) =>
-      value.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]+'), ' ').trim();
-
   void filterDriversByVisibleBounds() {
     final DateTime now = DateTime.now();
     // Search results are city-scoped, not viewport-scoped. Panning the map must
@@ -540,13 +727,11 @@ class UserHomeController extends GetxController
       if (!_isDriverEligibleForSelectedCity(driver, now: now)) return false;
 
       // Filter by vehicle type if selected
-      if (selectedVehicleType.isNotEmpty) {
+      if (selectedVehicleTypeKey.isNotEmpty) {
         final String driverVehicleType =
-            _normalizeVehicleType(driver.vehicleType ?? '');
-        final String filterVehicleType =
-            _normalizeVehicleType(selectedVehicleType);
+            canonicalVehicleTypeKey(driver.vehicleTypeKey ?? driver.vehicleType);
         if (driverVehicleType.isEmpty ||
-            driverVehicleType != filterVehicleType) {
+            driverVehicleType != selectedVehicleTypeKey) {
           return false;
         }
       }
@@ -575,7 +760,7 @@ class UserHomeController extends GetxController
     syncBottomSheetSize();
 
     print(
-        'Visible drivers: ${visibleDriversList.length} out of ${allDriversList.length} (filter: "$selectedVehicleType")');
+        'Visible drivers: ${visibleDriversList.length} out of ${allDriversList.length} (filter: "$selectedVehicleTypeKey")');
     increment();
   }
 
@@ -624,6 +809,7 @@ class UserHomeController extends GetxController
     for (int i = 0; i < visibleDriversList.length; i++) {
       Drivers driver = visibleDriversList[i];
       if (driver.lat != null && driver.long != null) {
+        final bool selected = selectIndex == i;
         markers.add(
           Marker(
             // Keep map identity tied to the driver rather than the current
@@ -631,20 +817,22 @@ class UserHomeController extends GetxController
             markerId: MarkerId(
               'driver_${(driver.sId ?? '').trim().isNotEmpty ? driver.sId!.trim() : (driver.fullName ?? 'unknown').trim()}',
             ),
-            icon: selectIndex == i ? selectedDriverMarker : driverMarker,
+            icon: _vehicleMarkerIconSync(driver, selected: selected),
             position: LatLng(
               double.tryParse(driver.lat.toString()) ?? 0,
               double.tryParse(driver.long.toString()) ?? 0,
             ),
+            flat: true,
+            rotation: _driverMarkerRotation(driver),
             onTap: () {
               clickOnDriverIndex(i);
             },
             // Add info window with driver name
             infoWindow: InfoWindow(
               title: driver.fullName ?? 'Driver',
-              snippet: driver.vehicleType ?? '',
+              snippet: vehicleTypeDisplayLabel(driver.vehicleTypeKey ?? driver.vehicleType),
             ),
-            zIndex: selectIndex == i ? 4 : 1,
+            zIndex: selected ? 4 : 1,
           ),
         );
       }
@@ -700,6 +888,7 @@ class UserHomeController extends GetxController
 
     _syncDriverLoaderAnimation();
     loadCustomMarker();
+    unawaited(_preloadVehicleMarkerIcons());
     callingGetUserDetails();
     // WidgetsBinding.instance.addPostFrameCallback((_) {
     //   leftPosition.value = MediaQuery.of(Get.context!).size.width - 100;
@@ -766,6 +955,7 @@ class UserHomeController extends GetxController
     _stopDriverPolling();
     _stopUserLocationTracking();
     _disconnectSocket();
+    _clearVehicleMarkerAnimations();
     isUserLocationLoaded.value = false;
     _lastUserPositionRecordedAt = null;
     super.onClose();
@@ -822,6 +1012,7 @@ class UserHomeController extends GetxController
     _stopDriverPolling();
     _stopUserLocationTracking();
     _disconnectSocket();
+    _clearVehicleMarkerAnimations();
     isDriversLoading.value = false;
     isDriverServiceUnavailable.value = true;
     driverServiceMessage.value = message ??
@@ -876,7 +1067,9 @@ class UserHomeController extends GetxController
     if (_currentCity != null && _currentCity!.isNotEmpty) {
       socketService.emitJoinCityRoom(
         _currentCity!,
-        vehicleType: selectedVehicleType,
+        vehicleType: selectedVehicleTypeKey.isNotEmpty
+            ? selectedVehicleTypeKey
+            : selectedVehicleType,
         latitude: hasReferenceLocation ? referenceLocation.latitude : null,
         longitude: hasReferenceLocation ? referenceLocation.longitude : null,
         onAck: _handleDiscoveryRoomAck,
@@ -952,6 +1145,7 @@ class UserHomeController extends GetxController
         allDriversList.indexWhere((Drivers driver) => driver.sId == driverId);
 
     if (!available) {
+      _vehicleMarkerAnimationTimers.remove(driverId)?.cancel();
       allDriversList.removeWhere((Drivers driver) => driver.sId == driverId);
       if (selectedDriverId == driverId) _resetSelectedDriver();
       filterDriversByVisibleBounds();
@@ -1058,6 +1252,10 @@ class UserHomeController extends GetxController
         _extractCoordinate(driverUpdate, ['lat', 'latitude']);
     final double? newLong =
         _extractCoordinate(driverUpdate, ['long', 'lng', 'longitude']);
+    final double? newHeading =
+        _extractCoordinate(driverUpdate, ['heading', 'bearing']);
+    final double? newSpeed =
+        _extractCoordinate(driverUpdate, ['speed']);
 
     if (driverId == null || newLat == null || newLong == null) {
       return false;
@@ -1070,8 +1268,19 @@ class UserHomeController extends GetxController
       return false;
     }
 
+    final Drivers driver = allDriversList[index];
+    final LatLng? previousPosition = _driverPosition(driver);
+    final double? previousHeading = driver.heading;
+    final LatLng nextPosition = LatLng(newLat, newLong);
+
     allDriversList[index].lat = newLat;
     allDriversList[index].long = newLong;
+    if (newHeading != null) {
+      allDriversList[index].heading = newHeading;
+    }
+    if (newSpeed != null) {
+      allDriversList[index].speed = newSpeed;
+    }
     final String? serviceArea = (driverUpdate['currentServiceArea'] ??
             driverUpdate['serviceArea'] ??
             driverUpdate['locationCity'])
@@ -1101,6 +1310,18 @@ class UserHomeController extends GetxController
     if (driverUpdate.containsKey('isAvailable')) {
       allDriversList[index].isAvailable = driverUpdate['isAvailable'] == true;
     }
+
+    if (previousPosition != null &&
+        (previousPosition.latitude != nextPosition.latitude ||
+            previousPosition.longitude != nextPosition.longitude)) {
+      _animateDriverMarkerTransition(
+        driverId: driverId,
+        from: previousPosition,
+        to: nextPosition,
+        fromHeading: previousHeading,
+        toHeading: newHeading ?? previousHeading,
+      );
+    }
     return true;
   }
 
@@ -1121,6 +1342,7 @@ class UserHomeController extends GetxController
         }
 
         _prepareVehicleDiscoveryResults(initialDrivers);
+        unawaited(_preloadVehicleMarkerIcons());
         _consecutiveDriverRefreshFailures = 0;
         isDriverServiceUnavailable.value = false;
         driverServiceMessage.value = '';
@@ -1134,6 +1356,7 @@ class UserHomeController extends GetxController
             payload == null ? null : _extractDriverId(payload);
         if (driverId == null) return;
 
+        _vehicleMarkerAnimationTimers.remove(driverId)?.cancel();
         allDriversList.removeWhere((Drivers driver) => driver.sId == driverId);
         filterDriversByVisibleBounds();
         return;
@@ -1189,18 +1412,31 @@ class UserHomeController extends GetxController
   /// Handle text changes in the location field with debounce
   void onLocationTextChanged(String value) {
     _placesDebounce?.cancel();
-    if (value.trim().isEmpty) {
+    _placeSearchRequestId++;
+    final String query = value.trim();
+    if (query.isEmpty) {
       placeSuggestions.clear();
+      isPlacesLoading.value = false;
+      placesSearchError.value = '';
       increment();
       return;
     }
-    _placesDebounce = Timer(const Duration(milliseconds: 400), () {
-      _fetchPlaceSuggestions(value.trim());
-    });
+    isPlacesLoading.value = true;
+    placesSearchError.value = '';
+    placeSuggestions.clear();
+    increment();
+    _placesDebounce = Timer(
+      const Duration(milliseconds: _placeSearchDebounceMs),
+      () {
+        if (!_canUpdateView) return;
+        _fetchPlaceSuggestions(query);
+      },
+    );
   }
 
   /// Fetch autocomplete suggestions from Google Places HTTP API
   Future<void> _fetchPlaceSuggestions(String input) async {
+    final int requestId = _placeSearchRequestId;
     try {
       final uri = Uri.parse(
           'https://maps.googleapis.com/maps/api/place/autocomplete/json'
@@ -1210,30 +1446,54 @@ class UserHomeController extends GetxController
           '&components=country:${AppConfig.marketplaceCountryCode}');
 
       final response = await http.get(uri);
-      if (!_canUpdateView) return;
+      if (!_canUpdateView || requestId != _placeSearchRequestId) return;
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
-        if (data['status'] == 'OK') {
+        final String status = data['status'] ?? '';
+        if (status == 'OK') {
           final List preds = data['predictions'] ?? [];
           placeSuggestions.value =
               preds.map((e) => Prediction.fromJson(e)).toList();
+        } else if (status == 'ZERO_RESULTS') {
+          placeSuggestions.clear();
         } else {
           placeSuggestions.clear();
+          placesSearchError.value = status == 'REQUEST_DENIED'
+              ? 'Location search is temporarily unavailable.'
+              : 'Unable to find locations. Try again.';
         }
       } else {
         placeSuggestions.clear();
+        placesSearchError.value = 'Unable to find locations. Try again.';
       }
     } catch (_) {
-      if (!_canUpdateView) return;
+      if (!_canUpdateView || requestId != _placeSearchRequestId) return;
       placeSuggestions.clear();
+      placesSearchError.value = 'Unable to find locations. Try again.';
     }
+    if (!_canUpdateView || requestId != _placeSearchRequestId) return;
+    isPlacesLoading.value = false;
     increment();
   }
 
   /// Clear suggestions explicitly (used when opening drawer, etc.)
   void clearPlaceSuggestions() {
     _placesDebounce?.cancel();
+    _placeSearchRequestId++;
     placeSuggestions.clear();
+    isPlacesLoading.value = false;
+    placesSearchError.value = '';
+    increment();
+  }
+
+  /// Clear the typed text together with any in-flight search state.
+  void clearLocationSearch() {
+    _placesDebounce?.cancel();
+    _placeSearchRequestId++;
+    placeSuggestions.clear();
+    isPlacesLoading.value = false;
+    placesSearchError.value = '';
+    locationController.clear();
     increment();
   }
 
@@ -1803,7 +2063,9 @@ class UserHomeController extends GetxController
     try {
       DriverListModel? driverListModel = await ApiMethods.getAllDriverListApi(
         city: parameter[ApiKeyConstants.city] ?? '',
-        vType: parameter[ApiKeyConstants.vehicleType] ?? '',
+        vType: selectedVehicleTypeKey.isNotEmpty
+            ? selectedVehicleTypeKey
+            : (parameter[ApiKeyConstants.vehicleType] ?? ''),
         availability: 'online',
         latitude: hasReferenceLocation ? referenceLocation.latitude : null,
         longitude: hasReferenceLocation ? referenceLocation.longitude : null,
@@ -1815,6 +2077,7 @@ class UserHomeController extends GetxController
           driverListModel.success! &&
           driverListModel.drivers != null) {
         _prepareVehicleDiscoveryResults(driverListModel.drivers!);
+        unawaited(_preloadVehicleMarkerIcons());
         _consecutiveDriverRefreshFailures = 0;
         isDriverServiceUnavailable.value = false;
         driverServiceMessage.value = '';

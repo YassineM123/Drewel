@@ -140,18 +140,89 @@ export const listAdminRides = async (req, res) => {
     );
     const status = String(req.query.status || "active").trim().toLowerCase();
     const filter = {};
-    if (status === "active") filter.status = { $in: ACTIVE_RIDE_STATUSES };
-    else if (status === "completed") filter.status = "completed";
-    else if (status === "cancelled")
-      filter.status = { $in: cancelledStatuses };
-    else if (status === "disputed") filter.status = "disputed";
-    else if (status !== "all") {
-      throw new RideTransitionError(
-        "Invalid ride status filter",
-        400,
-        "INVALID_RIDE_FILTER"
-      );
+    const statusBuckets = {
+      requested: ["requested"],
+      searching: ["contacting", "offer_pending"],
+      assigned: ["accepted", "confirmed"],
+      active: [
+        "driver_arriving",
+        "driver_on_the_way",
+        "driver_arrived",
+        "pickup_confirmed",
+        "in_progress",
+        "disputed",
+      ],
+      completed: ["completed"],
+      cancelled: cancelledStatuses,
+      disputed: ["disputed"],
+    };
+    if (status !== "all") {
+      const statusFilter = statusBuckets[status];
+      if (!statusFilter) {
+        throw new RideTransitionError(
+          "Invalid ride status filter",
+          400,
+          "INVALID_RIDE_FILTER"
+        );
+      }
+      filter.status =
+        statusFilter.length === 1 ? statusFilter[0] : { $in: statusFilter };
     }
+
+    const from = String(req.query.from || "").trim();
+    if (from) {
+      const fromDate = new Date(from);
+      if (Number.isNaN(fromDate.getTime())) {
+        throw new RideTransitionError(
+          "Invalid from date filter",
+          400,
+          "INVALID_RIDE_FILTER"
+        );
+      }
+      filter.createdAt = { ...(filter.createdAt || {}), $gte: fromDate };
+    }
+
+    const to = String(req.query.to || "").trim();
+    if (to) {
+      const toDate = new Date(to);
+      if (Number.isNaN(toDate.getTime())) {
+        throw new RideTransitionError(
+          "Invalid to date filter",
+          400,
+          "INVALID_RIDE_FILTER"
+        );
+      }
+      toDate.setHours(23, 59, 59, 999);
+      filter.createdAt = { ...(filter.createdAt || {}), $lte: toDate };
+    }
+
+    const vehicleType = String(req.query.vehicleType || "").trim();
+    if (vehicleType) {
+      const escaped = vehicleType.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      filter.vehicleType = new RegExp(escaped, "i");
+    }
+
+    const addParticipantFilter = async (field, value, model, nameFields) => {
+      const text = String(value || "").trim();
+      if (!text) return;
+      if (mongoose.isValidObjectId(text)) {
+        filter[field] = text;
+        return;
+      }
+      const escaped = text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      const matches = await model
+        .find({
+          $or: nameFields.map((nameField) => ({
+            [nameField]: new RegExp(escaped, "i"),
+          })),
+        })
+        .select("_id")
+        .limit(100)
+        .lean();
+      filter[field] = matches.length
+        ? { $in: matches.map((item) => item._id) }
+        : { $in: [] };
+    };
 
     const search = String(req.query.search || "").trim();
     if (search) {
@@ -172,6 +243,17 @@ export const listAdminRides = async (req, res) => {
         );
       }
     }
+
+    await Promise.all([
+      addParticipantFilter("driverId", req.query.driver, Driver, [
+        "fullName",
+        "firstName",
+        "lastName",
+      ]),
+      addParticipantFilter("passengerId", req.query.customer, User, [
+        "fullName",
+      ]),
+    ]);
 
     const [rides, total] = await Promise.all([
       Ride.find(filter)

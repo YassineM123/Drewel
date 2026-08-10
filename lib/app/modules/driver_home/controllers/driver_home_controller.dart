@@ -91,6 +91,8 @@ class DriverHomeController extends GetxController with WidgetsBindingObserver {
   bool _hasDriverLocation = false;
   DateTime? _driverPositionRecordedAt;
   double? _driverPositionAccuracyM;
+  double? _driverPositionHeadingDegrees;
+  double? _driverPositionSpeedMps;
   bool _isRefreshingLocationHeartbeat = false;
 
   bool get _isDriverOnline => !isGoOnline.value;
@@ -358,6 +360,8 @@ class DriverHomeController extends GetxController with WidgetsBindingObserver {
         longitude: lon.value,
         recordedAt: recordedAt,
         accuracyM: accuracyM,
+        heading: _driverPositionHeadingDegrees,
+        speed: _driverPositionSpeedMps,
       ),
       'fullName': _driverName ?? '',
       'vehicleType': _vehicleType ?? '',
@@ -424,6 +428,9 @@ class DriverHomeController extends GetxController with WidgetsBindingObserver {
     _hasDriverLocation = true;
     _driverPositionRecordedAt = position.timestamp;
     _driverPositionAccuracyM = normalizeGpsAccuracy(position.accuracy);
+    _driverPositionHeadingDegrees =
+        position.heading >= 0 ? position.heading : null;
+    _driverPositionSpeedMps = position.speed >= 0 ? position.speed : null;
 
     if (animateCamera && xController != null) {
       xController!.animateCamera(
@@ -738,6 +745,8 @@ class DriverHomeController extends GetxController with WidgetsBindingObserver {
         longitude: lon.value,
         recordedAt: recordedAt,
         accuracyM: accuracyM,
+        heading: _driverPositionHeadingDegrees,
+        speed: _driverPositionSpeedMps,
       );
       SimpleResponseModel? simpleResponseModel =
           await ApiMethods.driverUpdateLocationApi(bodyParams: bodyParams);
@@ -814,6 +823,8 @@ class DriverHomeController extends GetxController with WidgetsBindingObserver {
             longitude: position.longitude,
             recordedAt: position.timestamp,
             accuracyM: normalizeGpsAccuracy(position.accuracy),
+            heading: position.heading >= 0 ? position.heading : null,
+            speed: position.speed >= 0 ? position.speed : null,
           ));
         } on TimeoutException {
           final DateTime? recordedAt = _driverPositionRecordedAt;
@@ -828,6 +839,8 @@ class DriverHomeController extends GetxController with WidgetsBindingObserver {
             longitude: lon.value,
             recordedAt: recordedAt,
             accuracyM: normalizeGpsAccuracy(accuracyM),
+            heading: _driverPositionHeadingDegrees,
+            speed: _driverPositionSpeedMps,
           ));
         }
       }

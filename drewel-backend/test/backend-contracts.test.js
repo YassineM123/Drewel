@@ -26,7 +26,7 @@ const routeLayer = (router, path, method) =>
 
 test("available-driver filter only returns online approved unrestricted drivers", () => {
   const filter = buildAvailableDriverFilter({
-    city: "Tunis.*",
+    city: "  Abu+Dhabi  ",
     vehicleType: "Small Pickup",
   });
 
@@ -38,9 +38,12 @@ test("available-driver filter only returns online approved unrestricted drivers"
     { status: "completed" },
     { status: null, profileRequestStatus: null },
   ]);
-  assert.equal(filter.city.$regex.test("Tunis.*"), true);
-  assert.equal(filter.city.$regex.test("Tunis-anything"), false);
+  assert.equal(filter.city.$regex.test("abu dhabi"), true);
+  assert.equal(filter.city.$regex.test("Abu-Dhabi"), true);
+  assert.equal(filter.city.$regex.test("Dubai"), false);
   assert.equal(filter.vehicleType.$regex.test("small pickup"), true);
+  assert.equal(filter.vehicleType.$regex.test("small+pickup"), true);
+  assert.equal(filter.vehicleType.$regex.test("small pickup plus"), false);
 });
 
 test("available-driver status compatibility only admits completed and pre-workflow legacy records", () => {
@@ -142,16 +145,18 @@ test("pending profile amendments preserve the existing proposal snapshot", () =>
   assert.equal(amendedProposal.idProofBackUrl, "pending-id-back.jpg");
 });
 
-test("available-driver matching is trimmed, exact, case-insensitive, and escaped", () => {
+test("available-driver matching is canonicalized across separators and casing", () => {
   const filter = buildSharedAvailableDriverFilter({
-    city: "  Tunis.*  ",
-    vehicleType: " Small (Pickup) ",
+    city: "  Abu Dhabi  ",
+    vehicleType: " Large+Pickup ",
   });
 
-  assert.equal(filter.city.$regex.test("tunis.*"), true);
-  assert.equal(filter.city.$regex.test("Tunis-anything"), false);
-  assert.equal(filter.vehicleType.$regex.test("small (pickup)"), true);
-  assert.equal(filter.vehicleType.$regex.test("Small Pickup"), false);
+  assert.equal(filter.city.$regex.test("abu+dhabi"), true);
+  assert.equal(filter.city.$regex.test("ABU-DHABI"), true);
+  assert.equal(filter.city.$regex.test("Abu Dhabi East"), false);
+  assert.equal(filter.vehicleType.$regex.test("large pickup"), true);
+  assert.equal(filter.vehicleType.$regex.test("LARGE_PICKUP"), true);
+  assert.equal(filter.vehicleType.$regex.test("large pickup plus"), false);
 });
 
 test("marketplace filters validate bounds and public DTO hides private registration", () => {

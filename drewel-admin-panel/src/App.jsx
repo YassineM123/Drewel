@@ -63,6 +63,8 @@ function App() {
               <Route path="/notification" element={<PushNotification />} />
               <Route path="/chat" element={<ChatWrapper />} />
               <Route path="/calls" element={<Calls />} />
+              <Route path="/reservations" element={<Rides />} />
+              <Route path="/reservations/:rideId" element={<RideDetail />} />
               <Route path="/rides" element={<Rides />} />
               <Route path="/rides/:rideId" element={<RideDetail />} />
               <Route element={<RequirePointsAccess />}>

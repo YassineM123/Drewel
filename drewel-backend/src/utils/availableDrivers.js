@@ -7,16 +7,14 @@ import {
   getMarketplaceLocationMaxAccuracyM,
   getServiceAreaLocationMaxAccuracyM,
 } from "./dubaiLocation.js";
+import { canonicalLabelKey, flexibleExactRegex } from "./canonicalLabels.js";
 
 export const AVAILABLE_DRIVER_FIELDS =
-  "firstName lastName fullName profileImageUrl city vehicleType vehicleModel registration registrationVisible rating priceEstimate lat long currentLocation currentServiceArea locationUpdatedAt isOnline availabilityStatus status updatedAt";
-
-const escapeRegex = (value) =>
-  String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  "firstName lastName fullName profileImageUrl city vehicleType vehicleModel registration registrationVisible rating priceEstimate lat long heading speed currentLocation currentServiceArea locationUpdatedAt isOnline availabilityStatus status updatedAt";
 
 const exactCaseInsensitiveMatch = (value) => {
-  const trimmed = String(value ?? "").trim();
-  return trimmed ? { $regex: new RegExp(`^${escapeRegex(trimmed)}$`, "i") } : null;
+  const regex = flexibleExactRegex(value);
+  return regex ? { $regex: regex } : null;
 };
 
 export const buildAvailableDriverFilter = (query = {}) => {
@@ -192,6 +190,7 @@ export const toAvailableDriverDto = (driver, origin = {}) => {
     : null;
   return {
     id: String(value._id),
+    vehicleTypeKey: canonicalLabelKey(value.vehicleType),
     firstName: value.firstName || String(value.fullName || "").trim().split(/\s+/)[0] || "",
     fullName: value.fullName || [value.firstName, value.lastName].filter(Boolean).join(" ").trim(),
     profileImageUrl: value.profileImageUrl || "",
@@ -204,6 +203,16 @@ export const toAvailableDriverDto = (driver, origin = {}) => {
     priceEstimate: Number.isFinite(value.priceEstimate) ? value.priceEstimate : null,
     lat: value.lat,
     long: value.long,
+    heading:
+      value.heading !== null && value.heading !== undefined &&
+      Number.isFinite(Number(value.heading))
+        ? Number(value.heading)
+        : null,
+    speed:
+      value.speed !== null && value.speed !== undefined &&
+      Number.isFinite(Number(value.speed))
+        ? Number(value.speed)
+        : null,
     status: value.availabilityStatus === "Busy" ? "Busy" : isAvailable ? "Online" : "Offline",
     availabilityStatus: value.availabilityStatus === "Busy" ? "Busy" : isAvailable ? "Online" : "Offline",
     isAvailable,

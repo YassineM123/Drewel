@@ -231,6 +231,8 @@ io.on("connection", async (socket) => {
           driverId: updatedDriver._id.toString(),
           lat: updatedDriver.lat,
           long: updatedDriver.long,
+          heading: updatedDriver.heading,
+          speed: updatedDriver.speed,
           locationAccuracyM: updatedDriver.locationAccuracyM,
           locationUpdatedAt: updatedDriver.locationUpdatedAt,
           availabilityStatus: updatedDriver.availabilityStatus,

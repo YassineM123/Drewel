@@ -22,11 +22,15 @@ Map<String, dynamic> buildGpsFixPayload({
   required double longitude,
   required DateTime recordedAt,
   required double accuracyM,
+  double? heading,
+  double? speed,
 }) {
   return <String, dynamic>{
     'lat': latitude,
     'long': longitude,
     'recordedAt': recordedAt.toUtc().toIso8601String(),
     'accuracyM': normalizeGpsAccuracy(accuracyM),
+    if (heading != null && heading.isFinite) 'heading': heading,
+    if (speed != null && speed.isFinite) 'speed': speed,
   };
 }

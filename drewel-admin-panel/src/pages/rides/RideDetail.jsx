@@ -23,8 +23,8 @@ const terminal = (status) => ["completed", "cancelled_by_user", "cancelled_by_dr
 
 const ACTIONS = {
   cancel: {
-    title: "Cancel stuck ride",
-    submit: "Cancel ride",
+    title: "Cancel stuck reservation",
+    submit: "Cancel reservation",
     help: "This ends the ride, releases participant locks through the backend transition service, and writes an audit record.",
   },
   resolve: {
@@ -87,7 +87,7 @@ const RideDetail = () => {
       setState({ loading: false, error: "", ride: payload?.ride || null });
     } catch (error) {
       if (error?.code !== "ERR_CANCELED") {
-        setState({ loading: false, error: rideApiError(error, "Unable to load this ride."), ride: null });
+        setState({ loading: false, error: rideApiError(error, "Unable to load this reservation."), ride: null });
       }
     }
   }, [rideId]);
@@ -114,14 +114,14 @@ const RideDetail = () => {
   };
 
   if (state.loading) return <main className="app-content admin-rides"><div className="tile ride-state"><div className="loader"/><span>Loading ride…</span></div></main>;
-  if (state.error || !state.ride) return <main className="app-content admin-rides"><div className="tile ride-state" role="alert"><h1>Ride unavailable</h1><p>{state.error || "Ride not found."}</p><Link className="btn btn-light" to="/rides">Back to rides</Link></div></main>;
+  if (state.error || !state.ride) return <main className="app-content admin-rides"><div className="tile ride-state" role="alert"><h1>Reservation unavailable</h1><p>{state.error || "Reservation not found."}</p><Link className="btn btn-light" to="/reservations">Back to reservations</Link></div></main>;
 
   const ride = state.ride;
   const audit = Array.isArray(ride.auditTrail) ? ride.auditTrail : Array.isArray(ride.audit) ? ride.audit : [];
   const points = ride.pointsTransaction || ride.points;
   return <main className="app-content admin-rides">
-    <header className="app-title tile p-3 ride-heading"><div><Link to="/rides">← All rides</Link><h1>Ride {ride.reference || ride.id || ride._id}</h1><p>Operational evidence and controlled resolution actions.</p></div><span className="ride-status">{label(ride.status)}</span></header>
-    <section className="tile ride-section"><header><h2>Ride details</h2><span>Updated {date(ride.updatedAt)}</span></header><dl className="ride-detail-grid">
+    <header className="app-title tile p-3 ride-heading"><div><Link to="/reservations">← All reservations</Link><h1>Reservation {ride.reference || ride.id || ride._id}</h1><p>Operational evidence and controlled resolution actions.</p></div><span className="ride-status">{label(ride.status)}</span></header>
+    <section className="tile ride-section"><header><h2>Reservation details</h2><span>Updated {date(ride.updatedAt)}</span></header><dl className="ride-detail-grid">
       <div><dt>User</dt><dd>{person(ride.user || ride.passenger)}</dd></div><div><dt>Driver</dt><dd>{person(ride.driver)}</dd></div>
       <div><dt>State</dt><dd>{label(ride.status)}</dd></div><div><dt>Created</dt><dd>{date(ride.createdAt)}</dd></div>
       <div><dt>Pickup</dt><dd>{place(ride.pickup)}</dd></div><div><dt>Destination</dt><dd>{place(ride.destination)}</dd></div>
@@ -133,7 +133,7 @@ const RideDetail = () => {
     </dl></section>
     <section className="tile ride-section"><header><h2>Audit trail</h2></header>{audit.length ? <ol className="ride-audit">{audit.map((item, index) => <li key={item.id || item._id || index}><strong>{label(item.action || item.toStatus || item.newStatus)}</strong> · {item.actor?.fullName || item.actorName || label(item.actorRole || "system")} · {date(item.createdAt || item.timestamp || item.occurredAt)}{item.reason ? ` — ${item.reason}` : ""}</li>)}</ol> : <div className="ride-state"><p>No audit records were returned.</p></div>}</section>
     <section className="tile ride-section"><header><h2>Controlled actions</h2></header><div className="ride-actions p-3">
-      {!terminal(ride.status) && <button type="button" className="btn btn-outline-danger" onClick={() => setAction("cancel")}>Cancel stuck ride</button>}
+      {!terminal(ride.status) && <button type="button" className="btn btn-outline-danger" onClick={() => setAction("cancel")}>Cancel reservation</button>}
       {ride.status === "disputed" && <button type="button" className="btn btn-primary" onClick={() => setAction("resolve")}>Resolve dispute</button>}
       <button type="button" className="btn btn-outline-primary" onClick={() => setAction("unlock")}>Controlled unlock</button>
       {points && <button type="button" className="btn btn-outline-primary" onClick={() => setAction("refund")}>Refund points</button>}

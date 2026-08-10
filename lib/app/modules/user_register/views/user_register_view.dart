@@ -176,8 +176,8 @@ class UserRegisterView extends GetView<UserRegisterController> {
                                                           .transportList[index]
                                                       ['image'] ??
                                                   '',
-                                              height: 32.px,
-                                              width: 50.px,
+                                              height: index == 7 ? 44.px : 32.px,
+                                              width: index == 7 ? 70.px : 50.px,
                                               color: index == 0
                                                   ? Colors.black
                                                   : null),

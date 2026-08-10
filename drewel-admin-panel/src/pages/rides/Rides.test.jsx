@@ -32,7 +32,7 @@ describe("Admin ride list", () => {
     expect(await screen.findByText("Assigned User")).toBeInTheDocument();
     expect(screen.getByText("Assigned Driver")).toBeInTheDocument();
     expect(screen.getByText("in progress")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "View details" })).toHaveAttribute("href", "/rides/ride-1");
+    expect(screen.getByRole("link", { name: "View details" })).toHaveAttribute("href", "/reservations/ride-1");
   });
 
   it("defaults to the active operational filter", async () => {

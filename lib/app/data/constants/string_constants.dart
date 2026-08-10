@@ -76,6 +76,7 @@ class StringConstants {
   static const String toUseThisServicesWeNeedPermissionToAccess =
       'To use this services we need permission to access';
   static const String searchLocation = 'Search location ...';
+  static const String searchLocationPlaceholder = 'Where do you want to go?';
   static const String support = 'Support';
   static const String notifications = 'Notifications';
   static const String documents = 'Documents';

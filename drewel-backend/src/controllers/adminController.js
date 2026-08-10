@@ -162,7 +162,7 @@ export const getOnlineDrivers = async (_req, res) => {
       ...buildActiveDriverPresenceFilter(),
     })
       .select(
-        "firstName lastName fullName phone whatsappNumber isOnline isApproved status lat long vehicleType vehicleModel registration locationUpdatedAt availabilityStatus presenceStatus presenceLeaseExpiresAt presenceLastHeartbeatAt presenceVersion"
+        "firstName lastName fullName phone whatsappNumber isOnline isApproved status lat long heading speed vehicleType vehicleModel registration locationUpdatedAt availabilityStatus presenceStatus presenceLeaseExpiresAt presenceLastHeartbeatAt presenceVersion"
       )
       .sort({ presenceLastHeartbeatAt: -1, _id: 1 })
       .lean();
@@ -199,7 +199,7 @@ export const getDriversWithLocation = async (_req, res) => {
       long: { $ne: 0 },
     })
       .select(
-        "firstName lastName fullName phone whatsappNumber isOnline isApproved status lat long vehicleType vehicleModel registration locationUpdatedAt availabilityStatus presenceStatus presenceLeaseExpiresAt presenceLastHeartbeatAt presenceVersion"
+        "firstName lastName fullName phone whatsappNumber isOnline isApproved status lat long heading speed vehicleType vehicleModel registration locationUpdatedAt availabilityStatus presenceStatus presenceLeaseExpiresAt presenceLastHeartbeatAt presenceVersion"
       )
       .sort({ locationUpdatedAt: -1, _id: 1 })
       .lean();

@@ -63,6 +63,12 @@ router.post('/rides/:rideId/cancel', requireSignIn, isAdmin, cancelAdminRide);
 router.post('/rides/:rideId/dispute/resolve', requireSignIn, isAdmin, resolveRideDispute);
 router.post('/rides/:rideId/unlock', requireSignIn, isAdmin, unlockRideParticipants);
 router.post('/rides/:rideId/refund-points', requireSignIn, isAdmin, refundRidePoints);
+router.get('/reservations', requireSignIn, isAdmin, listAdminRides);
+router.get('/reservations/:rideId', requireSignIn, isAdmin, getAdminRide);
+router.post('/reservations/:rideId/cancel', requireSignIn, isAdmin, cancelAdminRide);
+router.post('/reservations/:rideId/dispute/resolve', requireSignIn, isAdmin, resolveRideDispute);
+router.post('/reservations/:rideId/unlock', requireSignIn, isAdmin, unlockRideParticipants);
+router.post('/reservations/:rideId/refund-points', requireSignIn, isAdmin, refundRidePoints);
 // Compatibility contract for the current admin build. All status writes now
 // pass through the same validated, auditable transition service.
 router.put('/driver/:id/status', requireSignIn, isAdmin, updateAdminRequestStatus);

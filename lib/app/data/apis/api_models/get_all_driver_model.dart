@@ -1,4 +1,5 @@
 import '../../../../common/gps_fix.dart';
+import '../../../../common/vehicle_assets.dart';
 
 class DriverListModel {
   bool? success;
@@ -51,7 +52,10 @@ class Drivers {
   bool? isOnline;
   var latitude;
   var longitude;
+  double? heading;
+  double? speed;
   String? vehicleType;
+  String? vehicleTypeKey;
   String? vehicleModel;
   String? registrationNumber;
   bool registrationVisible = false;
@@ -84,7 +88,10 @@ class Drivers {
       this.isOnline,
       this.latitude,
       this.longitude,
+      this.heading,
+      this.speed,
       this.vehicleType,
+      this.vehicleTypeKey,
       this.vehicleModel,
       this.registrationNumber,
       this.registrationVisible = false,
@@ -130,7 +137,13 @@ class Drivers {
         rawStatus.toLowerCase() == 'busy';
     latitude = json['latitude'];
     longitude = json['longitude'];
+    heading = _asDouble(json['heading']);
+    speed = _asDouble(json['speed']);
     vehicleType = json['vehicleType'];
+    vehicleTypeKey = (json['vehicleTypeKey'] ??
+            json['vehicle_type_key'] ??
+            canonicalVehicleTypeKey(vehicleType))
+        ?.toString();
     vehicleModel =
         (json['vehicleModel'] ?? json['vehicle']?['model'])?.toString();
     registrationNumber = (json['registrationNumber'] ??
@@ -178,7 +191,10 @@ class Drivers {
     data['isOnline'] = isOnline;
     data['latitude'] = latitude;
     data['longitude'] = longitude;
+    data['heading'] = heading;
+    data['speed'] = speed;
     data['vehicleType'] = vehicleType;
+    data['vehicleTypeKey'] = vehicleTypeKey;
     data['vehicleModel'] = vehicleModel;
     if (registrationVisible) {
       data['registrationNumber'] = registrationNumber;

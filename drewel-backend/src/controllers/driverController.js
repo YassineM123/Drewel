@@ -1217,6 +1217,8 @@ export const updateDriverLocation = async (req, res) => {
       location: {
         lat: driver.lat,
         long: driver.long,
+        heading: driver.heading,
+        speed: driver.speed,
         accuracyM: driver.locationAccuracyM,
         updatedAt: driver.locationUpdatedAt,
         serviceArea: driver.currentServiceArea,
