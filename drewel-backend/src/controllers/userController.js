@@ -14,7 +14,7 @@ import { serveUploadedFile } from "../utils/fileServing.js";
 import { buildPublicAssetUrl } from "../utils/publicAssets.js";
 import { sanitizeAuthSubject } from "../utils/authResponse.js";
 import { grantWelcomeBonus } from "../services/pointsWalletService.js";
-import { buildFreshAdminMarketplaceAvailabilityFilter } from "../utils/availableDrivers.js";
+import { buildActiveDriverPresenceFilter } from "../services/driverPresenceService.js";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
@@ -412,7 +412,7 @@ export const dashBoardData = async (req, res) => {
       await Promise.all([
         User.countDocuments(),
         Driver.countDocuments(),
-        Driver.countDocuments(buildFreshAdminMarketplaceAvailabilityFilter()),
+        Driver.countDocuments(buildActiveDriverPresenceFilter()),
         User.countDocuments({ isRestricted: true }),
       ]);
 

@@ -15,13 +15,13 @@ import '../../../../common/drewel_web_map_fallback.dart';
 import '../../../../common/drewel_navigation.dart';
 import '../../../../common/drewel_pop_scope.dart';
 import '../../../../common/text_styles.dart';
-import '../../../data/apis/api_constants/api_key_constants.dart';
 import '../../../data/constants/icons_constant.dart';
 import '../../../data/constants/string_constants.dart';
 import '../../../routes/app_pages.dart';
 import '../controllers/user_home_controller.dart';
 import '../../communication/controllers/call_state_controller.dart';
 import '../../communication/widgets/secure_communication_panel.dart';
+import '../../messages/widgets/messages_app_bar_button.dart';
 import '../widgets/marketplace_driver_card.dart';
 import '../../active_ride/widgets/active_ride_card.dart';
 
@@ -129,6 +129,10 @@ class _UserHomeViewState extends State<UserHomeView> {
               ),
               showBackButton: true,
               showMenuButton: true,
+              actions: const <Widget>[
+                MessagesAppBarButton(),
+                SizedBox(width: 4),
+              ],
               onBack: _handleBack,
               backIcon: ExcludeSemantics(
                 child: CommonWidgets.appIcons(
@@ -996,7 +1000,7 @@ class _UserHomeViewState extends State<UserHomeView> {
     final isDriversLoading = controller.isDriversLoading.value;
     final bool isServiceUnavailable =
         controller.isDriverServiceUnavailable.value;
-    final String city = controller.parameter[ApiKeyConstants.city] ?? '';
+    final String city = controller.selectedMarketplaceCity;
     final String vehicleType = controller.selectedVehicleType;
     final String emptyMessage = city.isNotEmpty && vehicleType.isNotEmpty
         ? 'No online $vehicleType drivers in $city'

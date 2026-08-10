@@ -15,7 +15,9 @@ class UserRegisterController extends GetxController {
   final count = 0.obs;
   final currentIndex = 0.obs;
   final transportIndex = 0.obs;
-  final cityIndex = 0.obs;
+  late final RxInt cityIndex = defaultMarketplaceCityIndex(
+    LocalData().cityLatLongList,
+  ).obs;
   final hasUnsavedChanges = false.obs;
   @override
   void onInit() {

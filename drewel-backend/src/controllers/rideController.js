@@ -11,6 +11,13 @@ import {
   isRideContactAllowed,
   resolvePrincipal,
 } from "../services/rideCommunicationPolicy.js";
+import {
+  ensureConversationForRide,
+  markConversationRead,
+  syncConversationForRideId,
+  touchConversationWithMessage,
+} from "../services/conversationService.js";
+import RideConversation from "../models/RideConversation.js";
 import { endActiveCallsForRide, toCallDto } from "../services/callSessionService.js";
 import CallSession from "../models/CallSession.js";
 import User from "../models/User.js";
@@ -69,14 +76,65 @@ const publicParticipantDto = (participant, role) => {
     fullName,
     profileImageUrl: role === "driver" ? participant.profileImageUrl || "" : participant.profilePicture || "",
     role,
-    ...(role === "driver" ? { vehicleDescription: participant.vehicleType || "" } : {}),
+    ...(role === "driver"
+      ? {
+          vehicleDescription: participant.vehicleType || "",
+          vehicleModel: participant.vehicleModel || "",
+          registration: participant.registrationVisible ? participant.registration || "" : "",
+          rating: participant.rating ?? null,
+        }
+      : {}),
   };
+};
+
+export const emitConversationUpdated = async (conversation) => {
+  if (!conversation) return;
+  const [passengerTotal, driverTotal] = await Promise.all([
+    RideConversation.countDocuments({
+      passengerId: conversation.passengerId,
+      passengerUnreadCount: { $gt: 0 },
+    }),
+    RideConversation.countDocuments({
+      driverId: conversation.driverId,
+      driverUnreadCount: { $gt: 0 },
+    }),
+  ]);
+  const base = {
+    conversationId: String(conversation._id),
+    rideId: String(conversation.rideId),
+    status: conversation.status,
+    lastMessageAt: conversation.lastMessageAt,
+    lastMessagePreview: conversation.lastMessagePreview,
+    lastMessageSenderRole: conversation.lastMessageSenderRole,
+  };
+  io.to(String(conversation.passengerId)).emit("conversation:updated", {
+    ...base,
+    unreadCount: conversation.passengerUnreadCount,
+    unreadTotal: passengerTotal,
+  });
+  io.to(String(conversation.driverId)).emit("conversation:updated", {
+    ...base,
+    unreadCount: conversation.driverUnreadCount,
+    unreadTotal: driverTotal,
+  });
+};
+
+export const emitNotificationNew = (notification) => {
+  if (!notification) return;
+  io.to(String(notification.userId)).emit("notification:new", {
+    id: String(notification._id),
+    type: notification.type,
+    message: notification.message,
+    read: Boolean(notification.read),
+    data: notification.data || {},
+    createdAt: notification.createdAt,
+  });
 };
 
 const publicRideDto = async (ride) => {
   const [passenger, driver] = await Promise.all([
     User.findById(ride.passengerId).select("fullName profilePicture").lean(),
-    Driver.findById(ride.driverId).select("firstName lastName fullName profileImageUrl vehicleType").lean(),
+    Driver.findById(ride.driverId).select("firstName lastName fullName profileImageUrl vehicleType vehicleModel registration registrationVisible rating").lean(),
   ]);
   return { ...rideDto(ride), passenger: publicParticipantDto(passenger, "passenger"), driver: publicParticipantDto(driver, "driver") };
 };
@@ -136,6 +194,8 @@ export const createDriverContact = async (req, res) => {
     });
     await CommunicationAudit.create({ rideId: ride._id, action: "driver_contact_created", actorId: principal.id, actorRole: "passenger", outcome: "success" });
     io.to(String(driverId)).emit("driver:contact", { rideId: String(ride._id), status: ride.status });
+    const conversation = await ensureConversationForRide(ride);
+    await emitConversationUpdated(conversation);
     return res.status(201).json({ success: true, ride: await publicRideDto(ride) });
   } catch (error) {
     if (error?.code === 11000) {
@@ -288,12 +348,16 @@ export const confirmMission = async (req, res) => {
       status: "Busy",
       isAvailable: false,
     });
+    const conversation = await ensureConversationForRide(confirmedRide);
+    await emitConversationUpdated(conversation);
     for (const contact of cancelledContacts) {
       await endActiveCallsForRide(contact._id, "contact_closed");
       io.to(String(contact.passengerId)).to(String(contact.driverId)).emit(
         "ride:state",
         { rideId: String(contact._id), status: "cancelled" }
       );
+      const cancelledConversation = await syncConversationForRideId(contact._id);
+      await emitConversationUpdated(cancelledConversation);
     }
     return res.json({
       success: true,
@@ -414,6 +478,8 @@ export const transitionRide = async (req, res) => {
     const payload = { rideId: String(updated._id), status: updated.status, stateVersion: updated.stateVersion };
     io.to(room).to(String(updated.passengerId)).to(String(updated.driverId)).emit(event, payload);
     io.to(String(updated.passengerId)).to(String(updated.driverId)).emit("ride:state", payload);
+    const conversation = await ensureConversationForRide(updated);
+    await emitConversationUpdated(conversation);
     if (terminal) {
       const driver = await Driver.findById(updated.driverId).select("_id isOnline availabilityStatus updatedAt");
       if (driver) {
@@ -554,7 +620,35 @@ export const sendRideMessage = async (req, res) => {
       created = false;
       message = await RideMessage.findOne({ rideId: ride._id, senderId: principal.id, clientMessageId });
     }
-    io.to(String(ride.passengerId)).to(String(ride.driverId)).emit("ride:message", { rideId: String(ride._id), messageId: String(message._id), status: message.status });
+    const messageEvent = {
+      rideId: String(ride._id),
+      messageId: String(message._id),
+      senderId: String(message.senderId),
+      senderRole: message.senderRole,
+      text: message.text,
+      status: message.status,
+      clientMessageId: message.clientMessageId,
+      createdAt: message.createdAt,
+    };
+    io.to(String(ride.passengerId)).to(String(ride.driverId)).emit("ride:message", messageEvent);
+    const { conversation, recipientId, notification } = await touchConversationWithMessage({
+      ride,
+      message,
+      participantRole,
+    });
+    await emitConversationUpdated(conversation);
+    if (String(recipientId) === String(notification?.userId)) {
+      emitNotificationNew(notification);
+    } else {
+      io.to(String(recipientId)).emit("notification:new", {
+        id: notification?._id ? String(notification._id) : "",
+        type: "RIDE_MESSAGE",
+        message: notification?.message || "",
+        read: Boolean(notification?.read),
+        data: notification?.data || { rideId: String(ride._id) },
+        createdAt: notification?.createdAt || new Date(),
+      });
+    }
     return res.status(created ? 201 : 200).json({ success: true, message, idempotent: !created });
   } catch (error) { return sendError(res, error); }
 };
@@ -576,6 +670,11 @@ export const updateMessageReceipt = async (req, res) => {
     }
     await message.save();
     io.to(String(message.senderId)).emit("ride:message:receipt", { messageId: String(message._id), status: message.status, deliveredAt: message.deliveredAt, readAt: message.readAt });
+    if (status === "read") {
+      const conversation = await markConversationRead({ principal, rideId: String(ride._id) });
+      const conversationDoc = await RideConversation.findById(conversation.id);
+      await emitConversationUpdated(conversationDoc);
+    }
     return res.json({ success: true, message });
   } catch (error) { return sendError(res, error); }
 };

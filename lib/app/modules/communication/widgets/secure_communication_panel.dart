@@ -25,6 +25,12 @@ class SecureCommunicationPanel extends GetView<CallStateController> {
                 controller.userFacingError.value.trim().isEmpty
                     ? null
                     : controller.userFacingError.value;
+            final bool counterpartIsDriver =
+                controller.counterpart?.role == 'driver';
+            final String messageLabel =
+                counterpartIsDriver ? 'Message driver' : 'Message passenger';
+            final String callLabel =
+                counterpartIsDriver ? 'Call driver' : 'Call passenger';
             if (hideWhenUnavailable && !enabled && error == null) {
               return const SizedBox.shrink();
             }
@@ -63,9 +69,9 @@ class SecureCommunicationPanel extends GetView<CallStateController> {
                       Semantics(
                         button: true,
                         enabled: enabled,
-                        label: 'Message driver',
+                        label: messageLabel,
                         child: Tooltip(
-                          message: 'Message driver',
+                          message: messageLabel,
                           child: SizedBox.square(
                             dimension: 48,
                             child: IconButton.filledTonal(
@@ -80,9 +86,11 @@ class SecureCommunicationPanel extends GetView<CallStateController> {
                       DrewelCallButton(
                         enabled: enabled,
                         loading: controller.isBusy.value,
+                        label: callLabel,
                         onPressed: () async {
                           final String name =
-                              controller.counterpart?.firstName ?? 'Driver';
+                              controller.counterpart?.firstName ??
+                                  (counterpartIsDriver ? 'Driver' : 'Rider');
                           if (await controller.confirmDrewelCall(name)) {
                             await controller.initiateCall();
                           }

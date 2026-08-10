@@ -30,6 +30,8 @@ import '../modules/communication/views/active_call_screen.dart';
 import '../modules/communication/views/incoming_call_screen.dart';
 import '../modules/communication/views/outgoing_call_screen.dart';
 import '../modules/communication/views/ride_chat_screen.dart';
+import '../modules/messages/bindings/messages_binding.dart';
+import '../modules/messages/views/messages_view.dart';
 import '../modules/points/bindings/driver_points_binding.dart';
 import '../modules/points/views/buy_points_view.dart';
 import '../modules/points/views/my_points_view.dart';
@@ -128,6 +130,11 @@ class AppPages {
       name: _Paths.RIDE_CHAT,
       page: () => const RideChatScreen(),
       binding: CommunicationBinding(),
+    ),
+    GetPage(
+      name: _Paths.MESSAGES,
+      page: () => const MessagesView(),
+      binding: MessagesBinding(),
     ),
     GetPage(
       name: _Paths.MY_POINTS,

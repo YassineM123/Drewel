@@ -76,6 +76,10 @@ class DriverHomeController extends GetxController with WidgetsBindingObserver {
   // Socket service for real-time location updates
   final SocketService socketService = SocketService();
   Timer? _locationUpdateTimer;
+  Timer? _presenceHeartbeatTimer;
+  int _presenceHeartbeatIntervalMs = 20000;
+  bool _presenceHeartbeatInFlight = false;
+  bool _appIsForeground = true;
   String? _driverId;
   String? _driverName;
   String? _vehicleType;
@@ -143,6 +147,7 @@ class DriverHomeController extends GetxController with WidgetsBindingObserver {
     _mapsAuthenticationFailureSubscription?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     _stopLocationUpdates();
+    _stopPresenceHeartbeatTimer();
     _stopRealtimeLocationTracking();
     _placesDebounce?.cancel();
     socketService.disconnect();
@@ -155,19 +160,108 @@ class DriverHomeController extends GetxController with WidgetsBindingObserver {
     if (state == AppLifecycleState.hidden ||
         state == AppLifecycleState.paused ||
         state == AppLifecycleState.detached) {
+      _appIsForeground = false;
       // App is in background or closing - stop location updates
       _stopLocationUpdates();
       _stopRealtimeLocationTracking();
+      // A hidden web tab can still renew presence (subject to browser timer
+      // throttling), so do not deliberately force it to expire. Native
+      // background execution is delegated to the Android foreground service.
+      if (!kIsWeb || state == AppLifecycleState.detached) {
+        _stopPresenceHeartbeatTimer();
+      }
       // Location tracking is foreground-only, so do not let Socket.IO retry
       // DNS/network connections while Android has suspended the activity.
       socketService.disconnect();
     } else if (state == AppLifecycleState.resumed) {
+      _appIsForeground = true;
       // App is in foreground - resume location updates and realtime GPS tracking
       _initSocket();
       _startRealtimeLocationTracking();
       if (_isDriverOnline) {
         _startLocationUpdates();
+        unawaited(_resumeOnlinePresence());
       }
+    }
+  }
+
+  Future<void> _resumeOnlinePresence() async {
+    final PresenceHeartbeatResult result =
+        await DriverOnlineService.heartbeatNow();
+    if (result == PresenceHeartbeatResult.renewed ||
+        result == PresenceHeartbeatResult.networkFailure) {
+      final String? sessionId = await DriverOnlineService.currentSessionId();
+      if (sessionId != null) {
+        _startPresenceHeartbeatTimer();
+        await _startAndroidPresenceService(
+          DriverPresenceModel(sessionId: sessionId),
+        );
+      }
+      return;
+    }
+
+    // The server no longer accepts this lease (expired/replaced), or this is a
+    // legacy online record with no session. Establish a fresh, GPS-backed
+    // presence session instead of pretending the old Online flag is valid.
+    isGoOnline.value = true;
+    await callingUpdateDriverOnlineStatus();
+  }
+
+  Future<void> _startAndroidPresenceService(
+    DriverPresenceModel presence,
+  ) async {
+    try {
+      final bool started = await DriverOnlineService.start(presence);
+      if (!started && isAndroidPlatform && _appIsForeground) {
+        CommonWidgets.snackBarView(
+          title:
+              'Background online service could not start. Keep Drewel open and check battery restrictions.',
+        );
+      }
+    } catch (error) {
+      debugPrint('Presence foreground service failed: $error');
+      if (isAndroidPlatform && _appIsForeground) {
+        CommonWidgets.snackBarView(
+          title:
+              'Background online service could not start. Keep Drewel open and check battery restrictions.',
+        );
+      }
+    }
+  }
+
+  void _startPresenceHeartbeatTimer([int? intervalMs]) {
+    _stopPresenceHeartbeatTimer();
+    if (!_appIsForeground || !_isDriverOnline) return;
+    if (intervalMs != null) {
+      _presenceHeartbeatIntervalMs = intervalMs.clamp(5000, 60000).toInt();
+    }
+    _presenceHeartbeatTimer = Timer.periodic(
+      Duration(milliseconds: _presenceHeartbeatIntervalMs),
+      (_) => unawaited(_sendPresenceHeartbeat()),
+    );
+  }
+
+  void _stopPresenceHeartbeatTimer() {
+    _presenceHeartbeatTimer?.cancel();
+    _presenceHeartbeatTimer = null;
+  }
+
+  Future<void> _sendPresenceHeartbeat() async {
+    if (_presenceHeartbeatInFlight || !_isDriverOnline) return;
+    _presenceHeartbeatInFlight = true;
+    try {
+      final PresenceHeartbeatResult result =
+          await DriverOnlineService.heartbeatNow();
+      if (result == PresenceHeartbeatResult.staleSession ||
+          result == PresenceHeartbeatResult.noSession) {
+        _stopPresenceHeartbeatTimer();
+        if (_appIsForeground) {
+          isGoOnline.value = true;
+          await callingUpdateDriverOnlineStatus();
+        }
+      }
+    } finally {
+      _presenceHeartbeatInFlight = false;
     }
   }
 
@@ -676,6 +770,11 @@ class DriverHomeController extends GetxController with WidgetsBindingObserver {
       };
       showLoading.value = true;
 
+      if (!goingOnline) {
+        final String? sessionId = await DriverOnlineService.currentSessionId();
+        if (sessionId != null) bodyParams['sessionId'] = sessionId;
+      }
+
       if (goingOnline) {
         if (!await Geolocator.isLocationServiceEnabled()) {
           CommonWidgets.snackBarView(
@@ -694,22 +793,43 @@ class DriverHomeController extends GetxController with WidgetsBindingObserver {
           return;
         }
 
-        final Position position = await Geolocator.getCurrentPosition(
-          locationSettings: const LocationSettings(
-            accuracy: LocationAccuracy.bestForNavigation,
-            timeLimit: Duration(seconds: 12),
-          ),
-        );
-        await _applyDriverPosition(
-          position,
-          emitRealtimeOnMovement: false,
-        );
-        bodyParams.addAll(buildGpsFixPayload(
-          latitude: position.latitude,
-          longitude: position.longitude,
-          recordedAt: position.timestamp,
-          accuracyM: normalizeGpsAccuracy(position.accuracy),
-        ));
+        try {
+          final Position position = await Geolocator.getCurrentPosition(
+            locationSettings: LocationSettings(
+              // Desktop browsers can wait indefinitely for a navigation-grade
+              // fix. Their normal high-accuracy fix is sufficient in the
+              // allowlisted Tunisia QA area.
+              accuracy: kIsWeb
+                  ? LocationAccuracy.high
+                  : LocationAccuracy.bestForNavigation,
+              timeLimit: const Duration(seconds: 12),
+            ),
+          ).timeout(const Duration(seconds: 15));
+          await _applyDriverPosition(
+            position,
+            emitRealtimeOnMovement: false,
+          );
+          bodyParams.addAll(buildGpsFixPayload(
+            latitude: position.latitude,
+            longitude: position.longitude,
+            recordedAt: position.timestamp,
+            accuracyM: normalizeGpsAccuracy(position.accuracy),
+          ));
+        } on TimeoutException {
+          final DateTime? recordedAt = _driverPositionRecordedAt;
+          final double? accuracyM = _driverPositionAccuracyM;
+          final bool hasFreshPageFix = _hasDriverLocation &&
+              recordedAt != null &&
+              accuracyM != null &&
+              DateTime.now().difference(recordedAt).inSeconds <= 45;
+          if (!kIsWeb || !hasFreshPageFix) rethrow;
+          bodyParams.addAll(buildGpsFixPayload(
+            latitude: lat.value,
+            longitude: lon.value,
+            recordedAt: recordedAt,
+            accuracyM: normalizeGpsAccuracy(accuracyM),
+          ));
+        }
       }
 
       SimpleResponseModel? simpleResponseModel =
@@ -725,11 +845,21 @@ class DriverHomeController extends GetxController with WidgetsBindingObserver {
           // Driver is now online - start emitting location
           _startLocationUpdates();
           _syncDriverLocationToServer(force: true);
-          unawaited(DriverOnlineService.start());
+          final presence = simpleResponseModel.presence;
+          if (presence == null || presence.sessionId?.isNotEmpty != true) {
+            isGoOnline.value = true;
+            CommonWidgets.snackBarView(
+              title: 'The server did not start an online presence session.',
+            );
+            return;
+          }
+          _startPresenceHeartbeatTimer(presence.heartbeatIntervalMs);
+          await _startAndroidPresenceService(presence);
         } else {
           // Driver is now offline - stop emitting location
           _stopLocationUpdates();
-          unawaited(DriverOnlineService.stop());
+          _stopPresenceHeartbeatTimer();
+          await DriverOnlineService.stop();
         }
       } else {
         CommonWidgets.snackBarView(
@@ -780,9 +910,10 @@ class DriverHomeController extends GetxController with WidgetsBindingObserver {
           // Driver is online - start location updates
           _startLocationUpdates();
           _syncDriverLocationToServer(force: true);
-          unawaited(DriverOnlineService.start());
+          unawaited(_resumeOnlinePresence());
         } else {
           isGoOnline.value = true;
+          unawaited(DriverOnlineService.stop());
         }
         if (!(loginModel.driver!.isApproved ?? false)) {
           pref.clear();

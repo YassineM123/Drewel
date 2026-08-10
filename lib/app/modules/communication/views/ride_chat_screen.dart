@@ -2,10 +2,13 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../../../common/colors.dart';
 import '../../../data/apis/api_constants/api_key_constants.dart';
 import '../../../data/apis/api_models/ride_message_model.dart';
+import '../../../data/apis/api_models/ride_conversation_model.dart';
 import '../../../data/apis/api_models/driver_points_models.dart';
 import '../../../data/apis/communication_api_client.dart';
 import '../../../data/repositories/driver_points_repository.dart';
@@ -31,6 +34,7 @@ class _RideChatScreenState extends State<RideChatScreen> {
       ApiDriverPointsRepository(CommunicationApiClient());
   final List<TripOffer> _incomingOffers = <TripOffer>[];
   String? _offerActionLoading;
+  RideConversationModel? _conversation;
   String _selfId = '';
   String _role = '';
   bool _loading = true;
@@ -46,6 +50,23 @@ class _RideChatScreenState extends State<RideChatScreen> {
     'Please call me',
   ];
 
+  String? get _rideId {
+    final Object? arguments = Get.arguments;
+    if (arguments is Map && arguments['rideId'] != null) {
+      return arguments['rideId'].toString();
+    }
+    return _communication.activeRide.value?.id;
+  }
+
+  bool get _canChat => _communication.hasAuthorizedRide;
+
+  String get _chatTitle {
+    final RideConversationModel? conversation = _conversation;
+    final String name = conversation?.counterpart?.displayName.trim() ?? '';
+    if (name.isNotEmpty) return name;
+    return _communication.counterpart?.firstName ?? 'Drewel secure chat';
+  }
+
   @override
   void initState() {
     super.initState();
@@ -55,8 +76,8 @@ class _RideChatScreenState extends State<RideChatScreen> {
   Future<void> _load({bool showLoader = true}) async {
     if (_refreshing) return;
     _refreshing = true;
-    final String? rideId = _communication.activeRide.value?.id;
-    if (rideId == null || !_communication.hasAuthorizedRide) {
+    final String? rideId = _rideId;
+    if (rideId == null) {
       setState(() {
         _loading = false;
         _error = _communication.unavailableReason;
@@ -65,11 +86,19 @@ class _RideChatScreenState extends State<RideChatScreen> {
       return;
     }
     try {
-      final SharedPreferences preferences =
-          await SharedPreferences.getInstance();
       final List<RideMessageModel> messages =
           await _communication.messageRepository.list(rideId);
+      RideConversationModel? conversation;
+      try {
+        conversation =
+            await _communication.conversationRepository.get(rideId);
+        await _communication.markConversationRead(rideId);
+      } catch (_) {
+        // Header falls back to the active ride participant.
+      }
       if (!mounted) return;
+      final SharedPreferences preferences =
+          await SharedPreferences.getInstance();
       final String selfId = preferences.getString(ApiKeyConstants.userId) ?? '';
       final String role = preferences.getString(ApiKeyConstants.type) ?? '';
       if (role == ApiKeyConstants.driver && _points == null) {
@@ -87,6 +116,7 @@ class _RideChatScreenState extends State<RideChatScreen> {
       setState(() {
         _selfId = selfId;
         _role = role;
+        _conversation = conversation;
         _messages.clear();
         _messages.addAll(messages);
         _incomingOffers
@@ -122,7 +152,7 @@ class _RideChatScreenState extends State<RideChatScreen> {
 
   Future<void> _send([String? quickMessage]) async {
     final String text = (quickMessage ?? _textController.text).trim();
-    final String? rideId = _communication.activeRide.value?.id;
+    final String? rideId = _rideId;
     if (text.isEmpty || rideId == null || _sending) return;
     setState(() {
       _sending = true;
@@ -153,8 +183,29 @@ class _RideChatScreenState extends State<RideChatScreen> {
 
   @override
   Widget build(BuildContext context) => Scaffold(
+        backgroundColor: Colors.white,
         appBar: AppBar(
-          title: const Text('Drewel secure messages'),
+          titleSpacing: 0,
+          title: Row(
+            children: <Widget>[
+              _CounterpartAvatar(conversation: _conversation),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    Text(
+                      _chatTitle,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontWeight: FontWeight.w700),
+                    ),
+                    const SizedBox(height: 2),
+                    _CounterpartSubtitle(conversation: _conversation),
+                  ],
+                ),
+              ),
+            ],
+          ),
           actions: <Widget>[
             if (_role == ApiKeyConstants.driver &&
                 _communication.activeRide.value?.status == 'contacting')
@@ -170,8 +221,8 @@ class _RideChatScreenState extends State<RideChatScreen> {
             children: <Widget>[
               if (_points != null)
                 Obx(() {
-                  final rideId = _communication.activeRide.value?.id ?? '';
-                  final offer = _points!.offerForRide(rideId);
+                  final String rideId = _rideId ?? '';
+                  final TripOffer? offer = _points!.offerForRide(rideId);
                   return offer == null
                       ? const SizedBox.shrink()
                       : TripOfferStatusCard(offer: offer);
@@ -193,47 +244,13 @@ class _RideChatScreenState extends State<RideChatScreen> {
               Expanded(
                 child: _loading
                     ? const Center(child: CircularProgressIndicator())
-                    : ListView.builder(
-                        padding: const EdgeInsets.all(12),
-                        itemCount: _messages.length,
-                        itemBuilder: (BuildContext context, int index) {
-                          final RideMessageModel message = _messages[index];
-                          final bool mine = message.senderId == _selfId;
-                          return Align(
-                            alignment: mine
-                                ? Alignment.centerRight
-                                : Alignment.centerLeft,
-                            child: Container(
-                              constraints: const BoxConstraints(maxWidth: 320),
-                              margin: const EdgeInsets.symmetric(vertical: 4),
-                              padding: const EdgeInsets.all(12),
-                              decoration: BoxDecoration(
-                                color: mine
-                                    ? Theme.of(context)
-                                        .colorScheme
-                                        .primaryContainer
-                                    : Theme.of(context)
-                                        .colorScheme
-                                        .surfaceContainerHighest,
-                                borderRadius: BorderRadius.circular(14),
-                              ),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.end,
-                                children: <Widget>[
-                                  Text(message.text),
-                                  Text(
-                                    message.status.name,
-                                    style:
-                                        Theme.of(context).textTheme.labelSmall,
-                                  ),
-                                ],
-                              ),
-                            ),
-                          );
-                        },
+                    : _MessageList(
+                        messages: _messages,
+                        selfId: _selfId,
+                        onRefresh: () => _load(showLoader: false),
                       ),
               ),
-              if (_communication.hasAuthorizedRide) ...<Widget>[
+              if (_canChat) ...<Widget>[
                 SizedBox(
                   height: 42,
                   child: ListView.separated(
@@ -251,6 +268,7 @@ class _RideChatScreenState extends State<RideChatScreen> {
                 Padding(
                   padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
                   child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.end,
                     children: <Widget>[
                       Expanded(
                         child: TextField(
@@ -258,23 +276,47 @@ class _RideChatScreenState extends State<RideChatScreen> {
                           maxLength: 1000,
                           minLines: 1,
                           maxLines: 4,
-                          decoration: const InputDecoration(
+                          textInputAction: TextInputAction.send,
+                          onSubmitted: (_) => _send(),
+                          decoration: InputDecoration(
                             hintText: 'Message your ride participant',
                             counterText: '',
-                            border: OutlineInputBorder(),
+                            filled: true,
+                            fillColor: const Color(0xFFF1F1F1),
+                            contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 18,
+                              vertical: 12,
+                            ),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(24),
+                              borderSide: BorderSide.none,
+                            ),
                           ),
                         ),
                       ),
-                      IconButton.filled(
-                        tooltip: 'Send message',
-                        onPressed: _sending ? null : _send,
-                        icon: _sending
-                            ? const SizedBox.square(
-                                dimension: 18,
-                                child:
-                                    CircularProgressIndicator(strokeWidth: 2),
-                              )
-                            : const Icon(Icons.send_rounded),
+                      const SizedBox(width: 8),
+                      SizedBox.square(
+                        dimension: 48,
+                        child: IconButton.filled(
+                          style: IconButton.styleFrom(
+                            backgroundColor: primaryColor,
+                            foregroundColor: Colors.white,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(16),
+                            ),
+                          ),
+                          tooltip: 'Send message',
+                          onPressed: _sending ? null : _send,
+                          icon: _sending
+                              ? const SizedBox.square(
+                                  dimension: 18,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: Colors.white,
+                                  ),
+                                )
+                              : const Icon(Icons.send_rounded),
+                        ),
                       ),
                     ],
                   ),
@@ -460,18 +502,14 @@ class _RideChatScreenState extends State<RideChatScreen> {
       ),
     );
     if (confirmed != true || !mounted) {
-      pickup.dispose();
-      pickupLat.dispose();
-      pickupLong.dispose();
-      destination.dispose();
-      destinationLat.dispose();
-      destinationLong.dispose();
-      price.dispose();
-      currency.dispose();
+      _disposeControllers(<TextEditingController>[
+        pickup, pickupLat, pickupLong, destination, destinationLat,
+        destinationLong, price, currency,
+      ]);
       return;
     }
     final draft = TripOfferDraft(
-      contactRideId: _communication.activeRide.value?.id ?? '',
+      contactRideId: _rideId ?? '',
       pickup: <String, dynamic>{
         'address': pickup.text.trim(),
         'lat': double.parse(pickupLat.text.trim()),
@@ -487,26 +525,12 @@ class _RideChatScreenState extends State<RideChatScreen> {
     );
     final bool send =
         await showOfferReservationConfirmation(context, pointsController);
-    if (!send || !mounted) {
-      pickup.dispose();
-      pickupLat.dispose();
-      pickupLong.dispose();
-      destination.dispose();
-      destinationLat.dispose();
-      destinationLong.dispose();
-      price.dispose();
-      currency.dispose();
-      return;
-    }
+    _disposeControllers(<TextEditingController>[
+      pickup, pickupLat, pickupLong, destination, destinationLat,
+      destinationLong, price, currency,
+    ]);
+    if (!send || !mounted) return;
     final SendOfferResult result = await pointsController.sendOffer(draft);
-    pickup.dispose();
-    pickupLat.dispose();
-    pickupLong.dispose();
-    destination.dispose();
-    destinationLat.dispose();
-    destinationLong.dispose();
-    price.dispose();
-    currency.dispose();
     if (!mounted) return;
     // Successful reservations are already shown by the offer status card and
     // the deduplicated realtime notification. Only surface failures here.
@@ -521,6 +545,244 @@ class _RideChatScreenState extends State<RideChatScreen> {
         ),
       );
     }
+  }
+
+  void _disposeControllers(List<TextEditingController> controllers) {
+    for (final TextEditingController controller in controllers) {
+      controller.dispose();
+    }
+  }
+}
+
+class _CounterpartAvatar extends StatelessWidget {
+  const _CounterpartAvatar({required this.conversation});
+
+  final RideConversationModel? conversation;
+
+  @override
+  Widget build(BuildContext context) {
+    final String? image = conversation?.counterpart?.profileImageUrl;
+    return CircleAvatar(
+      radius: 20,
+      backgroundColor: primaryColor.withValues(alpha: 0.12),
+      backgroundImage:
+          image != null && image.isNotEmpty ? NetworkImage(image) : null,
+      child: image == null || image.isEmpty
+          ? const Icon(Icons.person_rounded, color: primaryColor)
+          : null,
+    );
+  }
+}
+
+class _CounterpartSubtitle extends StatelessWidget {
+  const _CounterpartSubtitle({required this.conversation});
+
+  final RideConversationModel? conversation;
+
+  @override
+  Widget build(BuildContext context) {
+    final ConversationCounterpartModel? counterpart =
+        conversation?.counterpart;
+    final String? vehicle = counterpart?.role == 'driver'
+        ? <String?>[
+            counterpart?.vehicleType,
+            counterpart?.vehicleModel,
+          ].where((String? value) => value != null && value.isNotEmpty).join(' · ')
+        : null;
+    final String subtitle =
+        vehicle != null && vehicle.isNotEmpty ? vehicle : 'Secure chat';
+    final String? reference = conversation?.rideReference;
+    return Text(
+      reference != null && reference.isNotEmpty
+          ? '$subtitle  •  $reference'
+          : subtitle,
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+      style: Theme.of(context).textTheme.labelSmall?.copyWith(
+            color: text2Color,
+          ),
+    );
+  }
+}
+
+class _MessageList extends StatelessWidget {
+  const _MessageList({
+    required this.messages,
+    required this.selfId,
+    required this.onRefresh,
+  });
+
+  final List<RideMessageModel> messages;
+  final String selfId;
+  final VoidCallback onRefresh;
+
+  @override
+  Widget build(BuildContext context) {
+    if (messages.isEmpty) {
+      return RefreshIndicator(
+        onRefresh: () async => onRefresh(),
+        child: ListView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          children: const <Widget>[
+            SizedBox(height: 160),
+            Icon(Icons.chat_bubble_outline_rounded,
+                size: 48, color: Color(0xFFC9C9C9)),
+            SizedBox(height: 12),
+            Center(
+              child: Text(
+                'No messages yet. Say hello to your ride participant.',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: text2Color),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+    return ListView.builder(
+      padding: const EdgeInsets.symmetric(vertical: 12),
+      physics: const AlwaysScrollableScrollPhysics(),
+      itemCount: messages.length,
+      itemBuilder: (BuildContext context, int index) {
+        final RideMessageModel message = messages[index];
+        final bool mine = message.senderId == selfId;
+        final DateTime? previousTime =
+            index > 0 ? messages[index - 1].createdAt : null;
+        final DateTime? currentTime = message.createdAt;
+        final bool showDayHeader = index == 0 ||
+            !_sameDay(previousTime, currentTime);
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: <Widget>[
+            if (showDayHeader) _DayHeader(at: currentTime),
+            _MessageBubble(message: message, mine: mine),
+          ],
+        );
+      },
+    );
+  }
+
+  bool _sameDay(DateTime? a, DateTime? b) {
+    if (a == null || b == null) return true;
+    return a.year == b.year && a.month == b.month && a.day == b.day;
+  }
+}
+
+class _DayHeader extends StatelessWidget {
+  const _DayHeader({required this.at});
+
+  final DateTime? at;
+
+  @override
+  Widget build(BuildContext context) {
+    final DateTime time = at?.toLocal() ?? DateTime.now();
+    final String label = time.year == DateTime.now().year
+        ? DateFormat.MMMd().format(time)
+        : DateFormat.yMMMd().format(time);
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Center(
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+          decoration: BoxDecoration(
+            color: const Color(0xFFF1F1F1),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Text(
+            label,
+            style: const TextStyle(
+              color: text2Color,
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _MessageBubble extends StatelessWidget {
+  const _MessageBubble({required this.message, required this.mine});
+
+  final RideMessageModel message;
+  final bool mine;
+
+  @override
+  Widget build(BuildContext context) {
+    return Align(
+      alignment: mine ? Alignment.centerRight : Alignment.centerLeft,
+      child: Container(
+        constraints: const BoxConstraints(maxWidth: 320),
+        margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 3),
+        padding: const EdgeInsets.fromLTRB(14, 10, 12, 8),
+        decoration: BoxDecoration(
+          color: mine ? primaryColor : const Color(0xFFF1F1F1),
+          borderRadius: BorderRadius.only(
+            topLeft: const Radius.circular(18),
+            topRight: const Radius.circular(18),
+            bottomLeft: Radius.circular(mine ? 18 : 6),
+            bottomRight: Radius.circular(mine ? 6 : 18),
+          ),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.end,
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            Text(
+              message.text,
+              style: TextStyle(
+                color: mine ? Colors.white : textColor,
+                height: 1.3,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: <Widget>[
+                if (message.createdAt != null)
+                  Text(
+                    DateFormat.Hm().format(message.createdAt!.toLocal()),
+                    style: TextStyle(
+                      color: mine
+                          ? Colors.white.withValues(alpha: 0.75)
+                          : text2Color,
+                      fontSize: 11,
+                    ),
+                  ),
+                if (mine) ...<Widget>[
+                  const SizedBox(width: 6),
+                  _StatusIcon(status: message.status),
+                ],
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _StatusIcon extends StatelessWidget {
+  const _StatusIcon({required this.status});
+
+  final RideMessageStatus status;
+
+  @override
+  Widget build(BuildContext context) {
+    return Icon(
+      switch (status) {
+        RideMessageStatus.sent => Icons.check_rounded,
+        RideMessageStatus.delivered => Icons.done_all_rounded,
+        RideMessageStatus.read => Icons.done_all_rounded,
+      },
+      size: 14,
+      color: switch (status) {
+        RideMessageStatus.sent => Colors.white.withValues(alpha: 0.6),
+        RideMessageStatus.delivered => Colors.white.withValues(alpha: 0.85),
+        RideMessageStatus.read => amberColor,
+      },
+    );
   }
 }
 
@@ -543,6 +805,14 @@ class _IncomingOfferCard extends StatelessWidget {
         (location?['address'] ?? fallback).toString();
     return Card(
       margin: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+      elevation: 0,
+      color: const Color(0xFFFFF8E8),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(
+          color: amberColor.withValues(alpha: 0.5),
+        ),
+      ),
       child: Padding(
         padding: const EdgeInsets.all(14),
         child: Column(
@@ -550,7 +820,7 @@ class _IncomingOfferCard extends StatelessWidget {
           children: <Widget>[
             Row(
               children: <Widget>[
-                const Icon(Icons.local_offer_outlined),
+                const Icon(Icons.local_offer_outlined, color: primaryColor),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
@@ -565,7 +835,10 @@ class _IncomingOfferCard extends StatelessWidget {
                   Text(
                     '${offer.offeredPrice!.toStringAsFixed(2)} '
                     '${offer.currency ?? ''}',
-                    style: const TextStyle(fontWeight: FontWeight.w700),
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w700,
+                      color: primaryColor,
+                    ),
                   ),
               ],
             ),
@@ -587,6 +860,10 @@ class _IncomingOfferCard extends StatelessWidget {
                 const SizedBox(width: 10),
                 Expanded(
                   child: FilledButton(
+                    style: FilledButton.styleFrom(
+                      backgroundColor: primaryColor,
+                      foregroundColor: Colors.white,
+                    ),
                     onPressed: loading ? null : onAccept,
                     child: loading
                         ? const SizedBox.square(

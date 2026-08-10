@@ -19,6 +19,7 @@ import {
   completeDriverProfile,
   getAvailableDrivers,
   getDriverAvailability,
+  heartbeatPresence,
 } from "../controllers/driverController.js";
 import { generateStorage } from "../utils/multerFunction.js";
 import { createRestrictedUpload, handleRestrictedUpload } from "../utils/uploadPolicy.js";
@@ -107,6 +108,7 @@ router.get(
 
 router.get("/all-drivers", requireSignIn, isAdmin, getAllDrivers);
 router.post("/update-online-status", requireSignIn, updateOnlineStatus);
+router.post("/presence/heartbeat", requireSignIn, heartbeatPresence);
 router.post("/update-location", requireSignIn, updateDriverLocation);
 // Kept as a compatibility alias for older admin builds. It is intentionally
 // protected and uses a safe projection in the controller.

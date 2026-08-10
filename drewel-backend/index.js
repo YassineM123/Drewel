@@ -15,6 +15,7 @@ import adminRoute from "./src/routes/adminRoute.js";
 import bannerRoute from "./src/routes/bannerRoute.js";
 import callRoutes from "./src/routes/callRoutes.js";
 import rideRoutes from "./src/routes/rideRoutes.js";
+import conversationRoutes from "./src/routes/conversationRoutes.js";
 import driverPointsRoutes from "./src/routes/driverPointsRoutes.js";
 import adminPointsRoutes from "./src/routes/adminPointsRoutes.js";
 import tripOfferRoutes from "./src/routes/tripOfferRoutes.js";
@@ -26,6 +27,7 @@ import {
 } from "./src/utils/publicAssets.js";
 import { startCallExpiryWatchdog } from "./src/jobs/callExpiryJob.js";
 import { startPointsJobs } from "./src/jobs/pointsJobs.js";
+import { startDriverPresenceWatchdog } from "./src/jobs/driverPresenceJob.js";
 
 loadEnv();
 validatePublicAssetConfig();
@@ -106,6 +108,7 @@ app.use("/api/admin", adminRoute);
 app.use("/api/banner", bannerRoute);
 app.use("/api/calls", callRoutes);
 app.use("/api/rides", rideRoutes);
+app.use("/api/conversations", conversationRoutes);
 app.use("/api/trip-offers", tripOfferRoutes);
 
 app.get("/api/health", async (req, res) => {
@@ -149,6 +152,7 @@ connectDB()
     server.listen(PORT, HOST, () => {
       startCallExpiryWatchdog();
       startPointsJobs();
+      startDriverPresenceWatchdog();
       console.log("server running at " + HOST + ":" + PORT);
     });
   })

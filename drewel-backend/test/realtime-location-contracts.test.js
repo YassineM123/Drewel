@@ -118,8 +118,8 @@ test("new clients go online with GPS while legacy clients remain hidden until a 
     mobileSource,
     /callingUpdateDriverOnlineStatus\(\)[\s\S]*?Geolocator\.getCurrentPosition\([\s\S]*?buildGpsFixPayload\([\s\S]*?driverUpdateOnlineStatusApi/
   );
-  assert.match(adminSource, /Driver\.find\(\{[\s\S]*?buildFreshAdminMarketplaceAvailabilityFilter\(\)/);
-  assert.match(dashboardSource, /Driver\.countDocuments\(buildFreshAdminMarketplaceAvailabilityFilter\(\)\)/);
+  assert.match(adminSource, /Driver\.find\(\{[\s\S]*?buildActiveDriverPresenceFilter\(\)/);
+  assert.match(dashboardSource, /Driver\.countDocuments\(buildActiveDriverPresenceFilter\(\)\)/);
 });
 
 test("map driver marker identity is based on driver id, not list position", () => {

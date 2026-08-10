@@ -129,6 +129,9 @@ class UserHomeController extends GetxController
   // Selected vehicle type for filtering
   String get selectedVehicleType =>
       parameter[ApiKeyConstants.vehicleType] ?? '';
+  String get selectedMarketplaceCity => AppConfig.tunisiaTestMode
+      ? AppConfig.marketplaceRegionLabel
+      : parameter[ApiKeyConstants.city] ?? '';
   // void loadCustomMarker() async {
   //   customMarker = await BitmapDescriptor.fromAssetImage(
   //     const ImageConfiguration(size: Size(35, 35)),
@@ -702,14 +705,32 @@ class UserHomeController extends GetxController
     //   leftPosition.value = MediaQuery.of(Get.context!).size.width - 100;
     //   increment();
     // });
-    setSelectedCityLocation(
-        LatLng(
-            LocalData().cityLatLongList[
-                int.parse(parameter[ApiKeyConstants.index] ?? '0')]['lat'],
-            LocalData().cityLatLongList[
-                int.parse(parameter[ApiKeyConstants.index] ?? '0')]['lon']),
-        LocalData().cityLatLongList[
-            int.parse(parameter[ApiKeyConstants.index] ?? '0')]['city']);
+    final LocalData localData = LocalData();
+    final int requestedIndex = int.tryParse(
+          parameter[ApiKeyConstants.index] ?? '',
+        ) ??
+        0;
+    final int safeIndex = AppConfig.tunisiaTestMode
+        ? defaultMarketplaceCityIndex(localData.cityLatLongList)
+        : requestedIndex.clamp(0, localData.cityLatLongList.length - 1);
+    final Map<String, dynamic> initialCity =
+        localData.cityLatLongList[safeIndex];
+    final LatLng initialCityCenter = LatLng(
+      (initialCity['lat'] as num).toDouble(),
+      (initialCity['lon'] as num).toDouble(),
+    );
+    mapPosition = initialCityCenter;
+    currentMapCenter = initialCityCenter;
+    if (shouldSeedCityCenterAsDiscoveryOrigin()) {
+      setSelectedCityLocation(initialCityCenter, initialCity['city'] as String);
+    } else {
+      // Tunisia is an isolated, account-allowlisted QA marketplace. A stale
+      // UAE route must never become its discovery origin; live GPS selects the
+      // backend service area and nearest providers.
+      parameter[ApiKeyConstants.index] = safeIndex.toString();
+      parameter[ApiKeyConstants.city] = AppConfig.marketplaceRegionLabel;
+      locationController.text = 'Current location in Tunisia';
+    }
 
     unawaited(_initializeDiscovery());
   }
@@ -804,7 +825,7 @@ class UserHomeController extends GetxController
     isDriversLoading.value = false;
     isDriverServiceUnavailable.value = true;
     driverServiceMessage.value = message ??
-        'Turn on precise location to find nearby drivers in ${parameter[ApiKeyConstants.city] ?? 'your city'}.';
+        'Turn on precise location to find nearby drivers in ${selectedMarketplaceCity.isEmpty ? 'your city' : selectedMarketplaceCity}.';
     allDriversList = <Drivers>[];
     visibleDriversList = <Drivers>[];
     driversList = <Drivers>[];
@@ -892,7 +913,7 @@ class UserHomeController extends GetxController
     SharedPreferences pref = await SharedPreferences.getInstance();
     if (!_canUpdateView) return;
     String token = pref.getString(ApiKeyConstants.token) ?? '';
-    _currentCity = parameter[ApiKeyConstants.city] ?? '';
+    _currentCity = selectedMarketplaceCity;
 
     if (token.isNotEmpty) {
       // Register listeners before opening the connection so an immediate
@@ -1511,6 +1532,17 @@ class UserHomeController extends GetxController
     userLng.value = position.longitude;
     isUserLocationLoaded.value = true;
     _lastUserPositionRecordedAt = position.timestamp;
+    if (AppConfig.tunisiaTestMode && !isSelectedLocationSet.value) {
+      final LatLng gpsLocation = LatLng(position.latitude, position.longitude);
+      mapPosition = gpsLocation;
+      currentMapCenter = gpsLocation;
+      locationController.text = 'Current location in Tunisia';
+      unawaited(_animateCamera(
+        CameraUpdate.newCameraPosition(
+          CameraPosition(target: gpsLocation, zoom: 14),
+        ),
+      ));
+    }
 
     isDriverServiceUnavailable.value = false;
     driverServiceMessage.value = '';

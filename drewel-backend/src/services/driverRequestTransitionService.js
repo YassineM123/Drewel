@@ -2,6 +2,10 @@ import mongoose from "mongoose";
 import Driver from "../models/Driver.js";
 import RequestAudit from "../models/RequestAudit.js";
 import { grantWelcomeBonusInSession } from "./pointsWalletService.js";
+import {
+  applyForcedOfflinePresence,
+  emitDriverPresenceTransition,
+} from "./driverPresenceService.js";
 
 export const DRIVER_STATUSES = ["pending", "approved", "rejected", "completed"];
 export const PROFILE_REQUEST_STATUSES = ["not_submitted", "pending", "approved", "rejected"];
@@ -69,7 +73,7 @@ export const applyProfileRequestTransitionFields = (
     driver.profileRejectionReason = "";
     if (driver.status === "completed") driver.status = "approved";
     driver.completedAt = null;
-    driver.isOnline = false;
+    applyForcedOfflinePresence(driver, now);
   } else if (newStatus === "approved") {
     driver.profileApprovedAt = now;
     driver.profileRejectionReason = "";
@@ -81,7 +85,7 @@ export const applyProfileRequestTransitionFields = (
     driver.profileApprovedBy = null;
     if (driver.status === "completed") driver.status = "approved";
     driver.completedAt = null;
-    driver.isOnline = false;
+    applyForcedOfflinePresence(driver, now);
   }
   return driver;
 };
@@ -101,12 +105,12 @@ export const applyRequestTransitionFields = (driver, newStatus, now = new Date()
     driver.completedAt = null;
     driver.pendingSince = now;
     driver.rejectionReason = "";
-    driver.isOnline = false;
+    applyForcedOfflinePresence(driver, now);
   } else if (newStatus === "rejected") {
     driver.isApproved = false;
     driver.approvedAt = null;
     driver.approvedBy = null;
-    driver.isOnline = false;
+    applyForcedOfflinePresence(driver, now);
   } else if (newStatus === "completed") {
     driver.isApproved = true;
     driver.approvedAt ||= now;
@@ -151,6 +155,7 @@ export const transitionDriverRequest = async ({
 
   const session = await mongoose.startSession();
   let transitionedDriver;
+  let forcedPresenceTransition = false;
   try {
     await session.withTransaction(async () => {
       const driver = await Driver.findById(requestId).session(session);
@@ -192,6 +197,8 @@ export const transitionDriverRequest = async ({
       }
 
       const now = new Date();
+      const presenceWasOnline =
+        driver.presenceStatus === "Online" || driver.isOnline === true;
       if (requestStage === "profile") {
         applyProfileRequestTransitionFields(driver, newStatus, now);
         if (newStatus === "approved") driver.profileApprovedBy = actor._id;
@@ -213,6 +220,10 @@ export const transitionDriverRequest = async ({
           isProfilePendingRefresh,
         });
       }
+      forcedPresenceTransition =
+        presenceWasOnline &&
+        driver.presenceStatus === "Offline" &&
+        driver.isOnline === false;
       await grantWelcomeBonusInSession(driver, session, {
         source:
           requestStage === "profile"
@@ -240,6 +251,14 @@ export const transitionDriverRequest = async ({
 
       transitionedDriver = driver;
     });
+    if (forcedPresenceTransition) {
+      emitDriverPresenceTransition(
+        transitionedDriver,
+        requestStage === "profile"
+          ? "PROFILE_ELIGIBILITY_REVOKED"
+          : "DRIVER_ELIGIBILITY_REVOKED"
+      );
+    }
     return transitionedDriver;
   } catch (error) {
     const message = String(error?.message || "");

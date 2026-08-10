@@ -72,6 +72,9 @@ class DrewelOsmMap extends StatelessWidget {
             urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
             userAgentPackageName: 'com.drewel',
             maxNativeZoom: 19,
+            errorTileCallback: (tile, error, stackTrace) {
+              debugPrint('OSM tile failed (${tile.coordinates}): $error');
+            },
           ),
           if (polylines.isNotEmpty)
             PolylineLayer(

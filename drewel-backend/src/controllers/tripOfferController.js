@@ -1,7 +1,13 @@
 import TripOffer from "../models/TripOffer.js";
 import Notification from "../models/Notification.js";
+import Ride from "../models/Ride.js";
 import { io } from "../socket/index.js";
 import { resolvePrincipal } from "../services/rideCommunicationPolicy.js";
+import {
+  ensureConversationForRide,
+  syncConversationForRideId,
+} from "../services/conversationService.js";
+import { emitConversationUpdated } from "./rideController.js";
 import {
   acceptTripOffer,
   closeTripOffer,
@@ -227,6 +233,19 @@ export const acceptOffer = async (req, res) => {
       status: "Busy",
       isAvailable: false,
     });
+    const conversation = await ensureConversationForRide(result.ride);
+    await emitConversationUpdated(conversation);
+    const cancelledContacts = await Ride.find({
+      _id: { $ne: result.ride._id },
+      $or: [{ passengerId: principal.id }, { driverId: result.offer.driverId }],
+      status: { $regex: /^cancelled/ },
+    })
+      .select("_id")
+      .lean();
+    for (const contact of cancelledContacts) {
+      const synced = await syncConversationForRideId(contact._id);
+      await emitConversationUpdated(synced);
+    }
     return res.json({
       success: true,
       offer: toTripOfferDto(result.offer),

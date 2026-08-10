@@ -40,6 +40,11 @@ import {
   serviceAreaForCoordinates,
   validateCoordinates,
 } from "../utils/dubaiLocation.js";
+import {
+  configureDriverPresenceEmitter,
+  heartbeatDriverPresence,
+  noteDriverSocketDisconnect,
+} from "../services/driverPresenceService.js";
 
 const app = express();
 const server = http.createServer(app);
@@ -430,6 +435,32 @@ io.on("connection", async (socket) => {
       acknowledgeSocketEvent(acknowledge, { ok: true, tracking: Boolean(on) });
     });
 
+    socket.on("driver:presence-heartbeat", async ({ sessionId } = {}, acknowledge) => {
+      try {
+        if (!authenticatedDriver) {
+          acknowledgeSocketEvent(acknowledge, { ok: false, error: "DRIVER_REQUIRED" });
+          return;
+        }
+        const result = await heartbeatDriverPresence({
+          driverId: userId,
+          sessionId,
+        });
+        if (!result) {
+          acknowledgeSocketEvent(acknowledge, {
+            ok: false,
+            error: "PRESENCE_SESSION_STALE",
+          });
+          return;
+        }
+        acknowledgeSocketEvent(acknowledge, { ok: true, presence: result.presence });
+      } catch {
+        acknowledgeSocketEvent(acknowledge, {
+          ok: false,
+          error: "PRESENCE_HEARTBEAT_FAILED",
+        });
+      }
+    });
+
     // socket.on("global-message-page", async (groupId) => {
     //   try {
     //     await globalMessagePageHandler(socket, groupId);
@@ -451,27 +482,9 @@ io.on("connection", async (socket) => {
           driverSocketCounts.set(userIdString, remaining);
         } else {
           driverSocketCounts.delete(userIdString);
-          const activeDriver = await Driver.findById(userId)
-            .select("_id activeRideId isOnline");
-          const driver = activeDriver?.activeRideId
-            ? await Driver.findByIdAndUpdate(
-                userId,
-                { $set: { isOnline: false, availabilityStatus: "Busy" } },
-                { new: true }
-              ).select("_id availabilityStatus updatedAt")
-            : await Driver.findByIdAndUpdate(
-                userId,
-                { $set: { isOnline: false, availabilityStatus: "Offline" } },
-                { new: true }
-              ).select("_id availabilityStatus updatedAt");
-          if (driver) {
-            io.emit("driver:availability", {
-              driverId: String(driver._id),
-              status: driver.availabilityStatus,
-              isAvailable: false,
-              updatedAt: driver.updatedAt,
-            });
-          }
+          // Background suspension and transient network loss both close the
+          // socket. They must not override the authenticated presence lease.
+          await noteDriverSocketDisconnect(userId);
         }
       }
     });
@@ -489,5 +502,6 @@ io.on("connection", async (socket) => {
     socket.disconnect(true);
   }
 });
+configureDriverPresenceEmitter((eventName, payload) => io.emit(eventName, payload));
 
 export { app, server, io };

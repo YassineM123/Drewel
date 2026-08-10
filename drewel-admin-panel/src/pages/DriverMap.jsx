@@ -4,6 +4,14 @@ import L from "leaflet";
 import PropTypes from "prop-types";
 import { useSocket } from "../context/SocketContext";
 import { getDriversWithLocation } from "../utils/api";
+import {
+  applyPresence,
+  mergePresenceSnapshot,
+  normalizeDriverPresence,
+  presenceIsOnline,
+  presenceVersion,
+  shouldApplyPresence,
+} from "../utils/driverPresence";
 
 const STATUS_COLORS = {
   Online: "#28a745",
@@ -14,7 +22,9 @@ const STATUS_COLORS = {
 const CENTER = [24.4539, 54.3773];
 
 const buildDriverIcon = (driver) => {
-  const status = driver.availabilityStatus || (driver.isOnline ? "Online" : "Offline");
+  const status = presenceIsOnline(driver)
+    ? driver.availabilityStatus || "Online"
+    : "Offline";
   const color = STATUS_COLORS[status] || STATUS_COLORS.Offline;
   const initial = (
     (driver.fullName || `${driver.firstName || ""} ${driver.lastName || ""}`).trim() ||
@@ -59,8 +69,12 @@ const hasValidLocation = (driver) => {
   );
 };
 
-const statusLabel = (driver) =>
-  driver.availabilityStatus || (driver.isOnline ? "Online" : "Offline");
+const presenceLabel = (driver) => (presenceIsOnline(driver) ? "Online" : "Offline");
+const availabilityLabel = (driver) => driver.availabilityStatus || "Unavailable";
+const locationIsFresh = (driver) => {
+  const updatedAt = new Date(driver.locationUpdatedAt || 0).getTime();
+  return Number.isFinite(updatedAt) && Date.now() - updatedAt <= 45000;
+};
 
 const DriverMap = () => {
   const { socket, isConnected } = useSocket();
@@ -69,17 +83,46 @@ const DriverMap = () => {
   const [loadError, setLoadError] = useState("");
   const [lastUpdate, setLastUpdate] = useState(null);
   const fetchInFlight = useRef(false);
+  const presenceVersions = useRef(new Map());
 
   const fetchDrivers = async (silent = false) => {
     if (fetchInFlight.current) return;
     fetchInFlight.current = true;
+    const versionsAtRequest = new Map(presenceVersions.current);
     try {
       if (!silent) {
         setLoading(true);
         setLoadError("");
       }
       const list = await getDriversWithLocation();
-      setDrivers(list);
+      setDrivers((current) => {
+        const currentById = new Map(
+          current.map((driver) => [String(driver._id), driver])
+        );
+        const snapshotIds = new Set();
+        const next = list.map((rawDriver) => {
+          const snapshot = normalizeDriverPresence(rawDriver);
+          const driverId = String(snapshot._id);
+          snapshotIds.add(driverId);
+          const latestVersion = presenceVersions.current.get(driverId);
+          if (snapshot.presenceVersion >= presenceVersion(latestVersion)) {
+            presenceVersions.current.set(driverId, snapshot.presenceVersion);
+          }
+          return mergePresenceSnapshot(
+            currentById.get(driverId),
+            snapshot,
+            latestVersion
+          );
+        });
+        current.forEach((driver) => {
+          const driverId = String(driver._id);
+          if (snapshotIds.has(driverId)) return;
+          const before = presenceVersion(versionsAtRequest.get(driverId));
+          const now = presenceVersion(presenceVersions.current.get(driverId));
+          if (now > before) next.push(driver);
+        });
+        return next;
+      });
       setLastUpdate(new Date());
     } catch (error) {
       const message =
@@ -100,6 +143,7 @@ const DriverMap = () => {
   useEffect(() => {
     if (!socket || !isConnected) return;
 
+    fetchDrivers(true);
     socket.emit("driver-map:track", { on: true });
 
     const onLocation = (update) => {
@@ -119,6 +163,7 @@ const DriverMap = () => {
               long: update.long,
               locationUpdatedAt: update.locationUpdatedAt,
               availabilityStatus: update.availabilityStatus,
+              presenceStatus: update.presenceStatus,
               isOnline: update.isOnline,
             },
           ];
@@ -129,8 +174,8 @@ const DriverMap = () => {
           lat: update.lat,
           long: update.long,
           locationUpdatedAt: update.locationUpdatedAt,
-          availabilityStatus: update.availabilityStatus,
-          isOnline: update.isOnline,
+          availabilityStatus:
+            update.availabilityStatus ?? next[index].availabilityStatus,
         };
         return next;
       });
@@ -147,19 +192,39 @@ const DriverMap = () => {
         next[index] = {
           ...next[index],
           availabilityStatus: update.status || "Offline",
-          isOnline: Boolean(update.isAvailable),
         };
         return next;
       });
     };
 
+    const onPresence = (update) => {
+      const driverId = String(update?.driverId || "");
+      if (!driverId) return;
+      const currentVersion = presenceVersions.current.get(driverId);
+      if (!shouldApplyPresence(currentVersion, update)) return;
+      presenceVersions.current.set(driverId, presenceVersion(update.version));
+      setDrivers((current) => {
+        const index = current.findIndex((driver) => String(driver._id) === driverId);
+        if (index === -1) {
+          fetchDrivers(true);
+          return current;
+        }
+        const next = current.slice();
+        next[index] = applyPresence(next[index], update);
+        return next;
+      });
+      setLastUpdate(new Date());
+    };
+
     socket.on("driver:location", onLocation);
     socket.on("driver:availability", onAvailability);
+    socket.on("driver:presence", onPresence);
 
     return () => {
       socket.emit("driver-map:track", { on: false });
       socket.off("driver:location", onLocation);
       socket.off("driver:availability", onAvailability);
+      socket.off("driver:presence", onPresence);
     };
   }, [socket, isConnected]);
 
@@ -180,10 +245,9 @@ const DriverMap = () => {
   const counts = useMemo(() => {
     return visibleDrivers.reduce(
       (acc, driver) => {
-        const status = statusLabel(driver);
-        if (status === "Busy") acc.busy += 1;
-        else if (status === "Online") acc.online += 1;
-        else acc.offline += 1;
+        if (!presenceIsOnline(driver)) acc.offline += 1;
+        else if (availabilityLabel(driver) === "Busy") acc.busy += 1;
+        else acc.online += 1;
         return acc;
       },
       { online: 0, busy: 0, offline: 0 }
@@ -283,20 +347,21 @@ const DriverMap = () => {
                     <div>
                       <span
                         className={`badge ${
-                          statusLabel(driver) === "Online"
+                          presenceLabel(driver) === "Online"
                             ? "badge-success"
-                            : statusLabel(driver) === "Busy"
-                              ? "badge-warning"
-                              : "badge-secondary"
+                            : "badge-secondary"
                         }`}
                       >
-                        {statusLabel(driver)}
+                        Presence: {presenceLabel(driver)}
                       </span>
+                    </div>
+                    <div className="small mt-1">
+                      Availability: {availabilityLabel(driver)}
                     </div>
                     <div className="small mt-1">{driver.whatsappNumber || driver.phone || ""}</div>
                     <div className="small text-muted">
                       {driver.locationUpdatedAt
-                        ? `Updated ${new Date(driver.locationUpdatedAt).toLocaleTimeString()}`
+                        ? `${locationIsFresh(driver) ? "GPS live" : "GPS stale"} · updated ${new Date(driver.locationUpdatedAt).toLocaleTimeString()}`
                         : "No location update yet"}
                     </div>
                   </div>

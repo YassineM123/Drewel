@@ -1,8 +1,17 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import Swal from "sweetalert2";
 import TableUser from "../components/TableUser";
 import { getOnlineDriverList, updateDriverReviewStatus } from "../utils/api";
+import { useSocket } from "../context/SocketContext";
+import {
+  applyPresence,
+  mergePresenceSnapshot,
+  normalizeDriverPresence,
+  presenceIsOnline,
+  presenceVersion,
+  shouldApplyPresence,
+} from "../utils/driverPresence";
 
 const statusBadgeClass = (status) => {
   switch ((status || "").toLowerCase()) {
@@ -19,33 +28,125 @@ const statusBadgeClass = (status) => {
 
 const OnlineDrivers = () => {
   const navigate = useNavigate();
+  const { socket, isConnected } = useSocket();
   const [drivers, setDrivers] = useState([]);
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState("");
   const [search, setSearch] = useState("");
   const [openDropdown, setOpenDropdown] = useState(null);
+  const presenceVersions = useRef(new Map());
+  const fetchInFlight = useRef(false);
+  const driversRef = useRef([]);
 
-  const fetchDrivers = async () => {
+  useEffect(() => {
+    driversRef.current = drivers;
+  }, [drivers]);
+
+  const fetchDrivers = useCallback(async (silent = false) => {
+    if (fetchInFlight.current) return;
+    fetchInFlight.current = true;
+    const versionsAtRequest = new Map(presenceVersions.current);
     try {
-      setLoading(true);
-      setLoadError("");
+      if (!silent) {
+        setLoading(true);
+        setLoadError("");
+      }
       const list = await getOnlineDriverList();
-      setDrivers(list);
+      setDrivers((current) => {
+        const currentById = new Map(
+          current.map((driver) => [String(driver._id), driver])
+        );
+        const snapshotIds = new Set();
+        const next = [];
+        list.forEach((rawDriver) => {
+          const snapshot = normalizeDriverPresence(rawDriver);
+          const driverId = String(snapshot._id);
+          snapshotIds.add(driverId);
+          const latestVersion = presenceVersions.current.get(driverId);
+          const currentDriver = currentById.get(driverId);
+          if (
+            !currentDriver &&
+            presenceVersion(latestVersion) > snapshot.presenceVersion
+          ) {
+            return;
+          }
+          const merged = mergePresenceSnapshot(
+            currentDriver,
+            snapshot,
+            latestVersion
+          );
+          if (snapshot.presenceVersion >= presenceVersion(latestVersion)) {
+            presenceVersions.current.set(driverId, snapshot.presenceVersion);
+          }
+          if (presenceIsOnline(merged)) next.push(merged);
+        });
+        current.forEach((driver) => {
+          const driverId = String(driver._id);
+          if (snapshotIds.has(driverId)) return;
+          const before = presenceVersion(versionsAtRequest.get(driverId));
+          const now = presenceVersion(presenceVersions.current.get(driverId));
+          if (now > before && presenceIsOnline(driver)) next.push(driver);
+        });
+        return next;
+      });
     } catch (error) {
       const message =
         error?.response?.data?.message ||
         error?.message ||
         "Failed to load online drivers.";
-      setDrivers([]);
-      setLoadError(message);
+      if (!silent) {
+        setDrivers([]);
+        setLoadError(message);
+      }
     } finally {
-      setLoading(false);
+      fetchInFlight.current = false;
+      if (!silent) setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     fetchDrivers();
-  }, []);
+  }, [fetchDrivers]);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => fetchDrivers(true), 30000);
+    return () => window.clearInterval(timer);
+  }, [fetchDrivers]);
+
+  useEffect(() => {
+    if (!socket || !isConnected) return;
+    fetchDrivers(true);
+
+    const onPresence = (update) => {
+      const driverId = String(update?.driverId || "");
+      if (!driverId) return;
+      const currentVersion = presenceVersions.current.get(driverId);
+      if (!shouldApplyPresence(currentVersion, update)) return;
+      presenceVersions.current.set(driverId, presenceVersion(update.version));
+
+      const found = driversRef.current.some(
+        (driver) => String(driver._id) === driverId
+      );
+      setDrivers((current) => {
+        const index = current.findIndex((driver) => String(driver._id) === driverId);
+        if (!presenceIsOnline(update)) {
+          return index !== -1
+            ? current.filter((_, itemIndex) => itemIndex !== index)
+            : current;
+        }
+        if (index === -1) return current;
+        const next = current.slice();
+        next[index] = applyPresence(next[index], update);
+        return next;
+      });
+      // Presence events intentionally contain no profile data. Refetch an
+      // unknown Online driver so the table never invents partial rows.
+      if (presenceIsOnline(update) && !found) fetchDrivers(true);
+    };
+
+    socket.on("driver:presence", onPresence);
+    return () => socket.off("driver:presence", onPresence);
+  }, [socket, isConnected, fetchDrivers]);
 
   const filteredDrivers = useMemo(() => {
     const term = search.trim().toLowerCase();
@@ -132,6 +233,8 @@ const OnlineDrivers = () => {
                   <th>Name</th>
                   <th>WhatsApp</th>
                   <th>Status</th>
+                  <th>Presence</th>
+                  <th>Last heartbeat</th>
                   <th>Actions</th>
                 </tr>
               </thead>
@@ -149,6 +252,14 @@ const OnlineDrivers = () => {
                         </span>
                       </td>
                       <td>
+                        <span className="badge badge-success">ONLINE</span>
+                      </td>
+                      <td>
+                        {driver.presenceLastHeartbeatAt
+                          ? new Date(driver.presenceLastHeartbeatAt).toLocaleTimeString()
+                          : "Active"}
+                      </td>
+                      <td>
                         <TableUser
                           user={driver}
                           openDropdown={openDropdown}
@@ -164,7 +275,7 @@ const OnlineDrivers = () => {
                 })}
                 {filteredDrivers.length === 0 && (
                   <tr>
-                    <td colSpan={5} className="text-center">
+                    <td colSpan={7} className="text-center">
                       No online drivers found.
                     </td>
                   </tr>

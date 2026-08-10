@@ -137,6 +137,17 @@ const driverSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+    presenceStatus: {
+      type: String,
+      enum: ["Online", "Offline"],
+      default: "Offline",
+      index: true,
+    },
+    presenceSessionId: { type: String, default: null, select: false },
+    presenceLastHeartbeatAt: { type: Date, default: null },
+    presenceLeaseExpiresAt: { type: Date, default: null, index: true },
+    presenceDisconnectedAt: { type: Date, default: null },
+    presenceVersion: { type: Number, default: 0, min: 0 },
     currentLocation: { type: geoPointSchema, default: undefined },
     locationUpdatedAt: { type: Date, default: null, index: true },
     locationAccuracyM: { type: Number, default: null, min: 0 },
@@ -288,6 +299,10 @@ driverSchema.index({ profileRequestStatus: 1, profileSubmittedAt: -1, _id: -1 })
 driverSchema.index({ profileRequestStatus: 1, profileApprovedBy: 1, profileApprovedAt: -1 });
 driverSchema.index({ isOnline: 1, availabilityStatus: 1, city: 1, vehicleType: 1 });
 driverSchema.index(
+  { presenceStatus: 1, presenceLeaseExpiresAt: 1 },
+  { name: "driver_presence_lease" }
+);
+driverSchema.index(
   { currentLocation: "2dsphere" },
   { sparse: true, name: "currentLocation_2dsphere" }
 );
@@ -307,8 +322,16 @@ export const ensureMarketplaceDriverIndexes = async () => {
     { currentServiceArea: 1, isOnline: 1, availabilityStatus: 1, locationUpdatedAt: -1 },
     { name: "marketplace_availability" }
   );
+  await Driver.collection.createIndex(
+    { presenceStatus: 1, presenceLeaseExpiresAt: 1 },
+    { name: "driver_presence_lease" }
+  );
   const indexes = await Driver.collection.indexes();
-  for (const required of ["currentLocation_2dsphere", "marketplace_availability"]) {
+  for (const required of [
+    "currentLocation_2dsphere",
+    "marketplace_availability",
+    "driver_presence_lease",
+  ]) {
     if (!indexes.some((index) => index.name === required)) {
       throw new Error(`Required marketplace index is missing: ${required}`);
     }

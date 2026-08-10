@@ -63,6 +63,8 @@ class ApiUrlConstants {
       '${baseUrl}driver/update-location';
   static String get endPointOfDriverUpdateOnlineStatus =>
       '${baseUrl}driver/update-online-status';
+  static String get endPointOfDriverPresenceHeartbeat =>
+      '${baseUrl}driver/presence/heartbeat';
   static String get endPointOfDriverDetails =>
       '${baseUrl}driver/get-driver-details';
   static String get endPointOfUserDetails => '${baseUrl}users/get-user-details';
@@ -74,6 +76,11 @@ class ApiUrlConstants {
   static String calls(String suffix) => '${baseUrl}calls$suffix';
   static String rideMessages(String rideId) =>
       '${baseUrl}rides/$rideId/messages';
+  static String conversations(String suffix) => '${baseUrl}conversations$suffix';
+  static String get endPointOfNotifications =>
+      '${baseUrl}notification/get-notifications';
+  static String markNotificationAsRead(String notificationId) =>
+      '${baseUrl}notification/mark-as-read/$notificationId';
 
   // Delete account endpoints
   static String get endPointOfDeleteUser => '${baseUrl}users';

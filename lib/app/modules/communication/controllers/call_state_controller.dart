@@ -9,10 +9,14 @@ import '../../../../common/socket_services.dart';
 import '../../../data/apis/api_constants/api_key_constants.dart';
 import '../../../data/apis/api_constants/api_url_constants.dart';
 import '../../../data/apis/api_models/active_ride_model.dart';
+import '../../../data/apis/api_models/app_notification_model.dart';
 import '../../../data/apis/api_models/call_session_model.dart';
+import '../../../data/apis/api_models/ride_conversation_model.dart';
 import '../../../data/apis/communication_api_client.dart';
 import '../../../data/repositories/active_ride_repository.dart';
 import '../../../data/repositories/call_repository.dart';
+import '../../../data/repositories/conversation_repository.dart';
+import '../../../data/repositories/notification_repository.dart';
 import '../../../data/repositories/ride_message_repository.dart';
 import '../../../data/services/agora_call_service.dart';
 import '../../../routes/app_pages.dart';
@@ -21,23 +25,30 @@ import '../widgets/safety_dialog.dart';
 class CallStateController extends GetxService with WidgetsBindingObserver {
   CallStateController({
     required ActiveRideRepository activeRideRepository,
-    required CallRepository callRepository,
-    required RideMessageRepository messageRepository,
+    required this.callRepository,
+    required this.messageRepository,
+    required this.conversationRepository,
+    required this.notificationRepository,
     required AgoraCallService agoraService,
+    SocketService? socketService,
   })  : _activeRideRepository = activeRideRepository,
-        callRepository = callRepository,
-        messageRepository = messageRepository,
-        _agoraService = agoraService;
+        _agoraService = agoraService,
+        _socketService = socketService ?? SocketService();
 
   final ActiveRideRepository _activeRideRepository;
   final CallRepository callRepository;
   final RideMessageRepository messageRepository;
+  final ConversationRepository conversationRepository;
+  final NotificationRepository notificationRepository;
   final AgoraCallService _agoraService;
-  final SocketService _socketService = SocketService();
+  final SocketService _socketService;
 
   final Rxn<ActiveRideModel> activeRide = Rxn<ActiveRideModel>();
   final Rxn<CallSessionModel> currentCall = Rxn<CallSessionModel>();
   final Rxn<ActiveRideModel> pendingRide = Rxn<ActiveRideModel>();
+  final RxInt conversationUnread = 0.obs;
+  final RxList<AppNotificationModel> notifications =
+      <AppNotificationModel>[].obs;
   final Rx<AgoraConnectionState> connectionState =
       AgoraConnectionState.idle.obs;
   final RxBool isBusy = false.obs;
@@ -200,6 +211,8 @@ class CallStateController extends GetxService with WidgetsBindingObserver {
     _agoraService.setTokenRenewalHandler(_renewAgoraToken);
     await configureSession();
     await refreshActiveRide();
+    await refreshUnreadSummary();
+    await refreshNotifications();
   }
 
   @override
@@ -251,10 +264,80 @@ class CallStateController extends GetxService with WidgetsBindingObserver {
       _socketService.off('call:state');
       _socketService.off('ride:state');
       _socketService.off('driver:contact');
+      _socketService.off('conversation:updated');
+      _socketService.off('notification:new');
       _socketService.on('call:state', _handleCallStateEvent);
       _socketService.on('ride:state', (_) => refreshActiveRide());
       _socketService.on('driver:contact', (_) => refreshActiveRide());
+      _socketService.on('conversation:updated', _handleConversationUpdated);
+      _socketService.on('notification:new', _handleNotificationNew);
     }
+  }
+
+  Future<void> refreshUnreadSummary() async {
+    try {
+      final ConversationUnreadSummary summary =
+          await conversationRepository.summary();
+      conversationUnread.value = summary.unreadTotal;
+    } catch (error) {
+      debugPrint('Conversation unread refresh failed: ${error.runtimeType}');
+    }
+  }
+
+  Future<void> refreshNotifications() async {
+    try {
+      notifications.assignAll(await notificationRepository.list());
+    } catch (error) {
+      debugPrint('Notification refresh failed: ${error.runtimeType}');
+    }
+  }
+
+  Future<void> _handleConversationUpdated(dynamic data) async {
+    await refreshUnreadSummary();
+  }
+
+  Future<void> _handleNotificationNew(dynamic data) async {
+    if (data is! Map) return;
+    final AppNotificationModel notification =
+        AppNotificationModel.fromJson(Map<String, dynamic>.from(data));
+    if (notification.id.isEmpty) {
+      await refreshNotifications();
+      return;
+    }
+    notifications
+      ..removeWhere(
+        (AppNotificationModel existing) => existing.id == notification.id,
+      )
+      ..insert(0, notification);
+    if (notifications.length > 100) {
+      notifications.removeRange(100, notifications.length);
+    }
+    await refreshUnreadSummary();
+  }
+
+  Future<RideConversationModel> markConversationRead(String rideId) async {
+    final RideConversationModel conversation =
+        await conversationRepository.markRead(rideId);
+    await refreshUnreadSummary();
+    return conversation;
+  }
+
+  Future<void> markNotificationRead(String notificationId) async {
+    try {
+      await notificationRepository.markRead(notificationId);
+      final int index = notifications.indexWhere(
+        (AppNotificationModel item) => item.id == notificationId,
+      );
+      if (index >= 0) notifications[index] = notifications[index].copyWith(read: true);
+    } catch (error) {
+      debugPrint('Notification read failed: ${error.runtimeType}');
+    }
+  }
+
+  void openConversation(String rideId) {
+    Get.toNamed(Routes.RIDE_CHAT, arguments: <String, dynamic>{
+      'rideId': rideId,
+    });
   }
 
   Future<void> _handleCallStateEvent(dynamic data) async {
@@ -568,7 +651,9 @@ class CommunicationBinding extends Bindings {
       CallStateController(
         activeRideRepository: ActiveRideRepository(api),
         callRepository: CallRepository(api),
+        conversationRepository: ConversationRepository(api),
         messageRepository: RideMessageRepository(api),
+        notificationRepository: NotificationRepository(api),
         agoraService: AgoraCallService(),
       ),
       permanent: true,

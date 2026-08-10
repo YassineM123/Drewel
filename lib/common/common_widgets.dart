@@ -14,6 +14,7 @@ import 'package:get/get.dart';
 import 'package:http/http.dart' as http;
 import 'package:pin_code_fields/pin_code_fields.dart';
 import 'package:responsive_sizer/responsive_sizer.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 
 import 'package:shimmer/shimmer.dart';
 import 'package:simple_gradient_text/simple_gradient_text.dart';
@@ -243,21 +244,34 @@ class CommonWidgets {
       double? borderRadius,
       Color? color,
       BoxFit? fit}) {
+    final bool isSvg = assetName.toLowerCase().endsWith('.svg');
     return ClipRRect(
       borderRadius: BorderRadius.circular(borderRadius ?? 4.px),
-      child: Image.asset(
-        assetName,
-        height: height ?? 24.px,
-        width: width ?? 24.px,
-        color: color,
-        fit: fit ?? BoxFit.fill,
-        errorBuilder: (context, error, stackTrace) {
-          return SizedBox(
-            height: height ?? 24.px,
-            width: width ?? 24.px,
-          );
-        },
-      ),
+      child: isSvg
+          ? SvgPicture.asset(
+              assetName,
+              height: height ?? 24.px,
+              width: width ?? 24.px,
+              color: color,
+              fit: fit ?? BoxFit.fill,
+              placeholderBuilder: (context) => SizedBox(
+                height: height ?? 24.px,
+                width: width ?? 24.px,
+              ),
+            )
+          : Image.asset(
+              assetName,
+              height: height ?? 24.px,
+              width: width ?? 24.px,
+              color: color,
+              fit: fit ?? BoxFit.fill,
+              errorBuilder: (context, error, stackTrace) {
+                return SizedBox(
+                  height: height ?? 24.px,
+                  width: width ?? 24.px,
+                );
+              },
+            ),
     );
   }
 

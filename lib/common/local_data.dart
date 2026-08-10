@@ -1,6 +1,24 @@
 import '../app/data/constants/icons_constant.dart';
 import '../app/data/config/app_config.dart';
 
+const String tunisiaQaDefaultCity = 'Tunis';
+
+int defaultMarketplaceCityIndex(
+  List<Map<String, dynamic>> cities, {
+  bool tunisiaTestMode = AppConfig.tunisiaTestMode,
+}) {
+  if (!tunisiaTestMode) return 0;
+  final int tunisIndex = cities.indexWhere(
+    (Map<String, dynamic> city) => city['city'] == tunisiaQaDefaultCity,
+  );
+  return tunisIndex < 0 ? 0 : tunisIndex;
+}
+
+bool shouldSeedCityCenterAsDiscoveryOrigin({
+  bool tunisiaTestMode = AppConfig.tunisiaTestMode,
+}) =>
+    !tunisiaTestMode;
+
 class LocalData {
 //  static LoginModel? loginModel;
   static String lat = '51.1657';
@@ -46,6 +64,6 @@ class LocalData {
     {'image': IconConstants.icRecovery, 'name': 'Recovery'},
     {'image': IconConstants.icTruck, 'name': ' Truck'},
     {'image': IconConstants.icConstruction, 'name': 'Construction'},
-    {'image': IconConstants.icRefrigerator, 'name': 'Refrigerator'},
+    {'image': IconConstants.icWaterTanker, 'name': 'Water Tanker'},
   ];
 }

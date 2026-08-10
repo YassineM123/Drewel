@@ -29,6 +29,14 @@ import {
   grantWelcomeBonusInSession,
   runPointsTransaction,
 } from "../services/pointsWalletService.js";
+import {
+  buildActiveDriverPresenceFilter,
+  endDriverPresence,
+  establishDriverPresence,
+  heartbeatDriverPresence,
+  forceEndDriverPresence,
+  toDriverPresenceEvent,
+} from "../services/driverPresenceService.js";
 
 export {
   AVAILABLE_DRIVER_FIELDS,
@@ -1049,35 +1057,94 @@ export const updateOnlineStatus = async (req, res) => {
         ],
       },
     });
+
+    if (!isOnline) {
+      const hasSuppliedSessionId =
+        Object.hasOwn(req.body || {}, "sessionId") ||
+        Object.hasOwn(req.body || {}, "presenceSessionId");
+      const suppliedSessionId = Object.hasOwn(req.body || {}, "sessionId")
+        ? req.body.sessionId
+        : req.body?.presenceSessionId;
+      const ended = await endDriverPresence({
+        driverId: driver._id,
+        sessionId: suppliedSessionId,
+      });
+      if (hasSuppliedSessionId && !ended) {
+        return res.status(409).send({
+          success: false,
+          code: "PRESENCE_SESSION_STALE",
+          message: "This presence session has been replaced or is no longer online",
+        });
+      }
+
+      let offlineDriver = ended?.driver;
+      if (!offlineDriver) {
+        if (locationUpdate) Object.assign(driver, locationUpdate);
+        driver.isOnline = false;
+        driver.availabilityStatus = activeRide ? "Busy" : "Offline";
+        driver.presenceStatus = "Offline";
+        driver.presenceLeaseExpiresAt = new Date();
+        driver.presenceLastHeartbeatAt = new Date();
+        driver.presenceSessionId = null;
+        driver.presenceVersion = Number(driver.presenceVersion || 0) + 1;
+        await driver.save();
+        offlineDriver = driver;
+      }
+
+      io.emit("driver:availability", {
+        driverId: String(offlineDriver._id),
+        status: offlineDriver.availabilityStatus,
+        isAvailable: false,
+        updatedAt: offlineDriver.updatedAt,
+      });
+      io.emit("driver:presence", toDriverPresenceEvent(offlineDriver, "OFFLINE_REQUEST"));
+      return res.status(200).send({
+        success: true,
+        message: "Driver status updated to offline",
+        driver: offlineDriver,
+        presence: ended?.presence || {
+          status: "Offline",
+          leaseExpiresAt: offlineDriver.presenceLeaseExpiresAt,
+          lastHeartbeatAt: offlineDriver.presenceLastHeartbeatAt,
+          version: offlineDriver.presenceVersion,
+        },
+      });
+    }
+
     if (activeRide) {
       if (locationUpdate) Object.assign(driver, locationUpdate);
-      driver.isOnline = isOnline;
+      driver.isOnline = true;
       driver.availabilityStatus = "Busy";
       await driver.save();
+      const established = await establishDriverPresence(driver._id);
       io.emit("driver:availability", {
         driverId: String(driver._id),
         status: "Busy",
         isAvailable: false,
         updatedAt: driver.updatedAt,
       });
+      io.emit("driver:presence", toDriverPresenceEvent(established.driver, "ONLINE_REQUEST"));
       return res.status(200).send({
         success: true,
         code: "DRIVER_BUSY",
         message: "Connectivity updated; the driver remains busy with an active ride",
-        driver,
+        driver: established.driver,
+        presence: established.presence,
       });
     }
 
     if (locationUpdate) Object.assign(driver, locationUpdate);
-    driver.isOnline = isOnline;
-    driver.availabilityStatus = isOnline ? "Online" : "Offline";
+    driver.isOnline = true;
+    driver.availabilityStatus = "Online";
     await driver.save();
+    const established = await establishDriverPresence(driver._id);
     io.emit("driver:availability", {
       driverId: String(driver._id),
-      status: driver.availabilityStatus,
-      isAvailable: isOnline,
+      status: "Online",
+      isAvailable: true,
       updatedAt: driver.updatedAt,
     });
+    io.emit("driver:presence", toDriverPresenceEvent(established.driver, "ONLINE_REQUEST"));
 
     return res.status(200).send({
       success: true,
@@ -1089,13 +1156,41 @@ export const updateOnlineStatus = async (req, res) => {
             }
           : { message: `Driver status updated to ${isOnline ? "online" : "offline"}` }
       ),
-      driver,
+      driver: established.driver,
+      presence: established.presence,
     });
   } catch (error) {
     return res.status(error.statusCode || 500).send({
       success: false,
       code: error.code || "DRIVER_STATUS_UPDATE_FAILED",
       message: error.statusCode ? error.message : "Failed to update driver status",
+    });
+  }
+};
+
+export const heartbeatPresence = async (req, res) => {
+  try {
+    const result = await heartbeatDriverPresence({
+      driverId: req.user?._id,
+      sessionId: req.body?.sessionId,
+    });
+    if (!result) {
+      return res.status(409).send({
+        success: false,
+        code: "PRESENCE_SESSION_STALE",
+        message: "Presence session expired or was replaced; go online again",
+      });
+    }
+    return res.status(200).send({
+      success: true,
+      message: "Presence heartbeat accepted",
+      presence: result.presence,
+    });
+  } catch {
+    return res.status(500).send({
+      success: false,
+      code: "PRESENCE_HEARTBEAT_FAILED",
+      message: "Failed to refresh driver presence",
     });
   }
 };
@@ -1138,11 +1233,9 @@ export const updateDriverLocation = async (req, res) => {
 
 export const getAllOnlineDrivers = async (req, res) => {
   try {
-    const drivers = await Driver.find({
-      ...buildFreshDubaiMarketplaceAvailabilityFilter(),
-    })
-      .select("firstName lastName fullName phone whatsappNumber isOnline isApproved status")
-      .sort({ updatedAt: -1, _id: 1 })
+    const drivers = await Driver.find(buildActiveDriverPresenceFilter())
+      .select("firstName lastName fullName phone whatsappNumber isOnline isApproved status presenceStatus presenceLeaseExpiresAt presenceLastHeartbeatAt presenceVersion")
+      .sort({ presenceLastHeartbeatAt: -1, _id: 1 })
       .lean();
 
     const normalized = drivers.map((driver) => ({
@@ -1217,11 +1310,18 @@ export const toggleDriverRestriction = async (req, res) => {
 
     driver.isRestricted = !driver.isRestricted;
     await driver.save();
+    let presenceDriver = null;
+    if (driver.isRestricted) {
+      presenceDriver = await forceEndDriverPresence({
+        driverId: driver._id,
+        reason: "DRIVER_RESTRICTED",
+      });
+    }
 
     return res.status(200).json({
       success: true,
       message: `Driver restriction status toggled to ${driver.isRestricted}`,
-      driver,
+      driver: presenceDriver || driver,
     });
   } catch (error) {
     return res.status(500).json({ message: "Server error" });
@@ -1267,10 +1367,15 @@ export const deleteDriver = async (req, res) => {
       });
     }
 
+    const offlineDriver = await forceEndDriverPresence({
+      driverId: driver._id,
+      reason: "DRIVER_DELETED",
+    });
+
     return res.status(200).json({
       success: true,
       message: "Driver account deactivated successfully; request history was preserved",
-      driver,
+      driver: offlineDriver || driver,
     });
   } catch (error) {
     return res.status(500).json({ message: "Server error" });

@@ -43,6 +43,6 @@ bool isMarketplaceServiceAreaAllowed(
 }) {
   final String normalized =
       (serviceArea ?? '').trim().toLowerCase().replaceAll(RegExp(r'\s+'), ' ');
-  if (normalized == 'uae' || normalized == 'dubai') return true;
-  return tunisiaTestMode && normalized == 'tunisia-test';
+  if (tunisiaTestMode) return normalized == 'tunisia-test';
+  return normalized == 'uae' || normalized == 'dubai';
 }

@@ -446,6 +446,23 @@ class ApiMethods {
     return null;
   }
 
+  /// Renews the server-authoritative driver presence lease.
+  static Future<SimpleResponseModel?> driverPresenceHeartbeatApi({
+    void Function(int)? checkResponse,
+    required String sessionId,
+  }) async {
+    final http.Response? response = await MyHttp.postMethod(
+      bodyParams: <String, dynamic>{'sessionId': sessionId},
+      url: ApiUrlConstants.endPointOfDriverPresenceHeartbeat,
+      checkResponse: checkResponse,
+      wantSnackBar: false,
+      returnResponseOnError: true,
+    );
+    if (response == null) return null;
+    final Map<String, dynamic>? decoded = _tryDecodeMap(response.body);
+    return decoded == null ? null : SimpleResponseModel.fromJson(decoded);
+  }
+
   ///  Driver get details api....
   static Future<AddDriverDetailModel?> getDriverDetailsApi(
       {void Function(int)? checkResponse, required String driverId}) async {

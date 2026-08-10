@@ -18,6 +18,7 @@ import '../../../../common/text_styles.dart';
 import '../controllers/driver_home_controller.dart';
 import '../../communication/widgets/secure_communication_panel.dart';
 import '../../communication/widgets/driver_ride_requests_panel.dart';
+import '../../messages/widgets/messages_app_bar_button.dart';
 import '../../points/widgets/driver_points_indicator.dart';
 import '../../active_ride/widgets/active_ride_card.dart';
 import '../widgets/driver_home_bottom_bar.dart';
@@ -35,6 +36,10 @@ class DriverHomeView extends GetView<DriverHomeController> {
             appBar: DrewelAppBar(
               title: '',
               showMenuButton: true,
+              actions: const <Widget>[
+                MessagesAppBarButton(),
+                SizedBox(width: 4),
+              ],
               onMenu: () {
                 controller.locationFocusNode.unfocus();
                 controller.clearPlaceSuggestions();

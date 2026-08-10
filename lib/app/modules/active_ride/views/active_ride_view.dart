@@ -365,13 +365,26 @@ class _RideActionSheet extends StatelessWidget {
                       ],
                     ),
                   ),
-                  IconButton(
-                    tooltip: 'Message ride participant',
-                    onPressed: ride.canCommunicate &&
-                            Get.isRegistered<CallStateController>()
-                        ? Get.find<CallStateController>().openRideChat
-                        : null,
-                    icon: const Icon(Icons.message_rounded),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: <Widget>[
+                      IconButton(
+                        tooltip: 'Message ride participant',
+                        onPressed: ride.canCommunicate &&
+                                Get.isRegistered<CallStateController>()
+                            ? Get.find<CallStateController>().openRideChat
+                            : null,
+                        icon: const Icon(Icons.message_rounded),
+                      ),
+                      IconButton(
+                        tooltip: 'Call ride participant',
+                        onPressed: ride.canCommunicate &&
+                                Get.isRegistered<CallStateController>()
+                            ? () => _callParticipant(context)
+                            : null,
+                        icon: const Icon(Icons.call_rounded),
+                      ),
+                    ],
                   ),
                 ],
               ),
@@ -440,6 +453,16 @@ class _RideActionSheet extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  Future<void> _callParticipant(BuildContext context) async {
+    final CallStateController communication =
+        Get.find<CallStateController>();
+    final String name =
+        communication.counterpart?.firstName ?? 'ride participant';
+    if (await communication.confirmDrewelCall(name)) {
+      await communication.initiateCall();
+    }
   }
 
   Future<void> _performAction(

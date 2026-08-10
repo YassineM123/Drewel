@@ -23,6 +23,7 @@ class IconConstants {
   static const String icRecovery = 'assets/icons/ic_recovery.png';
   static const String icConstruction = 'assets/icons/ic_construction.png';
   static const String icRefrigerator = 'assets/icons/ic_refrigirator.png';
+  static const String icWaterTanker = 'assets/icons/ic_water_tanker.png';
   static const String icTruck = 'assets/icons/ic_truck.png';
   static const String icDeliveryTruck = 'assets/icons/ic_delivery_truck.png';
   static const String icDeliveryTruckInactive =

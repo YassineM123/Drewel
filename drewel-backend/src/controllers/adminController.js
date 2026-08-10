@@ -3,7 +3,7 @@ import Driver from "../models/Driver.js";
 import DriverLogs from "../models/Driverlogs.js";
 import bcrypt from "bcryptjs";
 import jwt from 'jsonwebtoken';
-import { buildFreshAdminMarketplaceAvailabilityFilter } from "../utils/availableDrivers.js";
+import { buildActiveDriverPresenceFilter } from "../services/driverPresenceService.js";
 
 const deriveLegacyStatus = (driver) => {
   const hasDocs =
@@ -159,12 +159,12 @@ export const loginAdmin = async (req, res) => {
 export const getOnlineDrivers = async (_req, res) => {
   try {
     const drivers = await Driver.find({
-      ...buildFreshAdminMarketplaceAvailabilityFilter(),
+      ...buildActiveDriverPresenceFilter(),
     })
       .select(
-        "firstName lastName fullName phone whatsappNumber isOnline isApproved status lat long vehicleType vehicleModel registration locationUpdatedAt availabilityStatus"
+        "firstName lastName fullName phone whatsappNumber isOnline isApproved status lat long vehicleType vehicleModel registration locationUpdatedAt availabilityStatus presenceStatus presenceLeaseExpiresAt presenceLastHeartbeatAt presenceVersion"
       )
-      .sort({ updatedAt: -1, _id: 1 })
+      .sort({ presenceLastHeartbeatAt: -1, _id: 1 })
       .lean();
 
     const normalized = drivers.map((driver) => ({
@@ -199,7 +199,7 @@ export const getDriversWithLocation = async (_req, res) => {
       long: { $ne: 0 },
     })
       .select(
-        "firstName lastName fullName phone whatsappNumber isOnline isApproved status lat long vehicleType vehicleModel registration locationUpdatedAt availabilityStatus"
+        "firstName lastName fullName phone whatsappNumber isOnline isApproved status lat long vehicleType vehicleModel registration locationUpdatedAt availabilityStatus presenceStatus presenceLeaseExpiresAt presenceLastHeartbeatAt presenceVersion"
       )
       .sort({ locationUpdatedAt: -1, _id: 1 })
       .lean();

@@ -9,6 +9,8 @@ const labelColor = Color(0xFF6C6C6C);
 const outlineInputBorderDayColor = Color(0x61000000);
 const primaryColor = Color(0xFFBE1B2C);
 
+const amberColor = Color(0xFFFFC136);
+
 const primary2Color = Color(0xFF9F9E9E);
 const primaryPink = Color(0xffADA4A5);
 //0xff3270fc

@@ -68,5 +68,5 @@ export const vehicleTypes = [
   { label: "Recovery", value: "Recovery" },
   { label: "Truck", value: "Truck" },
   { label: "Construction", value: "Construction" },
-  { label: "Refrigerator", value: "Refrigerator" }
+  { label: "Water Tanker", value: "Water Tanker" }
 ];

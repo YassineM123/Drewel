@@ -73,9 +73,9 @@
         <meta-data android:name="com.google.android.geo.API_KEY"
             android:value="${GOOGLE_MAPS_ANDROID_API_KEY}"/>
 
-        <!-- Foreground service used to show the persistent "you are online"
-             notification and detect when the app task is removed while the
-             driver is online, so the driver can be flipped back offline. -->
+        <!-- Foreground service keeps the server-issued presence lease alive
+             while the driver is online. App removal never sends Offline; the
+             backend heartbeat timeout remains authoritative. -->
         <service
             android:name="com.pravera.flutter_foreground_task.service.ForegroundService"
             android:foregroundServiceType="location"

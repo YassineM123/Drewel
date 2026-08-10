@@ -357,6 +357,6 @@ test("driver action-time availability paths reuse fresh Dubai GPS eligibility", 
   );
   assert.match(
     driverSource,
-    /getDriverAvailability[\s\S]*?buildFreshDubaiMarketplaceAvailabilityFilter\(\)/
+    /getDriverAvailability[\s\S]*?buildFreshMarketplaceAvailabilityFilter\([\s\S]*?DUBAI_SERVICE_AREA/
   );
 });

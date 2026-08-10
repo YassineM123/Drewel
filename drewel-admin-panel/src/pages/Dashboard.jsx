@@ -1,9 +1,12 @@
-import { useState, useEffect } from "react";
+import { useCallback, useState, useEffect, useRef } from "react";
 import { Link } from "react-router-dom";
 import dashSide from "../assets/images/dash.gif";
 import { getAllDashboard } from "../utils/authUtils";
+import { useSocket } from "../context/SocketContext";
+import { presenceVersion, shouldApplyPresence } from "../utils/driverPresence";
 
 const Dashboard = () => {
+  const { socket, isConnected } = useSocket();
   const [time, setTime] = useState(new Date());
   const [userIP, setUserIP] = useState("");
   const [servicesData, setServicesData] = useState({
@@ -25,7 +28,10 @@ const Dashboard = () => {
     return { hours, minutes, seconds, ampm };
   };
 
-  const getServicesData = async () => {
+  const presenceVersions = useRef(new Map());
+  const refreshTimer = useRef(null);
+
+  const getServicesData = useCallback(async () => {
     try {
       const res = await getAllDashboard();
       setServicesData(res.dashBoardData);
@@ -33,7 +39,7 @@ const Dashboard = () => {
     } catch (error) {
       console.error("Error fetching services:", error);
     }
-  };
+  }, []);
 
   useEffect(() => {
     const clockTimer = window.setInterval(() => setTime(new Date()), 1000);
@@ -51,7 +57,33 @@ const Dashboard = () => {
     getServicesData();
     fetchUserIP();
     return () => window.clearInterval(clockTimer);
-  }, []);
+  }, [getServicesData]);
+
+  useEffect(() => {
+    const pollTimer = window.setInterval(getServicesData, 30000);
+    return () => window.clearInterval(pollTimer);
+  }, [getServicesData]);
+
+  useEffect(() => {
+    if (!socket || !isConnected) return;
+    getServicesData();
+    const onPresence = (update) => {
+      const driverId = String(update?.driverId || "");
+      if (!driverId) return;
+      const currentVersion = presenceVersions.current.get(driverId);
+      if (!shouldApplyPresence(currentVersion, update)) return;
+      presenceVersions.current.set(driverId, presenceVersion(update.version));
+      // The dashboard snapshot owns the count. Coalesce bursts rather than
+      // guessing a delta without having the previous status for every driver.
+      window.clearTimeout(refreshTimer.current);
+      refreshTimer.current = window.setTimeout(getServicesData, 200);
+    };
+    socket.on("driver:presence", onPresence);
+    return () => {
+      socket.off("driver:presence", onPresence);
+      window.clearTimeout(refreshTimer.current);
+    };
+  }, [socket, isConnected, getServicesData]);
 
   const { hours, minutes, seconds, ampm } = formatTime(time);
 
