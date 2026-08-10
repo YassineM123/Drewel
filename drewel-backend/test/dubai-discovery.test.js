@@ -5,7 +5,9 @@ import Driver from "../src/models/Driver.js";
 import {
   buildDubaiDiscoveryAggregation,
   buildAvailableDriverFilter,
+  buildFreshAdminMarketplaceAvailabilityFilter,
   buildFreshDubaiMarketplaceAvailabilityFilter,
+  buildFreshMarketplaceAvailabilityFilter,
   parseDriverDiscoveryQuery,
   toAvailableDriverDto,
 } from "../src/utils/availableDrivers.js";
@@ -17,7 +19,9 @@ import {
   getDriverLocationFutureSkewMs,
   getDriverLocationMaxFixAgeMs,
   getMarketplaceLocationMaxAccuracyM,
+  getTunisiaTestLocationMaxAccuracyM,
   pointInPolygon,
+  TUNISIA_TEST_SERVICE_AREA,
   serviceAreaForCoordinates,
   validateCoordinates,
 } from "../src/utils/dubaiLocation.js";
@@ -66,6 +70,203 @@ test("driver GPS updates dual-write GeoJSON in longitude-latitude order", () => 
     }, now),
     /accuracyM/
   );
+});
+
+test("Tunisia test marketplace is disabled by default and requires per-role allowlists", () => {
+  const names = [
+    "DREWEL_TUNISIA_TEST_MODE",
+    "DREWEL_TUNISIA_TEST_DRIVER_IDS",
+    "DREWEL_TUNISIA_TEST_USER_IDS",
+  ];
+  const original = Object.fromEntries(names.map((name) => [name, process.env[name]]));
+  try {
+    delete process.env.DREWEL_TUNISIA_TEST_MODE;
+    process.env.DREWEL_TUNISIA_TEST_DRIVER_IDS = "driver-allowed";
+    assert.equal(
+      serviceAreaForCoordinates(36.8065, 10.1815, 8, {
+        actorId: "driver-allowed",
+        actorType: "driver",
+      }),
+      null
+    );
+
+    process.env.DREWEL_TUNISIA_TEST_MODE = "true";
+    process.env.DREWEL_TUNISIA_TEST_USER_IDS = "user-allowed";
+    assert.equal(
+      serviceAreaForCoordinates(36.8065, 10.1815, 8, {
+        actorId: "driver-allowed",
+        actorType: "driver",
+      }),
+      TUNISIA_TEST_SERVICE_AREA
+    );
+    assert.equal(
+      serviceAreaForCoordinates(36.8065, 10.1815, 0, {
+        actorId: "user-allowed",
+        actorType: "user",
+      }),
+      TUNISIA_TEST_SERVICE_AREA
+    );
+    assert.equal(
+      serviceAreaForCoordinates(36.8065, 10.1815, 0, {
+        actorId: "not-allowed",
+        actorType: "user",
+      }),
+      null
+    );
+  } finally {
+    for (const name of names) {
+      if (original[name] === undefined) delete process.env[name];
+      else process.env[name] = original[name];
+    }
+  }
+});
+
+test("allowlisted Tunisia driver GPS and discovery use the isolated test service area", () => {
+  const originalMode = process.env.DREWEL_TUNISIA_TEST_MODE;
+  const originalDrivers = process.env.DREWEL_TUNISIA_TEST_DRIVER_IDS;
+  try {
+    process.env.DREWEL_TUNISIA_TEST_MODE = "true";
+    process.env.DREWEL_TUNISIA_TEST_DRIVER_IDS = "driver-1";
+    const now = new Date("2026-08-03T12:00:00.000Z");
+    const update = buildDriverLocationUpdate({
+      lat: 36.8065,
+      long: 10.1815,
+      accuracyM: 8,
+      recordedAt: now,
+    }, now, { actorId: "driver-1" });
+    assert.equal(update.currentServiceArea, TUNISIA_TEST_SERVICE_AREA);
+    assert.deepEqual(update.currentLocation.coordinates, [10.1815, 36.8065]);
+
+    const filter = buildFreshMarketplaceAvailabilityFilter(
+      {},
+      now,
+      TUNISIA_TEST_SERVICE_AREA
+    );
+    assert.equal(filter.currentServiceArea, TUNISIA_TEST_SERVICE_AREA);
+    const options = parseDriverDiscoveryQuery({ lat: 36.8065, long: 10.1815 });
+    const pipeline = buildDubaiDiscoveryAggregation(
+      {},
+      options,
+      now,
+      TUNISIA_TEST_SERVICE_AREA
+    );
+    assert.equal(pipeline[0].$geoNear.query.currentServiceArea, TUNISIA_TEST_SERVICE_AREA);
+    assert.deepEqual(pipeline[0].$geoNear.near.coordinates, [10.1815, 36.8065]);
+  } finally {
+    if (originalMode === undefined) delete process.env.DREWEL_TUNISIA_TEST_MODE;
+    else process.env.DREWEL_TUNISIA_TEST_MODE = originalMode;
+    if (originalDrivers === undefined) delete process.env.DREWEL_TUNISIA_TEST_DRIVER_IDS;
+    else process.env.DREWEL_TUNISIA_TEST_DRIVER_IDS = originalDrivers;
+  }
+});
+
+test("allowlisted Tunisia QA accepts coarse GPS consistently in writes and discovery", () => {
+  const names = [
+    "DREWEL_TUNISIA_TEST_MODE",
+    "DREWEL_TUNISIA_TEST_DRIVER_IDS",
+    "DREWEL_TUNISIA_TEST_LOCATION_MAX_ACCURACY_METERS",
+  ];
+  const original = Object.fromEntries(names.map((name) => [name, process.env[name]]));
+  try {
+    process.env.DREWEL_TUNISIA_TEST_MODE = "true";
+    process.env.DREWEL_TUNISIA_TEST_DRIVER_IDS = "driver-coarse";
+    process.env.DREWEL_TUNISIA_TEST_LOCATION_MAX_ACCURACY_METERS = "25000";
+    const now = new Date("2026-08-03T12:00:00.000Z");
+    const update = buildDriverLocationUpdate({
+      lat: 36.8065,
+      long: 10.1815,
+      accuracyM: 12_500,
+      recordedAt: now,
+    }, now, { actorId: "driver-coarse" });
+
+    assert.equal(update.currentServiceArea, TUNISIA_TEST_SERVICE_AREA);
+    assert.equal(update.locationAccuracyM, 12_500);
+    assert.equal(getTunisiaTestLocationMaxAccuracyM(), 25_000);
+
+    const filter = buildFreshMarketplaceAvailabilityFilter(
+      {}, now, TUNISIA_TEST_SERVICE_AREA
+    );
+    assert.deepEqual(filter.locationAccuracyM, { $gte: 0, $lte: 25_000 });
+    const options = parseDriverDiscoveryQuery({ lat: 36.8065, long: 10.1815 });
+    const pipeline = buildDubaiDiscoveryAggregation(
+      {}, options, now, TUNISIA_TEST_SERVICE_AREA
+    );
+    assert.deepEqual(
+      pipeline[0].$geoNear.query.locationAccuracyM,
+      { $gte: 0, $lte: 25_000 }
+    );
+  } finally {
+    for (const name of names) {
+      if (original[name] === undefined) delete process.env[name];
+      else process.env[name] = original[name];
+    }
+  }
+});
+
+test("UAE production still rejects GPS worse than its strict accuracy limit", () => {
+  const now = new Date("2026-08-03T12:00:00.000Z");
+  assert.throws(
+    () => buildDriverLocationUpdate({
+      lat: 25.2048,
+      long: 55.2708,
+      accuracyM: getMarketplaceLocationMaxAccuracyM() + 1,
+      recordedAt: now,
+    }, now),
+    (error) => error.code === "INVALID_LOCATION_ACCURACY"
+  );
+});
+
+test("Tunisia discovery keeps every matching vehicle in nearest-first order before the bounded cap", () => {
+  const now = new Date("2026-08-03T12:00:00.000Z");
+  const options = parseDriverDiscoveryQuery({
+    lat: "36.8065",
+    long: "10.1815",
+  });
+  const pipeline = buildDubaiDiscoveryAggregation(
+    { vehicleType: " Small Pickup " },
+    options,
+    now,
+    TUNISIA_TEST_SERVICE_AREA
+  );
+
+  const geoNear = pipeline[0].$geoNear;
+  assert.equal(geoNear.query.currentServiceArea, TUNISIA_TEST_SERVICE_AREA);
+  assert.deepEqual(geoNear.near.coordinates, [10.1815, 36.8065]);
+  assert.equal(Object.hasOwn(geoNear, "maxDistance"), false);
+  assert.match("small pickup", geoNear.query.vehicleType.$regex);
+  assert.doesNotMatch("Large Pickup", geoNear.query.vehicleType.$regex);
+  assert.deepEqual(pipeline[1], { $sort: { distanceMeters: 1, _id: 1 } });
+  assert.deepEqual(pipeline[2], { $limit: 50 });
+});
+
+test("admin availability includes only allowlisted Tunisia test drivers when enabled", () => {
+  const names = ["DREWEL_TUNISIA_TEST_MODE", "DREWEL_TUNISIA_TEST_DRIVER_IDS"];
+  const original = Object.fromEntries(names.map((name) => [name, process.env[name]]));
+  const now = new Date("2026-08-03T12:00:00.000Z");
+  try {
+    delete process.env.DREWEL_TUNISIA_TEST_MODE;
+    process.env.DREWEL_TUNISIA_TEST_DRIVER_IDS = "driver-1,driver-2";
+    const defaultFilter = buildFreshAdminMarketplaceAvailabilityFilter({}, now);
+    assert.equal(defaultFilter.currentServiceArea, UAE_SERVICE_AREA);
+    assert.equal(defaultFilter.$or.length, 2); // staged approval compatibility only
+
+    process.env.DREWEL_TUNISIA_TEST_MODE = "true";
+    const testFilter = buildFreshAdminMarketplaceAvailabilityFilter({}, now);
+    assert.equal(testFilter.$or.length, 2);
+    assert.equal(testFilter.$or[0].currentServiceArea, UAE_SERVICE_AREA);
+    assert.equal(
+      testFilter.$or[1].currentServiceArea,
+      TUNISIA_TEST_SERVICE_AREA
+    );
+    assert.deepEqual(testFilter.$or[1]._id, {
+      $in: ["driver-1", "driver-2"],
+    });
+  } finally {
+    for (const name of names) {
+      if (original[name] === undefined) delete process.env[name];
+      else process.env[name] = original[name];
+    }
+  }
 });
 
 test("GPS measurement time cannot be refreshed by replaying a cached heartbeat", () => {

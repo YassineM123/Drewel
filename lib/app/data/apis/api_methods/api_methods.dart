@@ -434,7 +434,10 @@ class ApiMethods {
         bodyParams: bodyParams,
         url: ApiUrlConstants.endPointOfDriverUpdateOnlineStatus,
         checkResponse: checkResponse,
-        wantSnackBar: false);
+        wantSnackBar: false,
+        // Preserve structured backend errors such as OUTSIDE_SERVICE_AREA and
+        // LOCATION_PENDING so Driver Home can explain why Go Online failed.
+        returnResponseOnError: true);
     if (response != null) {
       simpleResponseModel =
           SimpleResponseModel.fromJson(jsonDecode(response.body));

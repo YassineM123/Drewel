@@ -9,6 +9,14 @@ bool isGpsTimestampFresh(
   return age >= -maxFutureSkew && age <= maxAge;
 }
 
+double normalizeGpsAccuracy(
+  double accuracyM, {
+  double browserFallbackM = 100,
+}) {
+  if (accuracyM.isFinite && accuracyM >= 0) return accuracyM;
+  return browserFallbackM;
+}
+
 Map<String, dynamic> buildGpsFixPayload({
   required double latitude,
   required double longitude,
@@ -19,6 +27,6 @@ Map<String, dynamic> buildGpsFixPayload({
     'lat': latitude,
     'long': longitude,
     'recordedAt': recordedAt.toUtc().toIso8601String(),
-    'accuracyM': accuracyM,
+    'accuracyM': normalizeGpsAccuracy(accuracyM),
   };
 }

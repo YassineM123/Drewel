@@ -23,7 +23,10 @@ test("realtime location commands provide success and structured error acknowledg
     /socket\.on\("driver-location-update",[\s\S]*?acknowledgeSocketEvent\(acknowledge,\s*\{\s*ok:\s*true,[\s\S]*?driverId:[\s\S]*?updatedAt:/
   );
   assert.match(source, /driver-location-update[\s\S]*?accuracyM[\s\S]*?recordedAt/);
-  assert.match(source, /buildDriverLocationUpdate\(\{ lat, long, accuracyM, recordedAt \}\)/);
+  assert.match(
+    source,
+    /buildDriverLocationUpdate\([\s\S]*?\{ lat, long, accuracyM, recordedAt \},[\s\S]*?\{ actorId: targetDriverId \}/
+  );
   assert.match(
     source,
     /socket\.on\("join-city-room",[\s\S]*?acknowledgeSocketEvent\(acknowledge,\s*\{\s*ok:\s*true,\s*count:/
@@ -88,6 +91,14 @@ test("accepted driver GPS movement is pushed immediately and stationary heartbea
     source,
     /if \(hasPositionChanged\) \{[\s\S]*?if \(_isDriverOnline && emitRealtimeOnMovement\) \{[\s\S]*?_emitCurrentLocation\(\)/
   );
+  assert.match(
+    source,
+    /AndroidSettings\([\s\S]*?distanceFilter:\s*0,[\s\S]*?intervalDuration:\s*Duration\([\s\S]*?seconds:\s*_locationUpdateIntervalSeconds/
+  );
+  assert.match(
+    source,
+    /Geolocator\.getPositionStream[\s\S]*?emitRealtimeOnMovement:\s*false[\s\S]*?if \(_isDriverOnline\) _emitCurrentLocation\(\)/
+  );
 });
 
 test("new clients go online with GPS while legacy clients remain hidden until a fresh fix", () => {
@@ -100,15 +111,15 @@ test("new clients go online with GPS while legacy clients remain hidden until a 
 
   assert.match(
     driverSource,
-    /updateOnlineStatus[\s\S]*?hasLocationPayload[\s\S]*?if \(isOnline && hasLocationPayload\)[\s\S]*?buildDriverLocationUpdate\(req\.body \|\| \{\}\)[\s\S]*?currentServiceArea !== DUBAI_SERVICE_AREA/
+    /updateOnlineStatus[\s\S]*?hasLocationPayload[\s\S]*?if \(isOnline && hasLocationPayload\)[\s\S]*?buildDriverLocationUpdate\(req\.body \|\| \{\}, new Date\(\), \{[\s\S]*?actorId: req\.user\?\._id[\s\S]*?if \(!locationUpdate\.currentServiceArea\)/
   );
   assert.match(driverSource, /isOnline && !locationUpdate[\s\S]*?LOCATION_PENDING/);
   assert.match(
     mobileSource,
     /callingUpdateDriverOnlineStatus\(\)[\s\S]*?Geolocator\.getCurrentPosition\([\s\S]*?buildGpsFixPayload\([\s\S]*?driverUpdateOnlineStatusApi/
   );
-  assert.match(adminSource, /Driver\.find\(\{[\s\S]*?buildFreshDubaiMarketplaceAvailabilityFilter\(\)/);
-  assert.match(dashboardSource, /Driver\.countDocuments\(buildFreshDubaiMarketplaceAvailabilityFilter\(\)\)/);
+  assert.match(adminSource, /Driver\.find\(\{[\s\S]*?buildFreshAdminMarketplaceAvailabilityFilter\(\)/);
+  assert.match(dashboardSource, /Driver\.countDocuments\(buildFreshAdminMarketplaceAvailabilityFilter\(\)\)/);
 });
 
 test("map driver marker identity is based on driver id, not list position", () => {

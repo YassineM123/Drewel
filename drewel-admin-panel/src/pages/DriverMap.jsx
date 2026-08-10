@@ -107,7 +107,22 @@ const DriverMap = () => {
       if (!driverId) return;
       setDrivers((prev) => {
         const index = prev.findIndex((driver) => String(driver._id) === driverId);
-        if (index === -1) return prev;
+        if (index === -1) {
+          return [
+            ...prev,
+            {
+              _id: driverId,
+              fullName: update.fullName || "Driver",
+              vehicleType: update.vehicleType || "",
+              vehicleModel: update.vehicleModel || "",
+              lat: update.lat,
+              long: update.long,
+              locationUpdatedAt: update.locationUpdatedAt,
+              availabilityStatus: update.availabilityStatus,
+              isOnline: update.isOnline,
+            },
+          ];
+        }
         const next = prev.slice();
         next[index] = {
           ...next[index],

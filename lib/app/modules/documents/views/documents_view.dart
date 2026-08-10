@@ -1,5 +1,4 @@
 import 'dart:io';
-import 'dart:typed_data';
 
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:dotted_border/dotted_border.dart';
@@ -40,254 +39,275 @@ class DocumentsView extends GetView<DocumentsController> {
               onRefresh: controller.callingGetDriverDetails,
               child: SingleChildScrollView(
                 physics: const AlwaysScrollableScrollPhysics(),
-                padding: EdgeInsets.fromLTRB(
-                  20.px,
-                  20.px,
-                  20.px,
-                  140.px + MediaQuery.of(context).viewInsets.bottom,
-                ),
-                child: Container(
-                  width: double.infinity,
-                  padding: EdgeInsets.fromLTRB(20.px, 24.px, 20.px, 24.px),
-                  decoration: BoxDecoration(
-                    color: primary3Color,
-                    borderRadius: BorderRadius.only(
-                      topRight: Radius.circular(40.px),
-                      topLeft: Radius.circular(40.px),
-                      bottomLeft: Radius.circular(24.px),
-                      bottomRight: Radius.circular(24.px),
-                    ),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: <Widget>[
-                      if (controller.isLoadingDetails.value)
-                        const LinearProgressIndicator(
-                          color: primaryColor,
-                          backgroundColor: Color(0xFFFFE7E9),
+                padding: EdgeInsets.fromLTRB(20.px, 20.px, 20.px,
+                    32.px + MediaQuery.of(context).viewInsets.bottom),
+                child: Center(
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 920),
+                    child: Container(
+                      width: double.infinity,
+                      padding: EdgeInsets.fromLTRB(20.px, 24.px, 20.px, 24.px),
+                      decoration: BoxDecoration(
+                        color: primary3Color,
+                        borderRadius: BorderRadius.only(
+                          topRight: Radius.circular(40.px),
+                          topLeft: Radius.circular(40.px),
+                          bottomLeft: Radius.circular(24.px),
+                          bottomRight: Radius.circular(24.px),
                         ),
-                      if (controller.isLoadingDetails.value)
-                        SizedBox(height: 16.px),
-                      if (controller.loadError.value.isNotEmpty) ...<Widget>[
-                        _NoticeCard(
-                          color: Colors.red.shade50,
-                          borderColor: Colors.red.shade300,
-                          icon: Icons.error_outline_rounded,
-                          text: controller.loadError.value,
-                          textColor: Colors.red.shade900,
-                          action: TextButton(
-                            onPressed: controller.callingGetDriverDetails,
-                            child: const Text('Retry'),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: <Widget>[
+                          if (controller.isLoadingDetails.value)
+                            const LinearProgressIndicator(
+                              color: primaryColor,
+                              backgroundColor: Color(0xFFFFE7E9),
+                            ),
+                          if (controller.isLoadingDetails.value)
+                            SizedBox(height: 16.px),
+                          if (controller
+                              .loadError.value.isNotEmpty) ...<Widget>[
+                            _NoticeCard(
+                              color: Colors.red.shade50,
+                              borderColor: Colors.red.shade300,
+                              icon: Icons.error_outline_rounded,
+                              text: controller.loadError.value,
+                              textColor: Colors.red.shade900,
+                              action: TextButton(
+                                onPressed: controller.callingGetDriverDetails,
+                                child: const Text('Retry'),
+                              ),
+                            ),
+                            SizedBox(height: 12.px),
+                          ],
+                          if (controller
+                              .missingRequiredDocuments.isNotEmpty) ...<Widget>[
+                            _NoticeCard(
+                              color: Colors.orange.shade50,
+                              borderColor: Colors.orange.shade300,
+                              icon: Icons.warning_amber_rounded,
+                              text:
+                                  'Missing documents: ${controller.missingRequiredDocuments.join(', ')}',
+                              textColor: Colors.orange.shade900,
+                            ),
+                            SizedBox(height: 12.px),
+                          ],
+                          if (controller.hasPendingApproval.value &&
+                              controller.pendingApprovalMessage.value
+                                  .isNotEmpty) ...<Widget>[
+                            _NoticeCard(
+                              color: Colors.orange.shade50,
+                              borderColor: Colors.orange.shade400,
+                              icon: Icons.hourglass_top_rounded,
+                              text: controller.pendingApprovalMessage.value,
+                              textColor: Colors.orange.shade900,
+                            ),
+                            SizedBox(height: 18.px),
+                          ],
+                          if (!controller.isLoadingDetails.value &&
+                              !controller.canEditProfile) ...<Widget>[
+                            _NoticeCard(
+                              color: Colors.red.shade50,
+                              borderColor: Colors.red.shade300,
+                              icon: Icons.lock_outline,
+                              text: controller.profileLockMessage,
+                              textColor: Colors.red.shade900,
+                            ),
+                            SizedBox(height: 14.px),
+                          ],
+                          CommonWidgets.commonTextFieldForLoginSignUP(
+                            focusNode: controller.focusNodeCity,
+                            controller: controller.cityController,
+                            isCard: controller.isCity.value,
+                            hintText: StringConstants.selectCity,
+                            labelText: StringConstants.selectCity,
+                            suffixIcon: Icon(
+                              Icons.keyboard_arrow_down,
+                              size: 20.px,
+                              color: Colors.black54,
+                            ),
+                            readOnly: true,
+                            onTap: controller.canEditProfile
+                                ? () => controller.openCityButtonSheet(context)
+                                : null,
                           ),
-                        ),
-                        SizedBox(height: 12.px),
-                      ],
-                      if (controller
-                          .missingRequiredDocuments.isNotEmpty) ...<Widget>[
-                        _NoticeCard(
-                          color: Colors.orange.shade50,
-                          borderColor: Colors.orange.shade300,
-                          icon: Icons.warning_amber_rounded,
-                          text:
-                              'Missing documents: ${controller.missingRequiredDocuments.join(', ')}',
-                          textColor: Colors.orange.shade900,
-                        ),
-                        SizedBox(height: 12.px),
-                      ],
-                      if (controller.hasPendingApproval.value &&
-                          controller.pendingApprovalMessage.value
-                              .isNotEmpty) ...<Widget>[
-                        _NoticeCard(
-                          color: Colors.orange.shade50,
-                          borderColor: Colors.orange.shade400,
-                          icon: Icons.hourglass_top_rounded,
-                          text: controller.pendingApprovalMessage.value,
-                          textColor: Colors.orange.shade900,
-                        ),
-                        SizedBox(height: 18.px),
-                      ],
-                      if (!controller.isLoadingDetails.value &&
-                          !controller.canEditProfile) ...<Widget>[
-                        _NoticeCard(
-                          color: Colors.red.shade50,
-                          borderColor: Colors.red.shade300,
-                          icon: Icons.lock_outline,
-                          text: controller.profileLockMessage,
-                          textColor: Colors.red.shade900,
-                        ),
-                        SizedBox(height: 14.px),
-                      ],
-                      CommonWidgets.commonTextFieldForLoginSignUP(
-                        focusNode: controller.focusNodeCity,
-                        controller: controller.cityController,
-                        isCard: controller.isCity.value,
-                        hintText: StringConstants.selectCity,
-                        labelText: StringConstants.selectCity,
-                        suffixIcon: Icon(
-                          Icons.keyboard_arrow_down,
-                          size: 20.px,
-                          color: Colors.black54,
-                        ),
-                        readOnly: true,
-                        onTap: controller.canEditProfile
-                            ? () => controller.openCityButtonSheet(context)
-                            : null,
-                      ),
-                      CommonWidgets.commonTextFieldForLoginSignUP(
-                        focusNode: controller.focusNodeType,
-                        controller: controller.typeController,
-                        isCard: controller.isType.value,
-                        hintText: StringConstants.selectvehicleType,
-                        labelText: StringConstants.selectvehicleType,
-                        suffixIcon: Icon(
-                          Icons.keyboard_arrow_down,
-                          size: 20.px,
-                          color: Colors.black54,
-                        ),
-                        readOnly: true,
-                        onTap: controller.canEditProfile
-                            ? () =>
-                                controller.openvehicleTypeButtonSheet(context)
-                            : null,
-                      ),
-                      SizedBox(height: 10.px),
-                      Text('Upload Documents',
-                          style: MyTextStyle.titleStyle16bb),
-                      SizedBox(height: 10.px),
-                      ListView.builder(
-                        padding: EdgeInsets.zero,
-                        itemCount: controller.selectedFile.length,
-                        shrinkWrap: true,
-                        physics: const NeverScrollableScrollPhysics(),
-                        itemBuilder: (context, index) {
-                          final Map<String, dynamic> docInfo =
-                              controller.fileNameList[index];
-                          final bool isBackImage = docInfo['isBack'] ?? false;
-                          final bool isRequired =
-                              controller.isBackRequired(index);
-                          final String statusLabel =
-                              controller.previewStateMessage(index);
+                          CommonWidgets.commonTextFieldForLoginSignUP(
+                            focusNode: controller.focusNodeType,
+                            controller: controller.typeController,
+                            isCard: controller.isType.value,
+                            hintText: StringConstants.selectvehicleType,
+                            labelText: StringConstants.selectvehicleType,
+                            suffixIcon: Icon(
+                              Icons.keyboard_arrow_down,
+                              size: 20.px,
+                              color: Colors.black54,
+                            ),
+                            readOnly: true,
+                            onTap: controller.canEditProfile
+                                ? () => controller
+                                    .openvehicleTypeButtonSheet(context)
+                                : null,
+                          ),
+                          SizedBox(height: 10.px),
+                          Text('Upload Documents',
+                              style: MyTextStyle.titleStyle16bb),
+                          SizedBox(height: 10.px),
+                          ListView.builder(
+                            padding: EdgeInsets.zero,
+                            itemCount: controller.selectedFile.length,
+                            shrinkWrap: true,
+                            physics: const NeverScrollableScrollPhysics(),
+                            itemBuilder: (context, index) {
+                              final Map<String, dynamic> docInfo =
+                                  controller.fileNameList[index];
+                              final bool isBackImage =
+                                  docInfo['isBack'] ?? false;
+                              final bool isRequired =
+                                  controller.isDocumentRequired(index);
+                              final String statusLabel =
+                                  controller.previewStateMessage(index);
 
-                          return Padding(
-                            padding: EdgeInsets.only(bottom: 15.px),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: <Widget>[
-                                Wrap(
-                                  crossAxisAlignment: WrapCrossAlignment.center,
-                                  spacing: 6.px,
-                                  runSpacing: 4.px,
+                              return Padding(
+                                padding: EdgeInsets.only(bottom: 15.px),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
                                   children: <Widget>[
-                                    Text(
-                                      docInfo['name'].toString(),
-                                      style: MyTextStyle.titleStyle14b,
+                                    Wrap(
+                                      crossAxisAlignment:
+                                          WrapCrossAlignment.center,
+                                      spacing: 6.px,
+                                      runSpacing: 4.px,
+                                      children: <Widget>[
+                                        Text(
+                                          docInfo['name'].toString(),
+                                          style: MyTextStyle.titleStyle14b,
+                                        ),
+                                        if (isRequired)
+                                          Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: <Widget>[
+                                              Icon(
+                                                Icons.warning_amber_rounded,
+                                                color: Colors.orange,
+                                                size: 16.px,
+                                              ),
+                                              SizedBox(width: 3.px),
+                                              Text(
+                                                'Required *',
+                                                style: MyTextStyle.titleStyle12b
+                                                    .copyWith(
+                                                  color: Colors.orange,
+                                                  fontWeight: FontWeight.w600,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        _StatusChip(label: statusLabel),
+                                      ],
                                     ),
-                                    if (isRequired)
-                                      Row(
-                                        mainAxisSize: MainAxisSize.min,
+                                    SizedBox(height: 6.px),
+                                    DottedBorder(
+                                      color: isRequired
+                                          ? (controller.selectedFile[index] ==
+                                                      null &&
+                                                  controller.documentUrl[index]
+                                                      .isEmpty
+                                              ? Colors.orange
+                                                  .withValues(alpha: 0.5)
+                                              : Colors.green
+                                                  .withValues(alpha: 0.5))
+                                          : Colors.black.withValues(alpha: 0.2),
+                                      dashPattern: const <double>[6, 6],
+                                      strokeWidth: 2,
+                                      borderPadding: EdgeInsets.all(4.px),
+                                      borderType: BorderType.RRect,
+                                      radius: Radius.circular(10.px),
+                                      child: ClipRRect(
+                                        borderRadius:
+                                            BorderRadius.circular(10.px),
+                                        child: _DocumentPreview(
+                                          documentUrl:
+                                              controller.documentUrl[index],
+                                          selectedBytes: controller
+                                              .selectedPreviewBytes[index],
+                                          localFile:
+                                              controller.selectedFile[index],
+                                          isBackImage: isBackImage,
+                                          isRequired: isRequired,
+                                        ),
+                                      ),
+                                    ),
+                                    if (controller.canEditProfile) ...<Widget>[
+                                      SizedBox(height: 8.px),
+                                      Wrap(
+                                        spacing: 8.px,
+                                        runSpacing: 6.px,
                                         children: <Widget>[
-                                          Icon(
-                                            Icons.warning_amber_rounded,
-                                            color: Colors.orange,
-                                            size: 16.px,
-                                          ),
-                                          SizedBox(width: 3.px),
-                                          Text(
-                                            'Required *',
-                                            style: MyTextStyle.titleStyle12b
-                                                .copyWith(
-                                              color: Colors.orange,
-                                              fontWeight: FontWeight.w600,
+                                          TextButton.icon(
+                                            onPressed: () => controller
+                                                .showAlertDialog(index),
+                                            icon: const Icon(
+                                              Icons.drive_folder_upload_rounded,
                                             ),
+                                            label: const Text('Replace'),
                                           ),
+                                          if (controller.selectedFile[index] !=
+                                              null)
+                                            TextButton.icon(
+                                              onPressed: () => controller
+                                                  .clearSelectedDocument(
+                                                index,
+                                              ),
+                                              icon: const Icon(
+                                                Icons.remove_circle_outline,
+                                              ),
+                                              label: const Text('Remove'),
+                                            ),
                                         ],
                                       ),
-                                    _StatusChip(label: statusLabel),
+                                    ],
                                   ],
                                 ),
-                                SizedBox(height: 6.px),
-                                DottedBorder(
-                                  color: isRequired
-                                      ? (controller.selectedFile[index] ==
-                                                  null &&
-                                              controller
-                                                  .documentUrl[index].isEmpty
-                                          ? Colors.orange.withValues(alpha: 0.5)
-                                          : Colors.green.withValues(alpha: 0.5))
-                                      : Colors.black.withValues(alpha: 0.2),
-                                  dashPattern: const <double>[6, 6],
-                                  strokeWidth: 2,
-                                  borderPadding: EdgeInsets.all(4.px),
-                                  borderType: BorderType.RRect,
-                                  radius: Radius.circular(10.px),
-                                  child: ClipRRect(
-                                    borderRadius: BorderRadius.circular(10.px),
-                                    child: _DocumentPreview(
-                                      documentUrl:
-                                          controller.documentUrl[index],
-                                      selectedBytes: controller
-                                          .selectedPreviewBytes[index],
-                                      localFile: controller.selectedFile[index],
-                                      isBackImage: isBackImage,
-                                      isRequired: isRequired,
-                                    ),
-                                  ),
-                                ),
-                                if (controller.canEditProfile) ...<Widget>[
-                                  SizedBox(height: 8.px),
-                                  Wrap(
-                                    spacing: 8.px,
-                                    runSpacing: 6.px,
-                                    children: <Widget>[
-                                      TextButton.icon(
-                                        onPressed: () =>
-                                            controller.showAlertDialog(index),
-                                        icon: const Icon(
-                                          Icons.drive_folder_upload_rounded,
-                                        ),
-                                        label: const Text('Replace'),
-                                      ),
-                                      if (controller.selectedFile[index] !=
-                                          null)
-                                        TextButton.icon(
-                                          onPressed: () =>
-                                              controller.clearSelectedDocument(
-                                            index,
-                                          ),
-                                          icon: const Icon(
-                                            Icons.remove_circle_outline,
-                                          ),
-                                          label: const Text('Remove'),
-                                        ),
-                                    ],
-                                  ),
-                                ],
-                              ],
-                            ),
-                          );
-                        },
+                              );
+                            },
+                          ),
+                        ],
                       ),
-                    ],
+                    ),
                   ),
                 ),
               ),
             ),
           ),
-          bottomNavigationBar: SafeArea(
-            top: false,
-            child: Padding(
-              padding: EdgeInsets.fromLTRB(16.px, 8.px, 16.px, 12.px),
-              child: ResponsivePrimaryButton(
-                onPressed: controller.canSubmit
-                    ? () => controller.clickOnSubmit(context)
-                    : null,
-                isLoading: controller.showLoading.value,
-                backgroundColor:
-                    controller.canSubmit ? primaryColor : Colors.grey.shade500,
-                semanticLabel: StringConstants.update,
-                child: Text(
-                  StringConstants.update,
-                  style: MyTextStyle.titleStyle16bw,
+          bottomNavigationBar: Material(
+            color: primary3Color,
+            elevation: 12,
+            child: SafeArea(
+              top: false,
+              minimum: const EdgeInsets.only(bottom: 8),
+              child: Center(
+                heightFactor: 1,
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 920),
+                  child: Padding(
+                    padding: EdgeInsets.fromLTRB(16.px, 10.px, 16.px, 10.px),
+                    child: ResponsivePrimaryButton(
+                      key: const Key('documents-update-button'),
+                      onPressed: controller.canSubmit
+                          ? () => controller.clickOnSubmit(context)
+                          : null,
+                      isLoading: controller.showLoading.value,
+                      backgroundColor: controller.canSubmit
+                          ? primaryColor
+                          : Colors.grey.shade500,
+                      semanticLabel: StringConstants.update,
+                      child: Text(
+                        StringConstants.update,
+                        style: MyTextStyle.titleStyle16bw,
+                      ),
+                    ),
+                  ),
                 ),
               ),
             ),
@@ -415,6 +435,23 @@ class _DocumentPreview extends StatelessWidget {
     }
 
     if (documentUrl.trim().isNotEmpty && _isNetworkUrl) {
+      if (kIsWeb) {
+        return Image.network(
+          documentUrl,
+          height: 130.px,
+          width: double.infinity,
+          fit: BoxFit.cover,
+          webHtmlElementStrategy: WebHtmlElementStrategy.prefer,
+          loadingBuilder: (context, child, progress) => progress == null
+              ? child
+              : const SizedBox(
+                  height: 130,
+                  child: Center(child: CircularProgressIndicator()),
+                ),
+          errorBuilder: (_, __, ___) =>
+              _DocumentErrorState(isRequired: isRequired, uploaded: true),
+        );
+      }
       return CachedNetworkImage(
         imageUrl: documentUrl,
         height: 130.px,
@@ -425,7 +462,7 @@ class _DocumentPreview extends StatelessWidget {
           child: Center(child: CircularProgressIndicator()),
         ),
         errorWidget: (context, error, stackTrace) =>
-            _DocumentErrorState(isRequired: isRequired),
+            _DocumentErrorState(isRequired: isRequired, uploaded: true),
       );
     }
 
@@ -472,9 +509,10 @@ class _DocumentPreview extends StatelessWidget {
 }
 
 class _DocumentErrorState extends StatelessWidget {
-  const _DocumentErrorState({required this.isRequired});
+  const _DocumentErrorState({required this.isRequired, this.uploaded = false});
 
   final bool isRequired;
+  final bool uploaded;
 
   @override
   Widget build(BuildContext context) {
@@ -485,10 +523,15 @@ class _DocumentErrorState extends StatelessWidget {
       width: double.infinity,
       color: color.withValues(alpha: 0.06),
       alignment: Alignment.center,
-      child: Text(
-        'Preview unavailable - tap Replace',
-        textAlign: TextAlign.center,
-        style: MyTextStyle.titleStyle12b.copyWith(color: color),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12),
+        child: Text(
+          uploaded
+              ? 'Uploaded document saved. Preview unavailable; use Replace only to change it.'
+              : 'Preview unavailable - tap Replace',
+          textAlign: TextAlign.center,
+          style: MyTextStyle.titleStyle12b.copyWith(color: color),
+        ),
       ),
     );
   }

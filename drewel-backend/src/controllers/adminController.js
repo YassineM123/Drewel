@@ -3,7 +3,7 @@ import Driver from "../models/Driver.js";
 import DriverLogs from "../models/Driverlogs.js";
 import bcrypt from "bcryptjs";
 import jwt from 'jsonwebtoken';
-import { buildFreshDubaiMarketplaceAvailabilityFilter } from "../utils/availableDrivers.js";
+import { buildFreshAdminMarketplaceAvailabilityFilter } from "../utils/availableDrivers.js";
 
 const deriveLegacyStatus = (driver) => {
   const hasDocs =
@@ -159,7 +159,7 @@ export const loginAdmin = async (req, res) => {
 export const getOnlineDrivers = async (_req, res) => {
   try {
     const drivers = await Driver.find({
-      ...buildFreshDubaiMarketplaceAvailabilityFilter(),
+      ...buildFreshAdminMarketplaceAvailabilityFilter(),
     })
       .select(
         "firstName lastName fullName phone whatsappNumber isOnline isApproved status lat long vehicleType vehicleModel registration locationUpdatedAt availabilityStatus"

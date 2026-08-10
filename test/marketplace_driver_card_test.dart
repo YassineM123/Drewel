@@ -1,4 +1,5 @@
 import 'package:drewel/app/data/apis/api_models/get_all_driver_model.dart';
+import 'package:drewel/app/modules/user_home/utils/marketplace_driver_sort.dart';
 import 'package:drewel/app/modules/user_home/widgets/marketplace_driver_card.dart';
 import 'package:drewel/common/gps_fix.dart';
 import 'package:flutter/material.dart';
@@ -90,6 +91,32 @@ void main() {
     );
   });
 
+  test('orders marketplace drivers nearest first with stable ties', () {
+    final Drivers far = Drivers.fromJson(<String, dynamic>{
+      '_id': 'driver-far',
+      'distanceKm': 8.0,
+    });
+    final Drivers nearB = Drivers.fromJson(<String, dynamic>{
+      '_id': 'driver-b',
+      'distanceKm': 1.5,
+    });
+    final Drivers nearA = Drivers.fromJson(<String, dynamic>{
+      '_id': 'driver-a',
+      'distanceKm': 1.5,
+    });
+    final Drivers unknown = Drivers.fromJson(<String, dynamic>{
+      '_id': 'driver-unknown',
+    });
+
+    final List<Drivers> values = <Drivers>[far, nearB, unknown, nearA]
+      ..sort(compareMarketplaceDriversNearestFirst);
+
+    expect(
+      values.map((Drivers value) => value.sId),
+      <String?>['driver-a', 'driver-b', 'driver-far', 'driver-unknown'],
+    );
+  });
+
   test('parses current service area and validates GPS freshness', () {
     final DateTime now = DateTime.utc(2026, 8, 3, 12);
     final Drivers value = Drivers.fromJson(<String, dynamic>{
@@ -159,5 +186,17 @@ void main() {
     expect(payload['long'], 55.2708);
     expect(payload['recordedAt'], recordedAt.toIso8601String());
     expect(payload['accuracyM'], 6.5);
+  });
+
+  test('GPS payload replaces browser-invalid accuracy with a safe value', () {
+    final Map<String, dynamic> payload = buildGpsFixPayload(
+      latitude: 36.8065,
+      longitude: 10.1815,
+      recordedAt: DateTime.utc(2026, 8, 10),
+      accuracyM: double.nan,
+    );
+
+    expect(payload['accuracyM'], 100);
+    expect(normalizeGpsAccuracy(-1, browserFallbackM: 75), 75);
   });
 }

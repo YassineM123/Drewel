@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 
 export const UAE_SERVICE_AREA = "uae";
+export const TUNISIA_TEST_SERVICE_AREA = "tunisia-test";
 // Compatibility export for existing consumers while the module is renamed in
 // a later cleanup. It now represents the UAE-wide marketplace boundary.
 export const DUBAI_SERVICE_AREA = UAE_SERVICE_AREA;
@@ -17,6 +18,49 @@ if (uaeBoundaryFeature?.properties?.shapeID !== "71949806B80265631352184" ||
 export const UAE_SERVICE_MULTIPOLYGON = uaeBoundaryFeature.geometry.coordinates;
 export const DUBAI_SERVICE_MULTIPOLYGON = UAE_SERVICE_MULTIPOLYGON;
 
+// Deliberately runtime-gated and account-gated. This is a test geofence, not a
+// claim that the rectangular bounds are a production-grade Tunisia boundary.
+// The allowlists keep accidentally enabling the flag from opening a second
+// public marketplace.
+const TUNISIA_TEST_BOUNDS = Object.freeze({
+  minLat: 30.2,
+  maxLat: 37.6,
+  minLong: 7.4,
+  maxLong: 11.7,
+});
+
+const envEnabled = (name) => /^(1|true|yes|on)$/i.test(String(process.env[name] || "").trim());
+const envIdSet = (name) => new Set(
+  String(process.env[name] || "")
+    .split(",")
+    .map((value) => value.trim())
+    .filter(Boolean)
+);
+
+export const getTunisiaTestActorIds = (actorType) => {
+  const variable = actorType === "driver"
+    ? "DREWEL_TUNISIA_TEST_DRIVER_IDS"
+    : "DREWEL_TUNISIA_TEST_USER_IDS";
+  return isTunisiaTestModeEnabled() ? [...envIdSet(variable)] : [];
+};
+
+export const isTunisiaTestModeEnabled = () => envEnabled("DREWEL_TUNISIA_TEST_MODE");
+
+export const isTunisiaTestActorAllowed = (actorId, actorType) => {
+  if (!isTunisiaTestModeEnabled() || !actorId) return false;
+  return getTunisiaTestActorIds(actorType).includes(String(actorId));
+};
+
+export const isInsideTunisiaTestGeofence = (lat, long, accuracyM = 0) => {
+  const latitudePadding = Number(accuracyM) / 111_320;
+  const longitudePadding = Number(accuracyM) /
+    (111_320 * Math.max(0.1, Math.cos((lat * Math.PI) / 180)));
+  return lat - latitudePadding >= TUNISIA_TEST_BOUNDS.minLat &&
+    lat + latitudePadding <= TUNISIA_TEST_BOUNDS.maxLat &&
+    long - longitudePadding >= TUNISIA_TEST_BOUNDS.minLong &&
+    long + longitudePadding <= TUNISIA_TEST_BOUNDS.maxLong;
+};
+
 const runtimeNumber = (name, fallback, min, max) => {
   const value = Number(process.env[name]);
   return Number.isFinite(value) && value >= min && value <= max ? value : fallback;
@@ -31,6 +75,17 @@ export const getDriverLocationFutureSkewMs = () =>
   runtimeNumber("DRIVER_LOCATION_FUTURE_SKEW_MS", 30_000, 0, 60_000);
 export const getMarketplaceLocationMaxAccuracyM = () =>
   runtimeNumber("MARKETPLACE_LOCATION_MAX_ACCURACY_METERS", 100, 10, 1_000);
+export const getTunisiaTestLocationMaxAccuracyM = () =>
+  runtimeNumber(
+    "DREWEL_TUNISIA_TEST_LOCATION_MAX_ACCURACY_METERS",
+    50_000,
+    100,
+    100_000
+  );
+export const getServiceAreaLocationMaxAccuracyM = (serviceArea) =>
+  serviceArea === TUNISIA_TEST_SERVICE_AREA
+    ? getTunisiaTestLocationMaxAccuracyM()
+    : getMarketplaceLocationMaxAccuracyM();
 
 export const validateCoordinates = (lat, long) => {
   if (!Number.isFinite(lat) || !Number.isFinite(long) || lat < -90 || lat > 90 || long < -180 || long > 180) {
@@ -97,12 +152,21 @@ export const distanceToUaeBoundaryMeters = (long, lat) => {
   return minimum;
 };
 
-export const serviceAreaForCoordinates = (lat, long, accuracyM = 0) => {
+export const serviceAreaForCoordinates = (lat, long, accuracyM = 0, context = {}) => {
   validateCoordinates(lat, long);
-  if (!pointInMultiPolygon(long, lat)) return null;
-  return accuracyM > 0 && distanceToUaeBoundaryMeters(long, lat) <= accuracyM
-    ? null
-    : UAE_SERVICE_AREA;
+  if (pointInMultiPolygon(long, lat)) {
+    return accuracyM > 0 && distanceToUaeBoundaryMeters(long, lat) <= accuracyM
+      ? null
+      : UAE_SERVICE_AREA;
+  }
+  if (isTunisiaTestActorAllowed(context.actorId, context.actorType) &&
+      // This is an allowlisted QA marketplace. Browser/desktop geolocation
+      // often reports coarse accuracy, so uncertainty must not push an
+      // otherwise valid Tunisia point outside the test geofence.
+      isInsideTunisiaTestGeofence(lat, long)) {
+    return TUNISIA_TEST_SERVICE_AREA;
+  }
+  return null;
 };
 
 export const distanceToDubaiBoundaryMeters = distanceToUaeBoundaryMeters;
@@ -137,7 +201,11 @@ const validateRecordedAt = (recordedAt, now) => {
   return fixTime;
 };
 
-export const buildDriverLocationUpdate = ({ lat, long, accuracyM, recordedAt }, now = new Date()) => {
+export const buildDriverLocationUpdate = (
+  { lat, long, accuracyM, recordedAt },
+  now = new Date(),
+  context = {}
+) => {
   validateCoordinates(lat, long);
   const fixTime = validateRecordedAt(recordedAt, now);
   const accuracy = Number(accuracyM);
@@ -147,8 +215,19 @@ export const buildDriverLocationUpdate = ({ lat, long, accuracyM, recordedAt }, 
     error.code = "LOCATION_ACCURACY_REQUIRED";
     throw error;
   }
-  if (!Number.isFinite(accuracy) || accuracy < 0 || accuracy > getMarketplaceLocationMaxAccuracyM()) {
-    const error = new Error(`accuracyM must be between 0 and ${getMarketplaceLocationMaxAccuracyM()} meters`);
+  if (!Number.isFinite(accuracy) || accuracy < 0) {
+    const error = new Error("accuracyM must be a non-negative number");
+    error.statusCode = 400;
+    error.code = "INVALID_LOCATION_ACCURACY";
+    throw error;
+  }
+  const currentServiceArea = serviceAreaForCoordinates(lat, long, accuracy, {
+    ...context,
+    actorType: "driver",
+  });
+  const maxAccuracyM = getServiceAreaLocationMaxAccuracyM(currentServiceArea);
+  if (accuracy > maxAccuracyM) {
+    const error = new Error(`accuracyM must be between 0 and ${maxAccuracyM} meters`);
     error.statusCode = 400;
     error.code = "INVALID_LOCATION_ACCURACY";
     throw error;
@@ -160,7 +239,7 @@ export const buildDriverLocationUpdate = ({ lat, long, accuracyM, recordedAt }, 
     // Discovery freshness follows the GPS measurement, not heartbeat receipt.
     // Re-sending a cached fix therefore cannot keep a driver discoverable.
     locationUpdatedAt: fixTime,
-    currentServiceArea: serviceAreaForCoordinates(lat, long, accuracy),
+    currentServiceArea,
     locationAccuracyM: accuracy,
   };
 };

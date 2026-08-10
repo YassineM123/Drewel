@@ -4,6 +4,8 @@ import 'package:drewel/app/data/constants/string_constants.dart';
 import 'package:drewel/common/common_drawer.dart';
 import 'package:drewel/common/common_methods.dart';
 import 'package:drewel/common/drewel_app_bar.dart';
+import 'package:drewel/common/drewel_osm_map.dart';
+import 'package:drewel/common/drewel_web_map_fallback.dart';
 import 'package:flutter/material.dart';
 
 import 'package:get/get.dart';
@@ -18,6 +20,7 @@ import '../../communication/widgets/secure_communication_panel.dart';
 import '../../communication/widgets/driver_ride_requests_panel.dart';
 import '../../points/widgets/driver_points_indicator.dart';
 import '../../active_ride/widgets/active_ride_card.dart';
+import '../widgets/driver_home_bottom_bar.dart';
 
 class DriverHomeView extends GetView<DriverHomeController> {
   const DriverHomeView({super.key});
@@ -43,42 +46,16 @@ class DriverHomeView extends GetView<DriverHomeController> {
               userData: controller.userData,
             ),
             backgroundColor: primaryColor,
-            bottomNavigationBar: const Column(
-              mainAxisSize: MainAxisSize.min,
-              children: <Widget>[
-                ActiveRideCard(),
-                DriverRideRequestsPanel(),
-                SecureCommunicationPanel(),
-              ],
+            bottomNavigationBar: DriverHomeBottomBar(
+              isOnline: !controller.isGoOnline.value,
+              isLoading: controller.showLoading.value,
+              onToggleOnline: controller.callingUpdateDriverOnlineStatus,
+              activeRide: const ActiveRideCard(),
+              rideRequests: const DriverRideRequestsPanel(),
+              communication: const SecureCommunicationPanel(
+                hideWhenUnavailable: true,
+              ),
             ),
-            floatingActionButtonLocation:
-                FloatingActionButtonLocation.centerDocked,
-            floatingActionButton: CommonWidgets.commonElevatedButton(
-                onPressed: () {
-                  controller.callingUpdateDriverOnlineStatus();
-                },
-                context: context,
-                child: Text(
-                  controller.isGoOnline.value
-                      ? StringConstants.goOnline
-                      : StringConstants.goOffline,
-                  style: controller.isGoOnline.value
-                      ? MyTextStyle.titleStyle20bw
-                      : MyTextStyle.titleStyleCustom(
-                          20, FontWeight.bold, Colors.redAccent, 'Exo'),
-                ),
-                buttonMargin: EdgeInsets.symmetric(horizontal: 15.px),
-                decoration: BoxDecoration(
-                    color: controller.isGoOnline.value
-                        ? primaryColor
-                        : primary3Color,
-                    border: Border.all(
-                        color: controller.isGoOnline.value
-                            ? primaryColor
-                            : Colors.grey.withOpacity(0.7),
-                        width: 1.px),
-                    borderRadius: BorderRadius.circular(10.px)),
-                showLoading: controller.showLoading.value),
             body: Column(
               mainAxisAlignment: MainAxisAlignment.end,
               crossAxisAlignment: CrossAxisAlignment.center,
@@ -95,40 +72,61 @@ class DriverHomeView extends GetView<DriverHomeController> {
                     clipBehavior: Clip.hardEdge,
                     child: Stack(
                       children: [
-                        Container(
-                          width: MediaQuery.of(context).size.width,
-                          height: MediaQuery.of(context).size.height - 130.px,
-                          padding: EdgeInsets.only(top: 60.px),
-                          child: GoogleMap(
-                            mapType: MapType.normal,
-                            zoomGesturesEnabled: true,
-                            tiltGesturesEnabled: true,
-                            myLocationButtonEnabled: false,
-                            markers: {
-                              Marker(
-                                  markerId: const MarkerId('driver_location'),
-                                  position: controller.mapPosition,
-                                  icon: controller.customMarker)
-                            },
-                            onCameraMove:
-                                (CameraPosition cameraPosition) async {
-                              print(cameraPosition.zoom);
-                            },
-                            minMaxZoomPreference:
-                                MinMaxZoomPreference.unbounded,
-                            initialCameraPosition: CameraPosition(
-                              target: controller.mapPosition,
-                              zoom: 12,
+                        Positioned.fill(
+                          child: Padding(
+                            padding: EdgeInsets.only(top: 60.px),
+                            child: DrewelWebMapFallback(
+                              openStreetMap: DrewelOsmMap(
+                                center: controller.mapPosition,
+                                markers: <DrewelOsmMarker>[
+                                  DrewelOsmMarker(
+                                    id: 'driver_location',
+                                    position: controller.mapPosition,
+                                    child: const Material(
+                                      color: Colors.transparent,
+                                      child: Icon(
+                                        Icons.local_shipping,
+                                        color: primaryColor,
+                                        size: 34,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              googleMap: GoogleMap(
+                                mapType: MapType.normal,
+                                zoomGesturesEnabled: true,
+                                tiltGesturesEnabled: true,
+                                myLocationButtonEnabled: false,
+                                markers: {
+                                  Marker(
+                                      markerId:
+                                          const MarkerId('driver_location'),
+                                      position: controller.mapPosition,
+                                      icon: controller.customMarker)
+                                },
+                                onCameraMove:
+                                    (CameraPosition cameraPosition) async {
+                                  print(cameraPosition.zoom);
+                                },
+                                minMaxZoomPreference:
+                                    MinMaxZoomPreference.unbounded,
+                                initialCameraPosition: CameraPosition(
+                                  target: controller.mapPosition,
+                                  zoom: 12,
+                                ),
+                                onMapCreated:
+                                    (GoogleMapController googlecontroller) {
+                                  controller.xController = googlecontroller;
+                                  controller.xController!.animateCamera(
+                                      CameraUpdate.newCameraPosition(
+                                          CameraPosition(
+                                    target: controller.mapPosition,
+                                    zoom: 12,
+                                  )));
+                                },
+                              ),
                             ),
-                            onMapCreated:
-                                (GoogleMapController googlecontroller) {
-                              controller.xController = googlecontroller;
-                              controller.xController!.animateCamera(
-                                  CameraUpdate.newCameraPosition(CameraPosition(
-                                target: controller.mapPosition,
-                                zoom: 12,
-                              )));
-                            },
                           ),
                         ),
                         // My Location Button

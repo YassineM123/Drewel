@@ -10,6 +10,8 @@ import '../../../../common/common_drawer.dart';
 import '../../../../common/common_methods.dart';
 import '../../../../common/common_widgets.dart';
 import '../../../../common/drewel_app_bar.dart';
+import '../../../../common/drewel_osm_map.dart';
+import '../../../../common/drewel_web_map_fallback.dart';
 import '../../../../common/drewel_navigation.dart';
 import '../../../../common/drewel_pop_scope.dart';
 import '../../../../common/text_styles.dart';
@@ -38,6 +40,43 @@ class _UserHomeViewState extends State<UserHomeView> {
   void initState() {
     super.initState();
     controller = Get.find<UserHomeController>();
+  }
+
+  List<DrewelOsmMarker> _openStreetMapMarkers() {
+    final List<DrewelOsmMarker> result = <DrewelOsmMarker>[];
+    if (controller.hasReferenceLocation) {
+      result.add(DrewelOsmMarker(
+        id: 'reference_location',
+        position: controller.referenceLocation,
+        child: const Material(
+          color: Colors.transparent,
+          child: Icon(Icons.location_pin, color: primaryColor, size: 42),
+        ),
+      ));
+    }
+    for (int index = 0; index < controller.driversList.length; index++) {
+      final Drivers driver = controller.driversList[index];
+      final double? latitude = double.tryParse(driver.lat?.toString() ?? '');
+      final double? longitude = double.tryParse(driver.long?.toString() ?? '');
+      if (latitude == null || longitude == null) continue;
+      result.add(DrewelOsmMarker(
+        id: 'driver-${driver.sId ?? index}',
+        position: LatLng(latitude, longitude),
+        onTap: () => controller.clickOnDriverIndex(index),
+        child: Material(
+          color: Colors.white,
+          elevation: controller.selectIndex == index ? 6 : 2,
+          shape: const CircleBorder(),
+          child: Icon(
+            Icons.local_shipping,
+            color:
+                controller.selectIndex == index ? primaryColor : Colors.black87,
+            size: 28,
+          ),
+        ),
+      ));
+    }
+    return result;
   }
 
   Future<void> _handleBack() async {
@@ -152,34 +191,45 @@ class _UserHomeViewState extends State<UserHomeView> {
                           width: MediaQuery.of(context).size.width,
                           height: mapHeight,
                           padding: EdgeInsets.only(top: 0.px),
-                          child: GoogleMap(
-                            mapType: MapType.normal,
-                            zoomGesturesEnabled: true,
-                            tiltGesturesEnabled: true,
-                            myLocationButtonEnabled: false,
-                            markers: controller.markers,
-                            // Track camera movement for updating driver list
-                            onCameraMove: (CameraPosition cameraPosition) {
-                              controller.onCameraMove(cameraPosition);
-                            },
-                            // When camera stops moving, filter drivers by visible bounds
-                            onCameraIdle: () {
-                              controller.onCameraIdle();
-                            },
-                            // Tap on map to set location
-                            onTap: (LatLng position) {
-                              controller.setSelectedLocation(position);
-                            },
-                            minMaxZoomPreference:
-                                MinMaxZoomPreference.unbounded,
-                            initialCameraPosition: CameraPosition(
-                              target: controller.mapPosition,
-                              zoom: 12,
+                          child: DrewelWebMapFallback(
+                            openStreetMap: DrewelOsmMap(
+                              center: controller.mapPosition,
+                              markers: _openStreetMapMarkers(),
+                              polylines: controller.polylines
+                                  .map((Polyline line) => line.points)
+                                  .toList(growable: false),
+                              onTap: controller.setSelectedLocation,
+                              onCenterChanged: controller.onAlternativeMapMove,
                             ),
-                            onMapCreated:
-                                (GoogleMapController googlecontroller) async {
-                              await controller.onMapCreated(googlecontroller);
-                            },
+                            googleMap: GoogleMap(
+                              mapType: MapType.normal,
+                              zoomGesturesEnabled: true,
+                              tiltGesturesEnabled: true,
+                              myLocationButtonEnabled: false,
+                              markers: controller.markers,
+                              // Track camera movement for updating driver list
+                              onCameraMove: (CameraPosition cameraPosition) {
+                                controller.onCameraMove(cameraPosition);
+                              },
+                              // When camera stops moving, filter drivers by visible bounds
+                              onCameraIdle: () {
+                                controller.onCameraIdle();
+                              },
+                              // Tap on map to set location
+                              onTap: (LatLng position) {
+                                controller.setSelectedLocation(position);
+                              },
+                              minMaxZoomPreference:
+                                  MinMaxZoomPreference.unbounded,
+                              initialCameraPosition: CameraPosition(
+                                target: controller.mapPosition,
+                                zoom: 12,
+                              ),
+                              onMapCreated:
+                                  (GoogleMapController googlecontroller) async {
+                                await controller.onMapCreated(googlecontroller);
+                              },
+                            ),
                           ),
                         ),
                         // Distance Card - Shows when driver is selected
@@ -397,7 +447,7 @@ class _UserHomeViewState extends State<UserHomeView> {
                                       SizedBox(width: 8.px),
                                       Expanded(
                                         child: Text(
-                                          'Tap map or drag marker to change location',
+                                          'Tap the map to change location',
                                           style: MyTextStyle.titleStyle12b
                                               .copyWith(color: primaryColor),
                                         ),

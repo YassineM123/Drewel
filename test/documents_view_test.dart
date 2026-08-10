@@ -125,6 +125,27 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('shows required labels consistently and keeps Update in view',
+      (tester) async {
+    await pumpDocuments(tester, size: const Size(627, 1015));
+
+    expect(find.text('Optional'), findsNWidgets(4));
+    expect(find.text('Required'), findsNWidgets(5));
+    expect(find.text('Required *'), findsNWidgets(5));
+    expect(
+      find.text(
+        'Missing documents: Car License - Front, Driver License - Front, ID Proof - Front, Profile Image, Passport Copy',
+      ),
+      findsOneWidget,
+    );
+    expect(find.byKey(const Key('documents-update-button')), findsOneWidget);
+    final Offset bottomRight = tester.getBottomRight(
+      find.byKey(const Key('documents-update-button')),
+    );
+    expect(bottomRight.dy, lessThanOrEqualTo(1015));
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('allows a pending Request 2 to be amended', (tester) async {
     final controller = _PendingDocumentsTestController();
     await pumpDocuments(
@@ -143,6 +164,7 @@ void main() {
     );
 
     controller.cityController.text = 'Sharjah';
+    controller.documentUrl = List<String>.filled(9, 'already-uploaded');
     controller.increment();
     await tester.pump();
     expect(controller.canSubmit, isTrue);

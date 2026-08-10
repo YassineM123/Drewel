@@ -29,6 +29,7 @@ import {
   AVAILABLE_DRIVER_FIELDS,
   buildDubaiDiscoveryAggregation,
   buildFreshDubaiMarketplaceAvailabilityFilter,
+  buildFreshMarketplaceAvailabilityFilter,
   parseDriverDiscoveryQuery,
   toAvailableDriverDto,
 } from "../utils/availableDrivers.js";
@@ -43,10 +44,10 @@ import {
 const app = express();
 const server = http.createServer(app);
 
-const dubaiDiscoveryRoomsForVehicle = (vehicleType) => [
+const discoveryRoomsForVehicle = (serviceArea, vehicleType) => [
   ...new Set([
-    discoveryRoom(DUBAI_SERVICE_AREA, vehicleType),
-    discoveryRoom(DUBAI_SERVICE_AREA, "all"),
+    discoveryRoom(serviceArea, vehicleType),
+    discoveryRoom(serviceArea, "all"),
   ]),
 ];
 
@@ -170,7 +171,11 @@ io.on("connection", async (socket) => {
           acknowledgeSocketEvent(acknowledge, { ok: false, error: "NOT_AUTHORIZED" });
           return;
         }
-        const locationUpdate = buildDriverLocationUpdate({ lat, long, accuracyM, recordedAt });
+        const locationUpdate = buildDriverLocationUpdate(
+          { lat, long, accuracyM, recordedAt },
+          new Date(),
+          { actorId: targetDriverId }
+        );
         const previousDriver = await Driver.findById(targetDriverId)
           .select("_id currentServiceArea vehicleType").lean();
         const updatedDriver = await Driver.findByIdAndUpdate(
@@ -186,10 +191,18 @@ io.on("connection", async (socket) => {
 
         const availableDriver = await Driver.findOne({
           _id: updatedDriver._id,
-          ...buildFreshDubaiMarketplaceAvailabilityFilter(),
+          ...buildFreshMarketplaceAvailabilityFilter(
+            {},
+            new Date(),
+            updatedDriver.currentServiceArea
+          ),
         }).select(AVAILABLE_DRIVER_FIELDS);
-        const currentRooms = dubaiDiscoveryRoomsForVehicle(updatedDriver.vehicleType);
-        const previousRooms = dubaiDiscoveryRoomsForVehicle(previousDriver?.vehicleType);
+        const currentRooms = updatedDriver.currentServiceArea
+          ? discoveryRoomsForVehicle(updatedDriver.currentServiceArea, updatedDriver.vehicleType)
+          : [];
+        const previousRooms = previousDriver?.currentServiceArea
+          ? discoveryRoomsForVehicle(previousDriver.currentServiceArea, previousDriver.vehicleType)
+          : [];
 
         // ✅ 1. Send update to all USERS in that city
         if (availableDriver) {
@@ -199,7 +212,7 @@ io.on("connection", async (socket) => {
               driver: toAvailableDriverDto(availableDriver),
             });
           }
-        } else if (previousDriver?.currentServiceArea === DUBAI_SERVICE_AREA) {
+        } else if (previousDriver?.currentServiceArea) {
           for (const room of previousRooms) {
             io.to(room).emit("drivers-nearby", {
               type: "REMOVE",
@@ -242,20 +255,24 @@ io.on("connection", async (socket) => {
     socket.on("join-city-room", async ({ vehicleType, lat, long } = {}, acknowledge) => {
       try {
         validateCoordinates(lat, long);
-        if (serviceAreaForCoordinates(lat, long) !== DUBAI_SERVICE_AREA) {
+        const serviceArea = serviceAreaForCoordinates(lat, long, 0, {
+          actorId: userId,
+          actorType: "user",
+        });
+        if (!serviceArea) {
           acknowledgeSocketEvent(acknowledge, { ok: false, error: "OUTSIDE_SERVICE_AREA" });
           return;
         }
 
         for (const joinedRoom of socket.data.discoveryRooms || []) socket.leave(joinedRoom);
-        const room = discoveryRoom(DUBAI_SERVICE_AREA, vehicleType);
+        const room = discoveryRoom(serviceArea, vehicleType);
         socket.join(room);
         socket.data.discoveryRooms = [room];
 
         // ✅ Fetch latest drivers immediately
         const options = parseDriverDiscoveryQuery({ lat, long, limit: 100 });
         const drivers = await Driver.aggregate(
-          buildDubaiDiscoveryAggregation({ vehicleType }, options)
+          buildDubaiDiscoveryAggregation({ vehicleType }, options, new Date(), serviceArea)
         );
 
         // ✅ Send initial snapshot immediately
@@ -266,7 +283,7 @@ io.on("connection", async (socket) => {
         acknowledgeSocketEvent(acknowledge, {
           ok: true,
           count: drivers.length,
-          serviceArea: DUBAI_SERVICE_AREA,
+          serviceArea,
         });
 
       } catch (error) {

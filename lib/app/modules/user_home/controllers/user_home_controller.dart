@@ -4,6 +4,7 @@ import 'package:drewel/common/local_data.dart';
 import 'package:drewel/common/gps_fix.dart';
 import 'package:drewel/common/socket_services.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'dart:async';
 import 'dart:convert';
@@ -25,7 +26,9 @@ import '../../../data/apis/api_methods/api_methods.dart';
 import '../../../data/constants/icons_constant.dart';
 import '../../../data/constants/string_constants.dart';
 import '../../../data/apis/api_constants/api_url_constants.dart';
+import '../../../data/config/app_config.dart';
 import '../../communication/controllers/call_state_controller.dart';
+import '../utils/marketplace_driver_sort.dart';
 
 enum DriverDiscoveryOutcome {
   success,
@@ -171,7 +174,7 @@ class UserHomeController extends GetxController
   }
 
   void loadCustomMarker() async {
-    if (Platform.isIOS) {
+    if (!kIsWeb && Platform.isIOS) {
       customMarker = await getResizedMarker(
         IconConstants.icLocation,
         width: 100, // smaller size for iOS
@@ -240,6 +243,7 @@ class UserHomeController extends GetxController
   /// Go to user's current location on map
   void goToUserLocation() {
     if (isUserLocationLoaded.value) {
+      mapPosition = userLocation;
       unawaited(_animateCamera(
         CameraUpdate.newCameraPosition(
           CameraPosition(
@@ -409,15 +413,11 @@ class UserHomeController extends GetxController
     return LatLng(latitude, longitude);
   }
 
-  String _normalizeCity(String? value) =>
-      (value ?? '').trim().toLowerCase().replaceAll(RegExp(r'\s+'), ' ');
-
   bool _isDriverEligibleForSelectedCity(
     Drivers driver, {
     DateTime? now,
   }) {
-    final String serviceArea = _normalizeCity(driver.currentServiceArea);
-    return (serviceArea == 'uae' || serviceArea == 'dubai') &&
+    return isMarketplaceServiceAreaAllowed(driver.currentServiceArea) &&
         driver.isOnlineAndAvailable &&
         driver.hasFreshLocation(
           now: now ?? DateTime.now(),
@@ -438,13 +438,6 @@ class UserHomeController extends GetxController
     return distance;
   }
 
-  int _compareDriversByDistance(Drivers a, Drivers b) {
-    final int distanceOrder = (a.distanceKm ?? double.infinity)
-        .compareTo(b.distanceKm ?? double.infinity);
-    if (distanceOrder != 0) return distanceOrder;
-    return (a.sId ?? '').compareTo(b.sId ?? '');
-  }
-
   void _prepareVehicleDiscoveryResults(List<Drivers> drivers) {
     final LatLng origin =
         hasReferenceLocation ? referenceLocation : _selectedCityCenter;
@@ -456,7 +449,7 @@ class UserHomeController extends GetxController
     for (final Drivers driver in validDrivers) {
       _updateDriverDistance(driver, origin);
     }
-    validDrivers.sort(_compareDriversByDistance);
+    validDrivers.sort(compareMarketplaceDriversNearestFirst);
 
     allDriversList = validDrivers;
   }
@@ -567,9 +560,7 @@ class UserHomeController extends GetxController
       _updateDriverDistance(driver, sortFromPoint);
     }
 
-    visibleDriversList.sort((a, b) {
-      return _compareDriversByDistance(a, b);
-    });
+    visibleDriversList.sort(compareMarketplaceDriversNearestFirst);
 
     // Update the driversList that's used by the UI
     driversList = visibleDriversList;
@@ -660,6 +651,10 @@ class UserHomeController extends GetxController
   /// Called when map camera moves (zoom/pan)
   Future<void> onCameraMove(CameraPosition position) async {
     currentMapCenter = position.target;
+  }
+
+  void onAlternativeMapMove(LatLng center) {
+    currentMapCenter = center;
   }
 
   /// Called when camera movement is idle (stopped moving)
@@ -879,7 +874,7 @@ class UserHomeController extends GetxController
         (payload?['error'] ?? payload?['code'] ?? '').toString().toUpperCase();
     if (code == 'OUTSIDE_SERVICE_AREA') {
       _setLocationRequiredState(
-        'Find Now is available only inside the UAE.',
+        'Find Now is available only inside ${AppConfig.marketplaceRegionLabel}.',
       );
     } else if (code == 'INVALID_COORDINATES' || code == 'LOCATION_REQUIRED') {
       _setLocationRequiredState(
@@ -1191,7 +1186,7 @@ class UserHomeController extends GetxController
           '?input=$input'
           '&key=${ApiKeyConstants.googleMapKey}'
           '&language=en'
-          '&components=country:ae');
+          '&components=country:${AppConfig.marketplaceCountryCode}');
 
       final response = await http.get(uri);
       if (!_canUpdateView) return;
@@ -1806,7 +1801,7 @@ class UserHomeController extends GetxController
           _setLocationRequiredState(
             driverListModel?.message ??
                 (outcome == DriverDiscoveryOutcome.outsideServiceArea
-                    ? 'Find Now is available only inside the UAE.'
+                    ? 'Find Now is available only inside ${AppConfig.marketplaceRegionLabel}.'
                     : 'A fresh precise GPS location is required.'),
           );
         } else if (responseStatus == 401) {

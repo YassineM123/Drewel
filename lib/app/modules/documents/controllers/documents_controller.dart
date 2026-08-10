@@ -84,12 +84,7 @@ class DocumentsController extends GetxController {
   List<String> get missingRequiredDocuments {
     final List<String> missing = <String>[];
     for (int index = 0; index < fileNameList.length; index++) {
-      final bool needsBack = isBackRequired(index);
-      if (needsBack) {
-        missing.add(fileNameList[index]['name'].toString());
-        continue;
-      }
-      if (!isDocumentPresent(index)) {
+      if (isDocumentRequired(index) && !isDocumentPresent(index)) {
         missing.add(fileNameList[index]['name'].toString());
       }
     }
@@ -171,6 +166,15 @@ class DocumentsController extends GetxController {
       'isBack': false
     },
   ];
+
+  // Canonical complete-profile documents required by the backend:
+  // license_car, license_driver, profile_image, id_document and passport_copy.
+  // Back-side scans and the optional company-license file remain useful
+  // supplements, but must not block submission.
+  static const Set<int> _requiredDocumentIndexes = <int>{0, 2, 4, 6, 7};
+
+  bool isDocumentRequired(int index) =>
+      _requiredDocumentIndexes.contains(index);
   @override
   void onInit() {
     super.onInit();
@@ -680,7 +684,7 @@ class DocumentsController extends GetxController {
   String previewStateMessage(int index) {
     if (selectedFile[index] != null) return 'Selected';
     if (documentUrl[index].trim().isNotEmpty) return 'Uploaded';
-    if (isBackRequired(index)) return 'Required';
+    if (isDocumentRequired(index)) return 'Required';
     return 'Optional';
   }
 }

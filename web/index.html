@@ -31,12 +31,65 @@
 
   <title>drewel</title>
   <link rel="manifest" href="manifest.json">
-  <!-- Mobile is the supported ride-navigation target. If web map support is
-       enabled later, CI must inject a separately restricted browser key into
-       this script URL without committing it. -->
-  <script src="https://maps.googleapis.com/maps/api/js?key="></script>
+  <!-- tool/build_flutter_web.ps1 replaces this token with a browser key that
+       is restricted to the deployed HTTP referrers. Never commit the key. -->
+  <script>
+    window.sessionStorage.removeItem('drewel-google-maps-auth-failed');
+    window.drewelReportGoogleMapsFailure = function () {
+      if (window.sessionStorage.getItem('drewel-google-maps-auth-failed') === '1') {
+        return;
+      }
+      window.sessionStorage.setItem('drewel-google-maps-auth-failed', '1');
+      window.dispatchEvent(new Event('drewel-google-maps-auth-failure'));
+    };
+    window.gm_authFailure = window.drewelReportGoogleMapsFailure;
+
+    window.addEventListener('DOMContentLoaded', function () {
+      const observer = new MutationObserver(function () {
+        const googleError = document.querySelector('.gm-err-container, .gm-err-message');
+        const authenticationDialog = Array.from(document.querySelectorAll('div'))
+          .some(function (element) {
+            return element.textContent?.trim() === "This page can't load Google Maps correctly.";
+          });
+        if (googleError || authenticationDialog) {
+          window.drewelReportGoogleMapsFailure();
+          observer.disconnect();
+        }
+      });
+      observer.observe(document.body, { childList: true, subtree: true });
+    });
+  </script>
+  <!-- GOOGLE_MAPS_WEB_SCRIPT -->
 </head>
 <body>
+  <script>
+    // Remove Flutter's legacy offline cache. It can otherwise combine an old
+    // Google-map bundle with a newly deployed OSM bundle on the first reload.
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.getRegistrations().then(function (registrations) {
+        registrations
+          .filter(function (registration) {
+            return registration.scope.indexOf('/app/') !== -1;
+          })
+          .forEach(function (registration) {
+            registration.unregister();
+          });
+      });
+    }
+    if ('caches' in window) {
+      caches.keys().then(function (names) {
+        names
+          .filter(function (name) {
+            return name === 'flutter-app-cache' ||
+              name === 'flutter-temp-cache' ||
+              name === 'flutter-app-manifest';
+          })
+          .forEach(function (name) {
+            caches.delete(name);
+          });
+      });
+    }
+  </script>
   <!--
     You can customize the "flutter_bootstrap.js" script.
     This is useful to provide a custom configuration to the Flutter loader

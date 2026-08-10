@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:drewel/app/data/apis/api_models/get_add_driver_details_model.dart';
 import 'package:drewel/app/data/apis/api_models/get_simple_response_model.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:geocoding/geocoding.dart';
 import 'package:geolocator/geolocator.dart';
@@ -16,7 +17,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:http/http.dart' as http;
 import '../../../../common/colors.dart';
 import '../../../../common/common_widgets.dart';
+import '../../../../common/driver_online_service.dart';
 import '../../../../common/gps_fix.dart';
+import '../../../../common/google_maps_web_auth.dart';
 import '../../../../common/socket_services.dart';
 import '../../../../common/text_styles.dart';
 import '../../../data/apis/api_constants/api_key_constants.dart';
@@ -24,11 +27,37 @@ import '../../../data/apis/api_methods/api_methods.dart';
 import '../../../data/constants/icons_constant.dart';
 import '../../../data/constants/string_constants.dart';
 import '../../../data/apis/api_constants/api_url_constants.dart';
+import '../../../data/config/app_config.dart';
 import '../../../routes/app_pages.dart';
 import '../../communication/controllers/call_state_controller.dart';
 
+String driverOnlineFailureMessage(SimpleResponseModel? response) {
+  final String serverMessage = (response?.message ?? '').trim();
+  if (serverMessage.isNotEmpty &&
+      serverMessage.toLowerCase() != 'unable to update online status.') {
+    return serverMessage;
+  }
+
+  return switch ((response?.code ?? '').trim().toUpperCase()) {
+    'OUTSIDE_SERVICE_AREA' =>
+      'Your current GPS location is outside the available service area.',
+    'LOCATION_PENDING' ||
+    'LOCATION_REQUIRED' ||
+    'INVALID_COORDINATES' =>
+      'A fresh precise GPS location is required before going online.',
+    'LOCATION_INACCURATE' =>
+      'Your GPS accuracy is too low. Enable precise location and try again.',
+    'PROFILE_NOT_APPROVED' ||
+    'DRIVER_NOT_APPROVED' =>
+      'Your driver profile must be approved before going online.',
+    _ => 'Unable to update online status. Please try again.',
+  };
+}
+
 class DriverHomeController extends GetxController with WidgetsBindingObserver {
   final GlobalKey<ScaffoldState> scaffoldKey = GlobalKey<ScaffoldState>();
+  StreamSubscription<void>? _mapsAuthenticationFailureSubscription;
+  final RxBool mapConfigurationFailed = false.obs;
   TextEditingController locationController = TextEditingController();
   FocusNode locationFocusNode = FocusNode();
   final lat = 23.4241.obs;
@@ -76,7 +105,7 @@ class DriverHomeController extends GetxController with WidgetsBindingObserver {
   }
 
   void loadCustomMarker() async {
-    if (Platform.isIOS) {
+    if (!kIsWeb && Platform.isIOS) {
       customMarker = await getResizedMarker(
         IconConstants.icLocation,
         width: 100, // smaller size for iOS
@@ -96,6 +125,11 @@ class DriverHomeController extends GetxController with WidgetsBindingObserver {
   @override
   void onInit() {
     super.onInit();
+    mapConfigurationFailed.value = googleMapsAuthenticationFailed();
+    _mapsAuthenticationFailureSubscription =
+        googleMapsAuthenticationFailures().listen((_) {
+      mapConfigurationFailed.value = true;
+    });
     Get.find<CallStateController>().refreshActiveRide();
     WidgetsBinding.instance.addObserver(this);
     loadCustomMarker();
@@ -106,6 +140,7 @@ class DriverHomeController extends GetxController with WidgetsBindingObserver {
 
   @override
   void onClose() {
+    _mapsAuthenticationFailureSubscription?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     _stopLocationUpdates();
     _stopRealtimeLocationTracking();
@@ -239,19 +274,33 @@ class DriverHomeController extends GetxController with WidgetsBindingObserver {
   void _startRealtimeLocationTracking() {
     if (_positionStreamSubscription != null) return;
 
-    const locationSettings = LocationSettings(
-      accuracy: LocationAccuracy.bestForNavigation,
-      distanceFilter: 10,
-    );
+    final LocationSettings locationSettings =
+        defaultTargetPlatform == TargetPlatform.android
+            ? AndroidSettings(
+                accuracy: LocationAccuracy.bestForNavigation,
+                distanceFilter: 0,
+                intervalDuration: Duration(
+                  seconds: _locationUpdateIntervalSeconds,
+                ),
+              )
+            : const LocationSettings(
+                accuracy: LocationAccuracy.bestForNavigation,
+                distanceFilter: 10,
+              );
 
     _positionStreamSubscription = Geolocator.getPositionStream(
       locationSettings: locationSettings,
     ).listen(
-      (Position position) {
-        _applyDriverPosition(
+      (Position position) async {
+        await _applyDriverPosition(
           position,
           syncToServer: _isDriverOnline,
+          emitRealtimeOnMovement: false,
         );
+        // AndroidSettings requests a new measured fix every ten seconds even
+        // while stationary. Emit every measurement so marketplace freshness
+        // and the admin marker never depend on the driver moving 10 metres.
+        if (_isDriverOnline) _emitCurrentLocation();
       },
       onError: (Object error) {
         print('Driver position stream error: $error');
@@ -280,7 +329,7 @@ class DriverHomeController extends GetxController with WidgetsBindingObserver {
     mapPosition = LatLng(position.latitude, position.longitude);
     _hasDriverLocation = true;
     _driverPositionRecordedAt = position.timestamp;
-    _driverPositionAccuracyM = position.accuracy;
+    _driverPositionAccuracyM = normalizeGpsAccuracy(position.accuracy);
 
     if (animateCamera && xController != null) {
       xController!.animateCamera(
@@ -374,7 +423,7 @@ class DriverHomeController extends GetxController with WidgetsBindingObserver {
           '?input=$input'
           '&key=${ApiKeyConstants.googleMapKey}'
           '&language=en'
-          '&components=country:ae');
+          '&components=country:${AppConfig.marketplaceCountryCode}');
 
       final response = await http.get(uri);
       if (response.statusCode == 200) {
@@ -414,31 +463,50 @@ class DriverHomeController extends GetxController with WidgetsBindingObserver {
   Future<void> checkPermission() async {
     bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
     if (!serviceEnabled) {
-      showPermissionAlert();
+      if (!kIsWeb) showPermissionAlert();
     } else {
-      getCurrentLocation();
+      await getCurrentLocation(showError: false);
     }
   }
 
-  Future<void> getCurrentLocation() async {
+  Future<void> getCurrentLocation({bool showError = true}) async {
     LocationPermission permission = await Geolocator.requestPermission();
-    if (permission == LocationPermission.denied) {
-      print('Permission Denied.....');
-      showPermissionAlert();
-    } else {
-      print('Permission Granted.....');
-      Position currentPosition = await Geolocator.getCurrentPosition();
-      await _applyDriverPosition(
-        currentPosition,
-        animateCamera: true,
-        forceServerSync: true,
-        updateAddress: true,
-      );
-      _startRealtimeLocationTracking();
+    if (permission == LocationPermission.denied ||
+        permission == LocationPermission.deniedForever) {
+      debugPrint('Location permission denied');
+      if (showError) {
+        if (kIsWeb) {
+          CommonWidgets.snackBarView(
+            title:
+                'Allow precise location for this site in your browser, then try again.',
+          );
+        } else {
+          showPermissionAlert();
+        }
+      }
+      return;
     }
+
+    final Position currentPosition = await Geolocator.getCurrentPosition();
+    await _applyDriverPosition(
+      currentPosition,
+      animateCamera: true,
+      forceServerSync: true,
+      updateAddress: true,
+    );
+    _startRealtimeLocationTracking();
   }
 
   void showPermissionAlert() {
+    // Browser permission is managed by the address-bar site controls. A
+    // Flutter modal only dims the map without giving web users a way to fix it.
+    if (kIsWeb) {
+      CommonWidgets.snackBarView(
+        title:
+            'Allow precise location for this site in your browser, then try again.',
+      );
+      return;
+    }
     showDialog(
         context: Get.context!,
         builder: (BuildContext context) {
@@ -600,6 +668,7 @@ class DriverHomeController extends GetxController with WidgetsBindingObserver {
   }
 
   Future<void> callingUpdateDriverOnlineStatus() async {
+    if (showLoading.value) return;
     try {
       final bool goingOnline = isGoOnline.value;
       Map<String, dynamic> bodyParams = {
@@ -639,7 +708,7 @@ class DriverHomeController extends GetxController with WidgetsBindingObserver {
           latitude: position.latitude,
           longitude: position.longitude,
           recordedAt: position.timestamp,
-          accuracyM: position.accuracy,
+          accuracyM: normalizeGpsAccuracy(position.accuracy),
         ));
       }
 
@@ -656,18 +725,24 @@ class DriverHomeController extends GetxController with WidgetsBindingObserver {
           // Driver is now online - start emitting location
           _startLocationUpdates();
           _syncDriverLocationToServer(force: true);
+          unawaited(DriverOnlineService.start());
         } else {
           // Driver is now offline - stop emitting location
           _stopLocationUpdates();
+          unawaited(DriverOnlineService.stop());
         }
       } else {
         CommonWidgets.snackBarView(
-            title: simpleResponseModel?.message ??
-                'Unable to update online status.');
+          title: driverOnlineFailureMessage(simpleResponseModel),
+        );
       }
-    } catch (e) {
+    } catch (error) {
+      debugPrint('Go Online failed: $error');
       CommonWidgets.snackBarView(
-          title: 'Unable to get a fresh GPS location. Please try again.');
+        title: kIsWeb
+            ? 'Drewel could not read your browser location. Allow precise location for this site, then try again.'
+            : 'Unable to get a fresh GPS location. Please try again.',
+      );
     } finally {
       showLoading.value = false;
     }
@@ -705,6 +780,7 @@ class DriverHomeController extends GetxController with WidgetsBindingObserver {
           // Driver is online - start location updates
           _startLocationUpdates();
           _syncDriverLocationToServer(force: true);
+          unawaited(DriverOnlineService.start());
         } else {
           isGoOnline.value = true;
         }

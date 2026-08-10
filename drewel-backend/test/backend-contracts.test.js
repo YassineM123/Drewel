@@ -197,15 +197,17 @@ test("controller preserves the shared available-driver filter contract", () => {
   assert.equal(buildAvailableDriverFilter, buildSharedAvailableDriverFilter);
 });
 
-test("socket discovery uses Dubai composite rooms and geospatial initial results", () => {
+test("socket discovery uses authenticated service-area rooms and geospatial initial results", () => {
   const source = readFileSync(
     new URL("../src/socket/index.js", import.meta.url),
     "utf8"
   );
 
-  assert.match(source, /discoveryRoom\(DUBAI_SERVICE_AREA, vehicleType\)/);
-  assert.match(source, /buildDubaiDiscoveryAggregation\(\{ vehicleType \}, options\)/);
-  assert.match(source, /serviceAreaForCoordinates\(lat, long\)/);
+  assert.match(source, /discoveryRoom\(serviceArea, vehicleType\)/);
+  assert.match(source, /buildDubaiDiscoveryAggregation\(\{ vehicleType \}, options, new Date\(\), serviceArea\)/);
+  assert.match(source, /parseDriverDiscoveryQuery\(\{ lat, long, limit: 100 \}\)/);
+  assert.match(source, /serviceAreaForCoordinates\(lat, long, 0, \{/);
+  assert.match(source, /actorId: userId,[\s\S]*?actorType: "user"/);
   assert.doesNotMatch(source, /socket\.join\(normalizeVehicleRoom/);
   assert.match(source, /socket\.on\("leave-city-room"/);
   assert.match(source, /socket\.data\.discoveryRooms\s*=\s*\[\]/);

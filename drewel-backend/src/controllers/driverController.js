@@ -13,12 +13,14 @@ import {
   buildDubaiDiscoveryAggregation,
   buildAvailableDriverFilter,
   buildFreshDubaiMarketplaceAvailabilityFilter,
+  buildFreshMarketplaceAvailabilityFilter,
   parseDriverDiscoveryQuery,
   toAvailableDriverDto,
 } from "../utils/availableDrivers.js";
 import {
   buildDriverLocationUpdate,
   DUBAI_SERVICE_AREA,
+  isTunisiaTestActorAllowed,
   serviceAreaForCoordinates,
   validateCoordinates,
 } from "../utils/dubaiLocation.js";
@@ -693,15 +695,19 @@ export const getAvailableDrivers = async (req, res) => {
       });
     }
     validateCoordinates(options.lat, options.long);
-    if (serviceAreaForCoordinates(options.lat, options.long) !== DUBAI_SERVICE_AREA) {
+    const serviceArea = serviceAreaForCoordinates(options.lat, options.long, 0, {
+      actorId: req.user?._id,
+      actorType: "user",
+    });
+    if (!serviceArea) {
       return res.status(422).send({
         success: false,
         code: "OUTSIDE_SERVICE_AREA",
-        message: "Find Now is available only inside the UAE",
+        message: "Find Now is not available at this location",
       });
     }
     const candidates = await Driver.aggregate(
-      buildDubaiDiscoveryAggregation(req.query, options)
+      buildDubaiDiscoveryAggregation(req.query, options, new Date(), serviceArea)
     );
     const drivers = candidates.map((driver) => toAvailableDriverDto(driver, options));
 
@@ -728,9 +734,21 @@ export const getDriverAvailability = async (req, res) => {
         message: "Invalid driver id",
       });
     }
+    const now = new Date();
+    const uaeAvailability = buildFreshMarketplaceAvailabilityFilter(
+      {}, now, DUBAI_SERVICE_AREA
+    );
+    const availabilityFilter = isTunisiaTestActorAllowed(req.user?._id, "user")
+      ? {
+          $or: [
+            uaeAvailability,
+            buildFreshMarketplaceAvailabilityFilter({}, now, "tunisia-test"),
+          ],
+        }
+      : uaeAvailability;
     const driver = await Driver.findOne({
       _id: req.params.id,
-      ...buildFreshDubaiMarketplaceAvailabilityFilter(),
+      ...availabilityFilter,
     }).select(AVAILABLE_DRIVER_FIELDS).lean();
     if (!driver) {
       return res.status(409).json({
@@ -1004,12 +1022,14 @@ export const updateOnlineStatus = async (req, res) => {
     );
     let locationUpdate = null;
     if (isOnline && hasLocationPayload) {
-      locationUpdate = buildDriverLocationUpdate(req.body || {});
-      if (locationUpdate.currentServiceArea !== DUBAI_SERVICE_AREA) {
+      locationUpdate = buildDriverLocationUpdate(req.body || {}, new Date(), {
+        actorId: req.user?._id,
+      });
+      if (!locationUpdate.currentServiceArea) {
         return res.status(422).send({
           success: false,
           code: "OUTSIDE_SERVICE_AREA",
-          message: "Drivers can only go online with a fresh GPS fix inside the UAE",
+          message: "Drivers can only go online with a fresh GPS fix inside an enabled service area",
         });
       }
     }
@@ -1082,7 +1102,9 @@ export const updateOnlineStatus = async (req, res) => {
 
 export const updateDriverLocation = async (req, res) => {
   try {
-    const locationUpdate = buildDriverLocationUpdate(req.body || {});
+    const locationUpdate = buildDriverLocationUpdate(req.body || {}, new Date(), {
+      actorId: req.user?._id,
+    });
 
     const driver = await Driver.findById(req.user._id);
     if (!driver) {

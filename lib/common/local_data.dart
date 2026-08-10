@@ -1,4 +1,5 @@
 import '../app/data/constants/icons_constant.dart';
+import '../app/data/config/app_config.dart';
 
 class LocalData {
 //  static LoginModel? loginModel;
@@ -20,6 +21,8 @@ class LocalData {
     'Ras AI\n Kaima',
     'Umm AI\n Qwaine',
     'Fujairah',
+    if (AppConfig.tunisiaTestMode) 'Tunis',
+    if (AppConfig.tunisiaTestMode) 'Nabeul',
   ];
   List<Map<String, dynamic>> cityLatLongList = [
     {'index': 0, 'lat': 24.4539, 'lon': 54.3773, 'city': 'Abu Dhabi'},
@@ -30,6 +33,10 @@ class LocalData {
     {'index': 5, 'lat': 25.8007, 'lon': 55.9762, 'city': 'Ras AI Kaima'},
     {'index': 6, 'lat': 25.5508, 'lon': 55.5524, 'city': 'Umm AI Qwaine'},
     {'index': 7, 'lat': 25.1221, 'lon': 56.3345, 'city': 'Fujairah'},
+    if (AppConfig.tunisiaTestMode)
+      {'index': 8, 'lat': 36.8065, 'lon': 10.1815, 'city': 'Tunis'},
+    if (AppConfig.tunisiaTestMode)
+      {'index': 9, 'lat': 36.4513, 'lon': 10.7357, 'city': 'Nabeul'},
   ];
   List<Map<String, String>> transportList = [
     {'image': IconConstants.icSmallPickUp, 'name': 'Small Pickup'},

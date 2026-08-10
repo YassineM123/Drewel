@@ -1,8 +1,11 @@
 import {
   DUBAI_SERVICE_AREA,
+  TUNISIA_TEST_SERVICE_AREA,
+  getTunisiaTestActorIds,
   getDriverLocationFutureSkewMs,
   getDriverLocationMaxAgeMs,
   getMarketplaceLocationMaxAccuracyM,
+  getServiceAreaLocationMaxAccuracyM,
 } from "./dubaiLocation.js";
 
 export const AVAILABLE_DRIVER_FIELDS =
@@ -69,6 +72,45 @@ export const buildFreshDubaiMarketplaceAvailabilityFilter = (
   };
 };
 
+export const buildFreshMarketplaceAvailabilityFilter = (
+  query = {},
+  now = new Date(),
+  serviceArea = DUBAI_SERVICE_AREA
+) => ({
+  ...buildFreshDubaiMarketplaceAvailabilityFilter(query, now),
+  currentServiceArea: serviceArea,
+  locationAccuracyM: {
+    $gte: 0,
+    $lte: getServiceAreaLocationMaxAccuracyM(serviceArea),
+  },
+});
+
+// Admin visibility mirrors the production marketplace, with one isolated
+// exception: when Tunisia test mode is enabled, only explicitly allowlisted
+// test drivers are added. UAE drivers remain visible through the normal branch.
+export const buildFreshAdminMarketplaceAvailabilityFilter = (
+  query = {},
+  now = new Date()
+) => {
+  const uaeFilter = buildFreshDubaiMarketplaceAvailabilityFilter(query, now);
+  const testDriverIds = getTunisiaTestActorIds("driver");
+  if (!testDriverIds.length) return uaeFilter;
+
+  return {
+    $or: [
+      uaeFilter,
+      {
+        ...buildFreshMarketplaceAvailabilityFilter(
+          query,
+          now,
+          TUNISIA_TEST_SERVICE_AREA
+        ),
+        _id: { $in: testDriverIds },
+      },
+    ],
+  };
+};
+
 export const parseDriverDiscoveryQuery = (query = {}) => {
   const availability = String(query.availability || "online").trim().toLowerCase();
   if (!["online", "available"].includes(availability)) {
@@ -104,8 +146,13 @@ export const parseDriverDiscoveryQuery = (query = {}) => {
   };
 };
 
-export const buildDubaiDiscoveryAggregation = (query, options, now = new Date()) => {
-  const filter = buildFreshDubaiMarketplaceAvailabilityFilter(query, now);
+export const buildDubaiDiscoveryAggregation = (
+  query,
+  options,
+  now = new Date(),
+  serviceArea = DUBAI_SERVICE_AREA
+) => {
+  const filter = buildFreshMarketplaceAvailabilityFilter(query, now, serviceArea);
   return [
     {
       $geoNear: {

@@ -6,7 +6,12 @@ import '../controllers/call_state_controller.dart';
 import 'drewel_call_button.dart';
 
 class SecureCommunicationPanel extends GetView<CallStateController> {
-  const SecureCommunicationPanel({super.key});
+  const SecureCommunicationPanel({
+    super.key,
+    this.hideWhenUnavailable = false,
+  });
+
+  final bool hideWhenUnavailable;
 
   @override
   Widget build(BuildContext context) => SafeArea(
@@ -20,6 +25,9 @@ class SecureCommunicationPanel extends GetView<CallStateController> {
                 controller.userFacingError.value.trim().isEmpty
                     ? null
                     : controller.userFacingError.value;
+            if (hideWhenUnavailable && !enabled && error == null) {
+              return const SizedBox.shrink();
+            }
             return Padding(
               padding: const EdgeInsets.fromLTRB(12, 8, 12, 10),
               child: Column(
