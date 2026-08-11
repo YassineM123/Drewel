@@ -1,0 +1,59 @@
+[
+  {
+    "_id": "6a100814657eef3a66dd8c8f",
+    "status": "approved",
+    "isOnline": false,
+    "availabilityStatus": "Offline"
+  },
+  {
+    "_id": "6a06cefd657eef3a66dd8bb3",
+    "status": "approved",
+    "isOnline": false
+  },
+  {
+    "_id": "6a002efe657eef3a66dd8b5d",
+    "status": "approved",
+    "isOnline": false,
+    "availabilityStatus": "Offline"
+  },
+  {
+    "_id": "69f4418c657eef3a66dd8a08",
+    "status": "approved",
+    "isOnline": false,
+    "availabilityStatus": "Offline"
+  },
+  {
+    "_id": "69f3487c657eef3a66dd892a",
+    "status": "approved",
+    "isOnline": false,
+    "availabilityStatus": "Offline"
+  },
+  {
+    "_id": "69f0695d657eef3a66dd8813",
+    "status": "approved",
+    "isOnline": false
+  },
+  {
+    "_id": "69f06730657eef3a66dd87d2",
+    "status": "approved",
+    "isOnline": false
+  },
+  {
+    "_id": "69f05219657eef3a66dd8733",
+    "status": "approved",
+    "isOnline": false,
+    "availabilityStatus": "Offline"
+  },
+  {
+    "_id": "69ef5d54657eef3a66dd86cf",
+    "status": "approved",
+    "isOnline": false,
+    "availabilityStatus": "Offline"
+  },
+  {
+    "_id": "69ef2a8a657eef3a66dd8659",
+    "status": "approved",
+    "isOnline": false,
+    "availabilityStatus": "Offline"
+  }
+]

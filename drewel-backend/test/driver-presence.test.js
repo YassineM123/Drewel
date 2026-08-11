@@ -63,6 +63,23 @@ test("presence timing is configurable and timeout cannot be shorter than two hea
   }
 });
 
+test("presence timeout is capped so stale online sessions cannot last for days", () => {
+  const previous = {
+    heartbeat: process.env.DRIVER_PRESENCE_HEARTBEAT_INTERVAL_MS,
+    timeout: process.env.DRIVER_PRESENCE_TIMEOUT_MS,
+  };
+  process.env.DRIVER_PRESENCE_HEARTBEAT_INTERVAL_MS = "20000";
+  process.env.DRIVER_PRESENCE_TIMEOUT_MS = String(7 * 24 * 60 * 60 * 1000);
+  try {
+    assert.equal(getDriverPresenceConfig().timeoutMs, 300000);
+  } finally {
+    if (previous.heartbeat === undefined) delete process.env.DRIVER_PRESENCE_HEARTBEAT_INTERVAL_MS;
+    else process.env.DRIVER_PRESENCE_HEARTBEAT_INTERVAL_MS = previous.heartbeat;
+    if (previous.timeout === undefined) delete process.env.DRIVER_PRESENCE_TIMEOUT_MS;
+    else process.env.DRIVER_PRESENCE_TIMEOUT_MS = previous.timeout;
+  }
+});
+
 test("presence events expose a monotonic version and no session secret", () => {
   const event = toDriverPresenceEvent(
     {
@@ -112,6 +129,10 @@ test("timeout sweep uses a compare-and-set session guard and emits one transitio
   assert.match(
     service,
     /expireStaleDriverPresences[\s\S]*?presenceSessionId:\s*candidate\.presenceSessionId[\s\S]*?presenceLeaseExpiresAt:\s*\{ \$lte: now \}/
+  );
+  assert.match(
+    service,
+    /expireStaleDriverPresences[\s\S]*?heartbeatCutoff[\s\S]*?presenceLastHeartbeatAt:\s*\{ \$lte: heartbeatCutoff \}/
   );
   assert.match(service, /\$inc:\s*\{ presenceVersion: 1 \}/);
   assert.match(service, /HEARTBEAT_TIMEOUT/);

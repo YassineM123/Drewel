@@ -151,6 +151,18 @@ test("Find Now uses the selected UAE place for REST and realtime discovery", () 
   );
   assert.match(
     source,
+    /_refreshDiscoveryForReferenceLocation\([\s\S]*?callingGetAllDriverListApi\([\s\S]*?showError:\s*false[\s\S]*?socketService\.isConnected[\s\S]*?_joinRealtimeTrackingRoom\(\)/
+  );
+  assert.match(
+    source,
+    /setSelectedLocation\(LatLng location\)[\s\S]*?filterDriversByVisibleBounds\(\);[\s\S]*?_refreshDiscoveryForReferenceLocation\(showLoader:\s*true\)/
+  );
+  assert.match(
+    source,
+    /clickOnLocation\(Prediction prediction\)[\s\S]*?isSelectedLocationSet\.value = true;[\s\S]*?filterDriversByVisibleBounds\(\);[\s\S]*?_refreshDiscoveryForReferenceLocation\(showLoader:\s*true\)/
+  );
+  assert.match(
+    source,
     /setSelectedCityLocation\(LatLng latLong, String city\)[\s\S]*?selectedLocationLat\.value = latLong\.latitude[\s\S]*?selectedLocationLng\.value = latLong\.longitude[\s\S]*?isSelectedLocationSet\.value = true/
   );
   assert.match(socketSource, /if \(latitude != null\) 'lat': latitude/);

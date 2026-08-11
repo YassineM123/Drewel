@@ -489,6 +489,7 @@ class UserHomeController extends GetxController
 
     // Re-filter and sort drivers based on new selected location
     filterDriversByVisibleBounds();
+    unawaited(_refreshDiscoveryForReferenceLocation(showLoader: true));
 
     // Get address for the location
     getAddressFromCoordinates(location);
@@ -502,6 +503,7 @@ class UserHomeController extends GetxController
     selectedLocationAddress.value = '';
     updateDriverMarkers();
     filterDriversByVisibleBounds();
+    unawaited(_refreshDiscoveryForReferenceLocation(showLoader: true));
     increment();
   }
 
@@ -1077,6 +1079,24 @@ class UserHomeController extends GetxController
       print('Joined city room: $_currentCity');
     }
     emitUserLocation();
+  }
+
+  Future<void> _refreshDiscoveryForReferenceLocation({
+    bool showLoader = false,
+  }) async {
+    if (!hasReferenceLocation || !_canUpdateView) return;
+
+    final DriverDiscoveryOutcome outcome = await callingGetAllDriverListApi(
+      showLoader: showLoader,
+      showError: false,
+    );
+    if (!_canUpdateView || outcome != DriverDiscoveryOutcome.success) return;
+
+    if (socketService.isConnected) {
+      _joinRealtimeTrackingRoom();
+    } else {
+      await _initSocket();
+    }
   }
 
   void _handleDiscoveryRoomAck(dynamic response) {
@@ -1987,6 +2007,7 @@ class UserHomeController extends GetxController
           // Update markers and filter drivers
           updateDriverMarkers();
           filterDriversByVisibleBounds();
+          unawaited(_refreshDiscoveryForReferenceLocation(showLoader: true));
 
           await _animateCamera(
             CameraUpdate.newCameraPosition(

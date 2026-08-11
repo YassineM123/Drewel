@@ -7,10 +7,13 @@ export const configureDriverPresenceEmitter = (emit) => {
   presenceEmitter = typeof emit === "function" ? emit : () => {};
 };
 
-const parsePositiveInt = (value, fallback, minimum) => {
+const parsePositiveInt = (value, fallback, minimum, maximum = Number.POSITIVE_INFINITY) => {
   const parsed = Number.parseInt(value, 10);
-  return Number.isInteger(parsed) && parsed >= minimum ? parsed : fallback;
+  if (!Number.isInteger(parsed) || parsed < minimum) return fallback;
+  return Math.min(parsed, maximum);
 };
+
+export const MAX_DRIVER_PRESENCE_TIMEOUT_MS = 300_000;
 
 export const getDriverPresenceConfig = () => {
   const heartbeatIntervalMs = parsePositiveInt(
@@ -21,7 +24,8 @@ export const getDriverPresenceConfig = () => {
   const timeoutMs = parsePositiveInt(
     process.env.DRIVER_PRESENCE_TIMEOUT_MS,
     120_000,
-    heartbeatIntervalMs * 2
+    heartbeatIntervalMs * 2,
+    Math.max(MAX_DRIVER_PRESENCE_TIMEOUT_MS, heartbeatIntervalMs * 2)
   );
   const sweepIntervalMs = parsePositiveInt(
     process.env.DRIVER_PRESENCE_SWEEP_INTERVAL_MS,
@@ -239,9 +243,15 @@ export const expireStaleDriverPresences = async ({
   now = new Date(),
   emit = () => {},
 } = {}) => {
+  const { timeoutMs } = getDriverPresenceConfig();
+  const heartbeatCutoff = new Date(now.getTime() - timeoutMs);
   const stale = await Driver.find({
     presenceStatus: "Online",
-    presenceLeaseExpiresAt: { $lte: now },
+    $or: [
+      { presenceLeaseExpiresAt: { $lte: now } },
+      { presenceLastHeartbeatAt: { $lte: heartbeatCutoff } },
+      { presenceLastHeartbeatAt: null },
+    ],
   }).select("_id +presenceSessionId activeRideId").lean();
   const expired = [];
   for (const candidate of stale) {
@@ -250,7 +260,11 @@ export const expireStaleDriverPresences = async ({
         _id: candidate._id,
         presenceStatus: "Online",
         presenceSessionId: candidate.presenceSessionId,
-        presenceLeaseExpiresAt: { $lte: now },
+        $or: [
+          { presenceLeaseExpiresAt: { $lte: now } },
+          { presenceLastHeartbeatAt: { $lte: heartbeatCutoff } },
+          { presenceLastHeartbeatAt: null },
+        ],
       },
       {
         $set: {
