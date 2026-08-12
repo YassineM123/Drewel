@@ -86,7 +86,7 @@ class _LocationSearchBarState extends State<LocationSearchBar> {
       children: <Widget>[
         _buildSearchField(),
         if (_hasText && _focused) Obx(_buildSuggestions),
-        Obx(_buildSelectedLocationBanner),
+        _buildSelectedLocationBanner(),
       ],
     );
   }
@@ -338,42 +338,6 @@ class _LocationSearchBarState extends State<LocationSearchBar> {
   }
 
   Widget _buildSelectedLocationBanner() {
-    if (!controller.isSelectedLocationSet.value) {
-      return const SizedBox.shrink();
-    }
-    return Container(
-      margin: const EdgeInsets.only(top: 8),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      decoration: BoxDecoration(
-        color: primaryColor.withOpacity(0.10),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: primaryColor.withOpacity(0.25)),
-      ),
-      child: Row(
-        children: <Widget>[
-          const Icon(Icons.touch_app, color: primaryColor, size: 16),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              'Tap the map to change location',
-              style: MyTextStyle.titleStyle12b.copyWith(color: primaryColor),
-            ),
-          ),
-          const SizedBox(width: 8),
-          GestureDetector(
-            onTap: controller.clearSelectedLocation,
-            behavior: HitTestBehavior.opaque,
-            child: Padding(
-              padding: const EdgeInsets.all(4),
-              child: const Icon(
-                Icons.close_rounded,
-                color: primaryColor,
-                size: 18,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
+    return const SizedBox.shrink();
   }
 }

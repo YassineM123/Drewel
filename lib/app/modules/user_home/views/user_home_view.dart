@@ -375,7 +375,7 @@ class _UserHomeViewState extends State<UserHomeView> {
         borderRadius: BorderRadius.circular(22.px),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.12),
+            color: Colors.black.withValues(alpha: 0.12),
             blurRadius: 18,
             offset: const Offset(0, 8),
           ),
@@ -388,7 +388,7 @@ class _UserHomeViewState extends State<UserHomeView> {
             height: 44.px,
             width: 44.px,
             decoration: BoxDecoration(
-              color: primaryColor.withOpacity(0.10),
+              color: primaryColor.withValues(alpha: 0.10),
               shape: BoxShape.circle,
             ),
             alignment: Alignment.center,
@@ -433,7 +433,7 @@ class _UserHomeViewState extends State<UserHomeView> {
               height: 36.px,
               width: 36.px,
               decoration: BoxDecoration(
-                color: primaryColor.withOpacity(0.10),
+                color: primaryColor.withValues(alpha: 0.10),
                 shape: BoxShape.circle,
               ),
               alignment: Alignment.center,
@@ -636,7 +636,7 @@ class _UserHomeViewState extends State<UserHomeView> {
         decoration: BoxDecoration(
           color: primary3Color,
           border: Border.all(
-            color: Colors.black.withOpacity(0.1),
+            color: Colors.black.withValues(alpha: 0.1),
             width: 1.px,
           ),
           borderRadius: BorderRadius.circular(15.px),
@@ -710,7 +710,7 @@ class _UserHomeViewState extends State<UserHomeView> {
                             vertical: 3.px,
                           ),
                           decoration: BoxDecoration(
-                            color: primaryColor.withOpacity(0.1),
+                            color: primaryColor.withValues(alpha: 0.1),
                             borderRadius: BorderRadius.circular(8.px),
                           ),
                           child: Row(
@@ -763,13 +763,21 @@ class _UserHomeViewState extends State<UserHomeView> {
         actionsLoading: communication.contactingDriverId.value == driver.sId,
         onTap: () => controller.clickOnDriverIndex(index),
         onChat: driver.canChat
-            ? () => communication.openDriverChat(driver.sId ?? '')
+            ? () => _requestTripFromDriver(context, driver, communication)
             : null,
         onCall: driver.canCall
             ? () => _confirmDriverCall(context, driver, communication)
             : null,
       ),
     );
+  }
+
+  Future<void> _requestTripFromDriver(
+    BuildContext context,
+    Drivers driver,
+    CallStateController communication,
+  ) async {
+    await communication.openDriverChat(driver.sId ?? '');
   }
 
   Future<void> _confirmDriverCall(
@@ -793,8 +801,7 @@ class _UserHomeViewState extends State<UserHomeView> {
     final String vehicleLabel =
         vehicleType.isNotEmpty ? vehicleType : 'drivers';
     final String placeLabel = city.isNotEmpty ? ' in $city' : '';
-    final String emptyMessage =
-        'No $vehicleLabel available nearby$placeLabel';
+    final String emptyMessage = 'No $vehicleLabel available nearby$placeLabel';
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.center,
@@ -888,8 +895,9 @@ class _LocationButton extends StatelessWidget {
               color: Colors.white,
               shape: BoxShape.circle,
               border: Border.all(
-                color:
-                    hasLocation ? primaryColor : Colors.black.withOpacity(0.08),
+                color: hasLocation
+                    ? primaryColor
+                    : Colors.black.withValues(alpha: 0.08),
                 width: hasLocation ? 1.5 : 1,
               ),
               boxShadow: const <BoxShadow>[

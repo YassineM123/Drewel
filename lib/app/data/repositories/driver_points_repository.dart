@@ -121,8 +121,6 @@ class ApiDriverPointsRepository implements DriverPointsRepository {
         'clientOfferId': clientOfferId,
         'offeredPrice': draft.offeredPrice,
         'currency': draft.currency,
-        'pickup': draft.pickup,
-        'destination': draft.destination,
         if (draft.vehicleType.trim().isNotEmpty)
           'vehicleType': draft.vehicleType.trim(),
         if (draft.note.trim().isNotEmpty) 'note': draft.note.trim(),

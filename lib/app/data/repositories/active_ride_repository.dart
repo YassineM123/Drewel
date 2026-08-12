@@ -17,11 +17,19 @@ class ActiveRideRepository {
     return ActiveRideModel.fromJson(Map<String, dynamic>.from(raw));
   }
 
-  Future<ActiveRideModel> createOrGetContact(String driverId) async =>
+  Future<ActiveRideModel> createOrGetContact(
+    String driverId, {
+    Map<String, dynamic>? pickup,
+    Map<String, dynamic>? destination,
+  }) async =>
       _readRide(
         await _api.post(
           '${ApiUrlConstants.baseUrl}rides/contact',
-          <String, dynamic>{'driverId': driverId},
+          <String, dynamic>{
+            'driverId': driverId,
+            if (pickup != null) 'pickup': pickup,
+            if (destination != null) 'destination': destination,
+          },
         ),
       );
 

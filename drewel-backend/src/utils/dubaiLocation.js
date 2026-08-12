@@ -75,7 +75,7 @@ export const getDriverLocationMaxFixAgeMs = () =>
 export const getDriverLocationFutureSkewMs = () =>
   runtimeNumber("DRIVER_LOCATION_FUTURE_SKEW_MS", 30_000, 0, 60_000);
 export const getMarketplaceLocationMaxAccuracyM = () =>
-  runtimeNumber("MARKETPLACE_LOCATION_MAX_ACCURACY_METERS", 100, 10, 1_000);
+  runtimeNumber("MARKETPLACE_LOCATION_MAX_ACCURACY_METERS", 5_000, 10, 10_000);
 export const getTunisiaTestLocationMaxAccuracyM = () =>
   runtimeNumber(
     "DREWEL_TUNISIA_TEST_LOCATION_MAX_ACCURACY_METERS",

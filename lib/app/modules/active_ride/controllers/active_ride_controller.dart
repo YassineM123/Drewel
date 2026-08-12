@@ -8,6 +8,7 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../../common/socket_services.dart';
+import '../../../../common/notification_sound_service.dart';
 import '../../../data/apis/api_constants/api_key_constants.dart';
 import '../../../data/apis/api_constants/api_url_constants.dart';
 import '../../../data/apis/api_models/active_ride_model.dart';
@@ -49,6 +50,11 @@ class ActiveRideController extends GetxService with WidgetsBindingObserver {
   String? _joinedRideId;
   int _latestEventVersion = -1;
   final Set<String> _actionKeys = <String>{};
+
+  NotificationSoundService? get _soundsService =>
+      Get.isRegistered<NotificationSoundService>()
+          ? Get.find<NotificationSoundService>()
+          : null;
 
   ActiveRideModel? get activeRide => ride.value;
   RideStatus get status => ride.value?.rideStatus ?? RideStatus.unknown;
@@ -174,7 +180,39 @@ class ActiveRideController extends GetxService with WidgetsBindingObserver {
       }
       return;
     }
+    // Anything else is a status changing event. Compare against the last known
+    // status so a sound is emitted exactly once per transition, regardless of
+    // how many sockets/polls observe the new status later.
+    final RideStatus previousStatus = ride.value?.rideStatus ?? RideStatus.unknown;
     await recover(showLoader: false);
+    final RideStatus currentStatus = ride.value?.rideStatus ?? RideStatus.unknown;
+    if (previousStatus != currentStatus) {
+      await _playStatusTransitionSound(previousStatus, currentStatus);
+    }
+  }
+
+  /// Plays the passenger-side "your driver arrived", the completion chime, and
+  /// cleans up the ride-request alert when it stops being pending.
+  Future<void> _playStatusTransitionSound(
+    RideStatus previous,
+    RideStatus current,
+  ) async {
+    final NotificationSoundService? sounds = _soundsService;
+    if (sounds == null) return;
+    final String rideId = ride.value?.id ?? '';
+
+    // A ride request is no longer pending when it transitions to an offer,
+    // a confirmed ride, or any terminal state.
+    if (previous == RideStatus.contacting ||
+        previous == RideStatus.offerPending) {
+      await sounds.stopRideRequestSound(rideId: rideId);
+    }
+
+    if (current == RideStatus.driverArrived && !isDriver) {
+      await sounds.playDriverArrived(eventKey: rideId);
+    } else if (current == RideStatus.completed) {
+      await sounds.playSuccess(eventKey: rideId);
+    }
   }
 
   Future<void> _setRide(ActiveRideModel? value) async {

@@ -33,24 +33,6 @@ const sendError = (res, error) => {
   });
 };
 
-const parseLocation = (value, field) => {
-  const lat = Number(value?.lat);
-  const long = Number(value?.long);
-  const address = String(value?.address || "").trim();
-  if (
-    !Number.isFinite(lat) ||
-    lat < -90 ||
-    lat > 90 ||
-    !Number.isFinite(long) ||
-    long < -180 ||
-    long > 180 ||
-    address.length > 300
-  ) {
-    throw new PointsValidationError(`${field} is invalid`);
-  }
-  return { lat, long, address };
-};
-
 const parseOfferPayload = (body = {}) => {
   const offeredPrice = Number(body.offeredPrice);
   if (!Number.isFinite(offeredPrice) || offeredPrice < 0 || offeredPrice > 1_000_000_000) {
@@ -70,8 +52,6 @@ const parseOfferPayload = (body = {}) => {
     }),
     offeredPrice,
     currency,
-    pickup: parseLocation(body.pickup, "pickup"),
-    destination: parseLocation(body.destination, "destination"),
     vehicleType: String(body.vehicleType || "").trim().slice(0, 120),
     note: String(body.note || "").trim().slice(0, 1000),
   };

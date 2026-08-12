@@ -5,6 +5,7 @@ import 'package:get/get.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../../common/socket_services.dart';
+import '../../../../common/notification_sound_service.dart';
 
 import '../../../data/apis/api_constants/api_key_constants.dart';
 import '../../../data/apis/api_constants/api_url_constants.dart';
@@ -56,6 +57,11 @@ class CallStateController extends GetxService with WidgetsBindingObserver {
   final RxBool isSpeakerEnabled = false.obs;
   final RxString contactingDriverId = ''.obs;
   final RxString userFacingError = ''.obs;
+
+  NotificationSoundService? get _soundsService =>
+      Get.isRegistered<NotificationSoundService>()
+          ? Get.find<NotificationSoundService>()
+          : null;
   StreamSubscription<AgoraConnectionState>? _connectionSubscription;
   Timer? _durationTimer;
   Timer? _outgoingPollTimer;
@@ -81,7 +87,11 @@ class CallStateController extends GetxService with WidgetsBindingObserver {
     return 'Secure communication is unavailable for this ride status.';
   }
 
-  Future<ActiveRideModel?> _createOrGetDriverContact(String driverId) async {
+  Future<ActiveRideModel?> _createOrGetDriverContact(
+    String driverId, {
+    Map<String, dynamic>? pickup,
+    Map<String, dynamic>? destination,
+  }) async {
     final String normalizedId = driverId.trim();
     if (normalizedId.isEmpty || isBusy.value) return null;
     isBusy.value = true;
@@ -89,7 +99,11 @@ class CallStateController extends GetxService with WidgetsBindingObserver {
     userFacingError.value = '';
     try {
       final ActiveRideModel contact =
-          await _activeRideRepository.createOrGetContact(normalizedId);
+          await _activeRideRepository.createOrGetContact(
+        normalizedId,
+        pickup: pickup,
+        destination: destination,
+      );
       if (!contact.canCommunicate) {
         userFacingError.value = 'This driver is no longer available.';
         return null;
@@ -108,8 +122,16 @@ class CallStateController extends GetxService with WidgetsBindingObserver {
     }
   }
 
-  Future<void> openDriverChat(String driverId) async {
-    final ActiveRideModel? contact = await _createOrGetDriverContact(driverId);
+  Future<void> openDriverChat(
+    String driverId, {
+    Map<String, dynamic>? pickup,
+    Map<String, dynamic>? destination,
+  }) async {
+    final ActiveRideModel? contact = await _createOrGetDriverContact(
+      driverId,
+      pickup: pickup,
+      destination: destination,
+    );
     if (contact != null) {
       Get.toNamed(Routes.RIDE_CHAT);
     } else {
@@ -220,6 +242,8 @@ class CallStateController extends GetxService with WidgetsBindingObserver {
     if (state == AppLifecycleState.hidden ||
         state == AppLifecycleState.paused ||
         state == AppLifecycleState.detached) {
+      // Never leave a ringtone or chime running while the app is not visible.
+      unawaited(_soundsService?.stopCallSound());
       _socketService.disconnect();
       return;
     }
@@ -268,7 +292,7 @@ class CallStateController extends GetxService with WidgetsBindingObserver {
       _socketService.off('notification:new');
       _socketService.on('call:state', _handleCallStateEvent);
       _socketService.on('ride:state', (_) => refreshActiveRide());
-      _socketService.on('driver:contact', (_) => refreshActiveRide());
+      _socketService.on('driver:contact', _handleDriverContact);
       _socketService.on('conversation:updated', _handleConversationUpdated);
       _socketService.on('notification:new', _handleNotificationNew);
     }
@@ -313,6 +337,55 @@ class CallStateController extends GetxService with WidgetsBindingObserver {
       notifications.removeRange(100, notifications.length);
     }
     await refreshUnreadSummary();
+    await _playNotificationSound(notification);
+  }
+
+  /// Maps a realtime notification to its Drewel sound. The event never needs
+  /// deduplication here because [NotificationSoundService] collapses multiple
+  /// sources for the same logical id onto a single play.
+  Future<void> _playNotificationSound(AppNotificationModel notification) async {
+    final NotificationSoundService? sounds = _soundsService;
+    if (sounds == null) return;
+    final String key = notification.messageId?.isNotEmpty == true
+        ? notification.messageId!
+        : notification.id;
+    switch ((notification.type ?? '').toUpperCase()) {
+      case 'RIDE_MESSAGE':
+        await sounds.playMessage(eventKey: key);
+      case 'POINTS_LOW_BALANCE':
+      case 'POINTS_INSUFFICIENT_BALANCE':
+        await sounds.playWarning(eventKey: key);
+      case 'TRIP_OFFER_ACCEPTED':
+      case 'POINTS_PURCHASE':
+      case 'POINTS_CREDITED':
+      case 'PURCHASED_POINTS_CREDITED':
+      case 'POINTS_ADJUSTED':
+      case 'WELCOME_POINTS_RECEIVED':
+      case 'OFFER_POINTS_RELEASED':
+        await sounds.playSuccess(eventKey: key);
+      case 'POINT_PURCHASE_REQUEST_UPDATED':
+        final String status =
+            (notification.data['status'] ?? '').toString().toLowerCase();
+        if (status == 'approved' || status == 'completed') {
+          await sounds.playSuccess(eventKey: key);
+        } else {
+          await sounds.playNotification(eventKey: key);
+        }
+      default:
+        await sounds.playNotification(eventKey: key);
+    }
+  }
+
+  /// A passenger has just contacted this driver with a new ride request.
+  /// This is the one authoritative source for the ride-request alert — REST
+  /// refreshes and the foreground panel never re-trigger it.
+  Future<void> _handleDriverContact(dynamic data) async {
+    if (_role == ApiKeyConstants.driver) {
+      final String rideId =
+          data is Map ? (data['rideId'] ?? '').toString() : '';
+      await _soundsService?.playRideRequest(eventKey: rideId);
+    }
+    await refreshActiveRide();
   }
 
   Future<RideConversationModel> markConversationRead(String rideId) async {
@@ -328,7 +401,9 @@ class CallStateController extends GetxService with WidgetsBindingObserver {
       final int index = notifications.indexWhere(
         (AppNotificationModel item) => item.id == notificationId,
       );
-      if (index >= 0) notifications[index] = notifications[index].copyWith(read: true);
+      if (index >= 0) {
+        notifications[index] = notifications[index].copyWith(read: true);
+      }
     } catch (error) {
       debugPrint('Notification read failed: ${error.runtimeType}');
     }
@@ -414,6 +489,9 @@ class CallStateController extends GetxService with WidgetsBindingObserver {
   Future<void> showIncomingCall(CallSessionModel call) async {
     if (!hasAuthorizedRide || call.rideId != activeRide.value?.id) return;
     currentCall.value = call;
+    // Start the looping ringtone before navigating. Duplicate ringing events
+    // for the same call id are ignored internally.
+    await _soundsService?.playIncomingCall(callId: call.id);
     if (Get.currentRoute != Routes.INCOMING_CALL) {
       await Get.toNamed(Routes.INCOMING_CALL);
     }
@@ -425,6 +503,8 @@ class CallStateController extends GetxService with WidgetsBindingObserver {
     isBusy.value = true;
     try {
       await _agoraService.ensureMicrophonePermission();
+      // Answering means the ringtone must vanish immediately.
+      await _soundsService?.stopCallSound(callId: current.id);
       CallSessionModel accepted = await callRepository.accept(current.id);
       final AgoraCredentialsModel credentials =
           accepted.credentials ?? await callRepository.getToken(current.id);
@@ -550,6 +630,7 @@ class CallStateController extends GetxService with WidgetsBindingObserver {
       isBusy.value = false;
     }
     if (succeeded) {
+      await _soundsService?.stopCallSound();
       await _terminateLocalCall();
       if (Get.currentRoute == Routes.ACTIVE_CALL ||
           Get.currentRoute == Routes.INCOMING_CALL ||
@@ -617,6 +698,8 @@ class CallStateController extends GetxService with WidgetsBindingObserver {
   }
 
   Future<void> _terminateLocalCall() async {
+    // The call is gone — the ringtone must not survive it.
+    await _soundsService?.stopCallSound();
     _outgoingPollTimer?.cancel();
     _outgoingPollTimer = null;
     _pollInFlight = false;

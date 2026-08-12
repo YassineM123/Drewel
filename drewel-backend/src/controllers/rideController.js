@@ -141,6 +141,12 @@ const publicRideDto = async (ride) => {
 
 const participantRideDto = async (ride, principal) => {
   const dto = await publicRideDto(ride);
+  // Exact route data is visible only to the two participants of their own
+  // requested contact, never through marketplace/list DTOs.
+  if (ride.status === "contacting" && principal?.role !== "admin") {
+    dto.pickup = ride.pickup;
+    dto.destination = ride.destination;
+  }
   if (principal?.role === "passenger" && String(ride.passengerId) === String(principal.id)) {
     const secret = await Ride.findById(ride._id).select("+pickupPinEncrypted").lean();
     const pickupPin = decryptPickupPin(secret?.pickupPinEncrypted);
@@ -156,6 +162,9 @@ const sendError = (res, error) => res.status(error.statusCode || 500).json({
   code: error.code || "INTERNAL_ERROR",
   message: error.statusCode ? error.message : "Internal server error",
 });
+
+const hasMissionPointInput = (value) =>
+  value && (value.lat !== undefined || value.long !== undefined || value.address !== undefined);
 
 export const createDriverContact = async (req, res) => {
   try {
@@ -180,22 +189,72 @@ export const createDriverContact = async (req, res) => {
       ...buildFreshDubaiMarketplaceAvailabilityFilter(),
     }).select("_id");
     if (!driver) throw new CommunicationPolicyError("Driver is not available", 409, "DRIVER_NOT_AVAILABLE");
+    const pickup = hasMissionPointInput(req.body?.pickup)
+      ? parseMissionPoint(req.body.pickup, "pickup")
+      : null;
+    const destination = hasMissionPointInput(req.body?.destination)
+      ? parseMissionPoint(req.body.destination, "destination")
+      : null;
     const existing = await Ride.findOne({
       passengerId: principal.id,
       driverId,
       status: { $in: ["contacting", ...ACTIVE_RIDE_STATUSES] },
     });
-    if (existing) return res.status(200).json({ success: true, ride: await publicRideDto(existing), idempotent: true });
-    const ride = await Ride.create({
+    if (existing) {
+      const routeRequested = pickup && destination;
+      const existingHasRoute = [existing.pickup?.lat, existing.pickup?.long, existing.destination?.lat, existing.destination?.long]
+        .every(Number.isFinite);
+      const sameRoute = !routeRequested || !existingHasRoute || (
+        Number(existing.pickup?.lat) === pickup.lat &&
+        Number(existing.pickup?.long) === pickup.long &&
+        Number(existing.destination?.lat) === destination.lat &&
+        Number(existing.destination?.long) === destination.long
+      );
+      if (routeRequested && existingHasRoute && !sameRoute) {
+        throw new CommunicationPolicyError(
+          "This driver already has an open request with a different route",
+          409,
+          "CONTACT_ROUTE_CONFLICT"
+        );
+      }
+      if (routeRequested && !existingHasRoute) {
+        existing.pickup = pickup;
+        existing.destination = destination;
+        await existing.save();
+      }
+      return res.status(200).json({ success: true, ride: await publicRideDto(existing), idempotent: true });
+    }
+    const ridePayload = {
       passengerId: principal.id,
       driverId,
       status: "contacting",
       reference: `DRW-${Date.now().toString(36).toUpperCase()}-${crypto.randomBytes(3).toString("hex").toUpperCase()}`,
-    });
+    };
+    if (pickup && destination) {
+      ridePayload.pickup = pickup;
+      ridePayload.destination = destination;
+    }
+    const ride = await Ride.create(ridePayload);
     await CommunicationAudit.create({ rideId: ride._id, action: "driver_contact_created", actorId: principal.id, actorRole: "passenger", outcome: "success" });
     io.to(String(driverId)).emit("driver:contact", { rideId: String(ride._id), status: ride.status });
     const conversation = await ensureConversationForRide(ride);
     await emitConversationUpdated(conversation);
+    // Opening a secure chat is not a booking. Re-assert the driver's current
+    // marketplace projection only when they still satisfy the same fresh-GPS
+    // availability predicate used by Find Now. A later accepted offer is the
+    // only path that publishes Busy/unavailable.
+    const stillAvailable = await Driver.findOne({
+      _id: driverId,
+      ...buildFreshDubaiMarketplaceAvailabilityFilter(),
+    }).select("_id isOnline availabilityStatus updatedAt").lean();
+    if (stillAvailable) {
+      io.emit("driver:availability", {
+        driverId: String(stillAvailable._id),
+        status: "Online",
+        isAvailable: true,
+        updatedAt: stillAvailable.updatedAt,
+      });
+    }
     return res.status(201).json({ success: true, ride: await publicRideDto(ride) });
   } catch (error) {
     if (error?.code === 11000) {
@@ -234,6 +293,24 @@ const parseMissionPoint = (value, field) => {
     );
   }
   return { lat, long, address };
+};
+
+const parseTripRequestMetadata = (body = {}) => {
+  const pickup = parseMissionPoint(body.pickup, "pickup");
+  const destination = parseMissionPoint(body.destination, "destination");
+  const proposedPrice =
+    body.proposedPrice === undefined || body.proposedPrice === null || body.proposedPrice === ""
+      ? null
+      : Number(body.proposedPrice);
+  if (proposedPrice !== null && (!Number.isFinite(proposedPrice) || proposedPrice < 0 || proposedPrice > 1_000_000_000)) {
+    throw new CommunicationPolicyError("proposedPrice is invalid", 400, "INVALID_TRIP_REQUEST");
+  }
+  const currency = String(body.currency || "AED").trim().toUpperCase();
+  if (!/^[A-Z]{3}$/.test(currency)) {
+    throw new CommunicationPolicyError("currency is invalid", 400, "INVALID_TRIP_REQUEST");
+  }
+  const note = String(body.note || "").trim().slice(0, 500);
+  return { pickup, destination, proposedPrice, currency, note };
 };
 
 export const confirmMission = async (req, res) => {
@@ -593,18 +670,27 @@ export const sendRideMessage = async (req, res) => {
   try {
     const principal = await resolvePrincipal(req.user?._id);
     const { ride, participantRole } = await assertRideParticipant(principal, req.params.rideId, { requireContact: true });
-    if (ride.status === "contacting") {
-      const driverAvailable = await Driver.exists({
-        _id: ride.driverId,
-        ...buildFreshDubaiMarketplaceAvailabilityFilter(),
-      });
-      if (!driverAvailable) {
-        throw new CommunicationPolicyError(
-          "Driver is unavailable",
-          409,
-          "DRIVER_NOT_AVAILABLE"
-        );
+    // A contact has already been authorized for these two participants.  GPS
+    // freshness controls discovery and creating a *new* contact, not message
+    // delivery in an existing private conversation.  Requiring a fresh
+    // location here made valid chats fail whenever the driver was stationary,
+    // backgrounded, or temporarily offline.
+    const messageType = String(req.body?.messageType || "text").trim().toLowerCase();
+    if (!["text", "trip_request"].includes(messageType)) {
+      throw new CommunicationPolicyError("Unsupported message type", 400, "INVALID_MESSAGE_TYPE");
+    }
+    let metadata = null;
+    if (messageType === "trip_request") {
+      if (participantRole !== "passenger") {
+        throw new CommunicationPolicyError("Only passengers can send trip requests", 403, "PASSENGER_REQUIRED");
       }
+      if (ride.status !== "contacting") {
+        throw new CommunicationPolicyError("Trip requests are only available while contacting", 409, "TRIP_REQUEST_CLOSED");
+      }
+      metadata = parseTripRequestMetadata(req.body?.metadata || {});
+      ride.pickup = metadata.pickup;
+      ride.destination = metadata.destination;
+      await ride.save();
     }
     const text = String(req.body?.text || "").trim();
     const clientMessageId = String(req.body?.clientMessageId || "").trim();
@@ -614,7 +700,7 @@ export const sendRideMessage = async (req, res) => {
     let message;
     let created = true;
     try {
-      message = await RideMessage.create({ rideId: ride._id, senderId: principal.id, senderRole: participantRole, text, clientMessageId });
+      message = await RideMessage.create({ rideId: ride._id, senderId: principal.id, senderRole: participantRole, text, clientMessageId, messageType, metadata });
     } catch (error) {
       if (error?.code !== 11000) throw error;
       created = false;
@@ -626,6 +712,8 @@ export const sendRideMessage = async (req, res) => {
       senderId: String(message.senderId),
       senderRole: message.senderRole,
       text: message.text,
+      messageType: message.messageType,
+      metadata: message.metadata,
       status: message.status,
       clientMessageId: message.clientMessageId,
       createdAt: message.createdAt,

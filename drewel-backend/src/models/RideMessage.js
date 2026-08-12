@@ -6,6 +6,16 @@ const rideMessageSchema = new mongoose.Schema(
     senderId: { type: mongoose.Schema.Types.ObjectId, required: true, index: true },
     senderRole: { type: String, enum: ["passenger", "driver"], required: true },
     text: { type: String, required: true, trim: true, maxlength: 2000 },
+    messageType: {
+      type: String,
+      enum: ["text", "trip_request"],
+      default: "text",
+      index: true,
+    },
+    metadata: {
+      type: mongoose.Schema.Types.Mixed,
+      default: null,
+    },
     clientMessageId: { type: String, required: true, trim: true, maxlength: 100 },
     status: { type: String, enum: ["sent", "delivered", "read"], default: "sent", index: true },
     deliveredAt: { type: Date, default: null },

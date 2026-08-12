@@ -22,15 +22,52 @@ class RideMessageRepository {
         .toList(growable: false);
   }
 
-  Future<RideMessageModel> send(String rideId, String text) async {
-    final String clientMessageId =
-        '${DateTime.now().microsecondsSinceEpoch.toRadixString(36)}-'
-        '${Random.secure().nextInt(1 << 32).toRadixString(36)}';
+  static String newClientMessageId() =>
+      '${DateTime.now().microsecondsSinceEpoch.toRadixString(36)}-'
+      '${Random.secure().nextInt(1 << 32).toRadixString(36)}';
+
+  Future<RideMessageModel> send(
+    String rideId,
+    String text, {
+    String? clientMessageId,
+  }) async {
+    final String idempotencyKey = clientMessageId ?? newClientMessageId();
     final Map<String, dynamic> response = await _api.post(
       ApiUrlConstants.rideMessages(rideId),
       <String, dynamic>{
         'text': text,
-        'clientMessageId': clientMessageId,
+        'clientMessageId': idempotencyKey,
+      },
+    );
+    final dynamic raw = response['message'] ?? response['data'];
+    return RideMessageModel.fromJson(Map<String, dynamic>.from(raw as Map));
+  }
+
+  Future<RideMessageModel> sendTripRequest(
+    String rideId, {
+    required Map<String, dynamic> pickup,
+    required Map<String, dynamic> destination,
+    required double proposedPrice,
+    required String currency,
+    String note = '',
+    String? clientMessageId,
+  }) async {
+    final String idempotencyKey = clientMessageId ?? newClientMessageId();
+    final String priceLabel =
+        '${proposedPrice.toStringAsFixed(2)} ${currency.toUpperCase()}';
+    final Map<String, dynamic> response = await _api.post(
+      ApiUrlConstants.rideMessages(rideId),
+      <String, dynamic>{
+        'text': 'Trip request: $priceLabel',
+        'clientMessageId': idempotencyKey,
+        'messageType': 'trip_request',
+        'metadata': <String, dynamic>{
+          'pickup': pickup,
+          'destination': destination,
+          'proposedPrice': proposedPrice,
+          'currency': currency.toUpperCase(),
+          if (note.trim().isNotEmpty) 'note': note.trim(),
+        },
       },
     );
     final dynamic raw = response['message'] ?? response['data'];

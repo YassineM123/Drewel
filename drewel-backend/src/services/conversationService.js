@@ -144,11 +144,10 @@ export const getConversationForPrincipal = async ({ principal, rideId }) => {
     throw new ConversationError("Invalid ride id", 400, "INVALID_RIDE_ID");
   }
   const { ride } = await assertRideParticipant(principal, rideId);
-  const conversation = await RideConversation.findOne({ rideId: ride._id });
-  if (!conversation) {
-    const created = await ensureConversationForRide(ride);
-    return toConversationDto(created, principal);
-  }
+  // Refresh the privacy-safe participant snapshot as accounts/vehicles can
+  // change after the conversation was first created. This also repairs legacy
+  // rows with blank names instead of leaving the client with a generic title.
+  const conversation = await ensureConversationForRide(ride);
   return toConversationDto(conversation, principal);
 };
 

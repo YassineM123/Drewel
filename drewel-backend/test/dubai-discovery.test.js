@@ -68,6 +68,14 @@ test("driver GPS updates dual-write GeoJSON in longitude-latitude order", () => 
 
 test("UAE production still rejects GPS worse than its strict accuracy limit", () => {
   const now = new Date("2026-08-03T12:00:00.000Z");
+  const accepted = buildDriverLocationUpdate({
+    lat: 36.8065,
+    long: 10.1815,
+    accuracyM: getMarketplaceLocationMaxAccuracyM(),
+    recordedAt: now,
+  }, now);
+  assert.equal(accepted.currentServiceArea, UAE_SERVICE_AREA);
+  assert.equal(accepted.locationAccuracyM, getMarketplaceLocationMaxAccuracyM());
   assert.throws(
     () => buildDriverLocationUpdate({
       lat: 25.2048,

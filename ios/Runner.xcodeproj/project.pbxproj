@@ -16,6 +16,13 @@
 		97C146FE1CF9000F007C117D /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 97C146FD1CF9000F007C117D /* Assets.xcassets */; };
 		97C147011CF9000F007C117D /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 97C146FF1CF9000F007C117D /* LaunchScreen.storyboard */; };
 		E03FA491EE680D7ECA45F716 /* Pods_RunnerTests.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 3D9A2379A001AF4F777CE322 /* Pods_RunnerTests.framework */; };
+		D21A7EA0D31E4B9090000001 /* drewel_notification.wav in Resources */ = {isa = PBXBuildFile; fileRef = D21A7EA0D31E4B9090000008 /* drewel_notification.wav */; };
+		D21A7EA0D31E4B9090000002 /* drewel_message.wav in Resources */ = {isa = PBXBuildFile; fileRef = D21A7EA0D31E4B9090000009 /* drewel_message.wav */; };
+		D21A7EA0D31E4B9090000003 /* drewel_ride_request.wav in Resources */ = {isa = PBXBuildFile; fileRef = D21A7EA0D31E4B909000000A /* drewel_ride_request.wav */; };
+		D21A7EA0D31E4B9090000004 /* drewel_driver_arrived.wav in Resources */ = {isa = PBXBuildFile; fileRef = D21A7EA0D31E4B909000000B /* drewel_driver_arrived.wav */; };
+		D21A7EA0D31E4B9090000005 /* drewel_call.wav in Resources */ = {isa = PBXBuildFile; fileRef = D21A7EA0D31E4B909000000C /* drewel_call.wav */; };
+		D21A7EA0D31E4B9090000006 /* drewel_success.wav in Resources */ = {isa = PBXBuildFile; fileRef = D21A7EA0D31E4B909000000D /* drewel_success.wav */; };
+		D21A7EA0D31E4B9090000007 /* drewel_warning.wav in Resources */ = {isa = PBXBuildFile; fileRef = D21A7EA0D31E4B909000000E /* drewel_warning.wav */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -60,6 +67,13 @@
 		97C146FD1CF9000F007C117D /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		97C147001CF9000F007C117D /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/LaunchScreen.storyboard; sourceTree = "<group>"; };
 		97C147021CF9000F007C117D /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		D21A7EA0D31E4B9090000008 /* drewel_notification.wav */ = {isa = PBXFileReference; lastKnownFileType = audio.wav; path = DrewelSounds/drewel_notification.wav; sourceTree = "<group>"; };
+		D21A7EA0D31E4B9090000009 /* drewel_message.wav */ = {isa = PBXFileReference; lastKnownFileType = audio.wav; path = DrewelSounds/drewel_message.wav; sourceTree = "<group>"; };
+		D21A7EA0D31E4B909000000A /* drewel_ride_request.wav */ = {isa = PBXFileReference; lastKnownFileType = audio.wav; path = DrewelSounds/drewel_ride_request.wav; sourceTree = "<group>"; };
+		D21A7EA0D31E4B909000000B /* drewel_driver_arrived.wav */ = {isa = PBXFileReference; lastKnownFileType = audio.wav; path = DrewelSounds/drewel_driver_arrived.wav; sourceTree = "<group>"; };
+		D21A7EA0D31E4B909000000C /* drewel_call.wav */ = {isa = PBXFileReference; lastKnownFileType = audio.wav; path = DrewelSounds/drewel_call.wav; sourceTree = "<group>"; };
+		D21A7EA0D31E4B909000000D /* drewel_success.wav */ = {isa = PBXFileReference; lastKnownFileType = audio.wav; path = DrewelSounds/drewel_success.wav; sourceTree = "<group>"; };
+		D21A7EA0D31E4B909000000E /* drewel_warning.wav */ = {isa = PBXFileReference; lastKnownFileType = audio.wav; path = DrewelSounds/drewel_warning.wav; sourceTree = "<group>"; };
 		AC6FE6507C173B106EBAF047 /* Pods-RunnerTests.profile.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-RunnerTests.profile.xcconfig"; path = "Target Support Files/Pods-RunnerTests/Pods-RunnerTests.profile.xcconfig"; sourceTree = "<group>"; };
 		AE909908CF7B05B93FB44F4D /* Pods-RunnerTests.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-RunnerTests.debug.xcconfig"; path = "Target Support Files/Pods-RunnerTests/Pods-RunnerTests.debug.xcconfig"; sourceTree = "<group>"; };
 		B4368AC26FC20CEBE9C79E5F /* Pods-Runner.profile.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Runner.profile.xcconfig"; path = "Target Support Files/Pods-Runner/Pods-Runner.profile.xcconfig"; sourceTree = "<group>"; };
@@ -147,8 +161,24 @@
 				1498D2331E8E89220040F4C2 /* GeneratedPluginRegistrant.m */,
 				74858FAE1ED2DC5600515810 /* AppDelegate.swift */,
 				74858FAD1ED2DC5600515810 /* Runner-Bridging-Header.h */,
+				D21A7EA0D31E4B909000000F /* DrewelSounds */,
 			);
 			path = Runner;
+			sourceTree = "<group>";
+		};
+		D21A7EA0D31E4B909000000F /* DrewelSounds */ = {
+			isa = PBXGroup;
+			children = (
+				D21A7EA0D31E4B9090000008 /* drewel_notification.wav */,
+				D21A7EA0D31E4B9090000009 /* drewel_message.wav */,
+				D21A7EA0D31E4B909000000A /* drewel_ride_request.wav */,
+				D21A7EA0D31E4B909000000B /* drewel_driver_arrived.wav */,
+				D21A7EA0D31E4B909000000C /* drewel_call.wav */,
+				D21A7EA0D31E4B909000000D /* drewel_success.wav */,
+				D21A7EA0D31E4B909000000E /* drewel_warning.wav */,
+			);
+			name = DrewelSounds;
+			path = DrewelSounds;
 			sourceTree = "<group>";
 		};
 		C344E05DE86E837D82387F26 /* Pods */ = {
@@ -264,6 +294,13 @@
 				3B3967161E833CAA004F5970 /* AppFrameworkInfo.plist in Resources */,
 				97C146FE1CF9000F007C117D /* Assets.xcassets in Resources */,
 				97C146FC1CF9000F007C117D /* Main.storyboard in Resources */,
+				D21A7EA0D31E4B9090000001 /* drewel_notification.wav in Resources */,
+				D21A7EA0D31E4B9090000002 /* drewel_message.wav in Resources */,
+				D21A7EA0D31E4B9090000003 /* drewel_ride_request.wav in Resources */,
+				D21A7EA0D31E4B9090000004 /* drewel_driver_arrived.wav in Resources */,
+				D21A7EA0D31E4B9090000005 /* drewel_call.wav in Resources */,
+				D21A7EA0D31E4B9090000006 /* drewel_success.wav in Resources */,
+				D21A7EA0D31E4B9090000007 /* drewel_warning.wav in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

@@ -16,6 +16,8 @@ class RideMessageModel {
     required this.text,
     required this.senderId,
     required this.status,
+    this.messageType = 'text',
+    this.metadata,
     this.createdAt,
   });
 
@@ -24,7 +26,11 @@ class RideMessageModel {
   final String text;
   final String senderId;
   final RideMessageStatus status;
+  final String messageType;
+  final Map<String, dynamic>? metadata;
   final DateTime? createdAt;
+
+  bool get isTripRequest => messageType == 'trip_request';
 
   factory RideMessageModel.fromJson(Map<String, dynamic> json) =>
       RideMessageModel(
@@ -33,6 +39,10 @@ class RideMessageModel {
         text: (json['text'] ?? '').toString(),
         senderId: (json['senderId'] ?? json['sender'] ?? '').toString(),
         status: RideMessageStatus.fromValue(json['status']),
+        messageType: (json['messageType'] ?? 'text').toString(),
+        metadata: json['metadata'] is Map
+            ? Map<String, dynamic>.from(json['metadata'] as Map)
+            : null,
         createdAt: DateTime.tryParse((json['createdAt'] ?? '').toString()),
       );
 }

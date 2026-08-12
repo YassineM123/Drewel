@@ -57,8 +57,6 @@ export const createTripOffer = async ({
   requestFingerprint,
   offeredPrice,
   currency,
-  pickup,
-  destination,
   vehicleType,
   note,
 }) =>
@@ -99,6 +97,17 @@ export const createTripOffer = async ({
         "The driver does not belong to this active conversation",
         403,
         "OFFER_CONVERSATION_FORBIDDEN"
+      );
+    }
+    const pickup = contact.pickup;
+    const destination = contact.destination;
+    const hasRequestedRoute = [pickup?.lat, pickup?.long, destination?.lat, destination?.long]
+      .every(Number.isFinite);
+    if (!hasRequestedRoute) {
+      throw new PointsError(
+        "The passenger must choose pickup and destination before an offer can be sent",
+        409,
+        "ROUTE_REQUEST_REQUIRED"
       );
     }
 
