@@ -105,7 +105,7 @@ class DrewelOsmMap extends StatelessWidget {
                 )
                 .toList(growable: false),
           ),
-          RichAttributionWidget(
+          const RichAttributionWidget(
             showFlutterMapAttribution: false,
             attributions: <SourceAttribution>[
               TextSourceAttribution(

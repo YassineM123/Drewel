@@ -20,6 +20,7 @@ import conversationRoutes from "./src/routes/conversationRoutes.js";
 import driverPointsRoutes from "./src/routes/driverPointsRoutes.js";
 import adminPointsRoutes from "./src/routes/adminPointsRoutes.js";
 import tripOfferRoutes from "./src/routes/tripOfferRoutes.js";
+import accountRoutes from "./src/routes/accountRoutes.js";
 import { app, server } from "./src/socket/index.js";
 import { isOriginAllowed } from "./src/utils/allowedOrigins.js";
 import {
@@ -112,6 +113,7 @@ app.use("/api/calls", callRoutes);
 app.use("/api/rides", rideRoutes);
 app.use("/api/conversations", conversationRoutes);
 app.use("/api/trip-offers", tripOfferRoutes);
+app.use("/api/account", accountRoutes);
 
 app.get("/api/health", async (req, res) => {
   return res.status(200).json({ success: true, message: "Backend API is running" });

@@ -29,6 +29,7 @@ class User {
   String? sId;
   String? countryCode;
   String? phone;
+  String? email;
   String? firstName;
   String? lastName;
   bool? isVerified;
@@ -54,6 +55,7 @@ class User {
       {this.sId,
       this.countryCode,
       this.phone,
+      this.email,
       this.firstName,
       this.lastName,
       this.isVerified,
@@ -79,6 +81,7 @@ class User {
     sId = json['_id'];
     countryCode = json['countryCode'];
     phone = json['phone'];
+    email = json['email'];
     firstName = json['firstName'];
     lastName = json['lastName'];
     isVerified = json['isVerified'];
@@ -98,7 +101,7 @@ class User {
     licenseCompany = json['licenseCompany'];
     passportCopyUrl = json['passportCopyUrl'];
     updatedAt = json['updatedAt'];
-    profileImageUrl = json['profileImageUrl'];
+    profileImageUrl = json['profileImageUrl'] ?? json['profilePicture'];
   }
 
   Map<String, dynamic> toJson() {
@@ -106,6 +109,7 @@ class User {
     data['_id'] = sId;
     data['countryCode'] = countryCode;
     data['phone'] = phone;
+    data['email'] = email;
     data['firstName'] = firstName;
     data['lastName'] = lastName;
     data['isVerified'] = isVerified;

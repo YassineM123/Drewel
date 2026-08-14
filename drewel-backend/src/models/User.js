@@ -19,6 +19,13 @@ const userSchema = new mongoose.Schema(
       set: (value) =>
         String(value ?? "").replace(/\D/g, "").replace(/^0+/, ""),
     },
+    email: {
+      type: String,
+      trim: true,
+      lowercase: true,
+      default: "",
+      index: true,
+    },
 
     long: {
       type: Number,

@@ -15,6 +15,7 @@ import { buildPublicAssetUrl } from "../utils/publicAssets.js";
 import { sanitizeAuthSubject } from "../utils/authResponse.js";
 import { grantWelcomeBonus } from "../services/pointsWalletService.js";
 import { buildActiveDriverPresenceFilter } from "../services/driverPresenceService.js";
+import validator from "validator";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
@@ -248,22 +249,44 @@ export const getAllUsers = async (req, res) => {
 // Update User
 export const updateUser = async (req, res) => {
   try {
-    const { fullName, email, dob, phone } = req.body || {};
+    const { fullName, email, dob, phone, countryCode } = req.body || {};
     const user = await User.findById(req.user._id);
     if (!user) {
       return sendResponse(res, 404, false, "User not found");
     }
 
-    if (fullName) user.fullName = fullName;
-    if (email) {
-      const existingUser = await User.findOne({ email });
-      if (existingUser && existingUser._id.toString() !== user._id.toString()) {
-        return sendResponse(res, 200, false, "Email already registered");
+    if (fullName !== undefined) {
+      const normalizedName = String(fullName).trim().replace(/\s+/g, " ");
+      if (normalizedName.length < 2 || normalizedName.length > 120) {
+        return sendResponse(res, 400, false, "Please provide a valid full name");
       }
-      user.email = email;
+      user.fullName = normalizedName;
+    }
+    if (email) {
+      const normalizedEmail = String(email).trim().toLowerCase();
+      if (!validator.isEmail(normalizedEmail)) {
+        return sendResponse(res, 400, false, "Please provide a valid email");
+      }
+      const existingUser = await User.findOne({ email: normalizedEmail });
+      if (existingUser && existingUser._id.toString() !== user._id.toString()) {
+        return sendResponse(res, 409, false, "Email already registered");
+      }
+      user.email = normalizedEmail;
     }
     if (dob) user.dob = dob;
-    if (phone) user.phone = phone;
+    if (phone) {
+      const normalizedPhone = getPhoneWithoutCountryCode(phone, countryCode || user.countryCode);
+      if (!normalizedPhone || normalizedPhone.length < 6 || normalizedPhone.length > 15) {
+        return sendResponse(res, 400, false, "Please provide a valid phone number");
+      }
+      const phoneCandidates = getPhoneCandidates(phone, countryCode || user.countryCode);
+      const existingUser = await User.findOne({ phone: { $in: phoneCandidates } });
+      if (existingUser && existingUser._id.toString() !== user._id.toString()) {
+        return sendResponse(res, 409, false, "Phone already registered");
+      }
+      user.phone = normalizedPhone;
+      if (countryCode) user.countryCode = normalizeCountryCode(countryCode);
+    }
 
     await user.save();
     sendResponse(res, 200, true, "User updated successfully", user);

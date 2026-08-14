@@ -2,6 +2,8 @@ import 'package:get/get.dart';
 
 import '../modules/documents/bindings/documents_binding.dart';
 import '../modules/documents/views/documents_view.dart';
+import '../modules/driver_account/bindings/driver_account_binding.dart';
+import '../modules/driver_account/views/driver_account_views.dart';
 import '../modules/driver_home/bindings/driver_home_binding.dart';
 import '../modules/driver_home/views/driver_home_view.dart';
 import '../modules/driver_register/bindings/driver_register_binding.dart';
@@ -37,6 +39,8 @@ import '../modules/points/views/buy_points_view.dart';
 import '../modules/points/views/my_points_view.dart';
 import '../modules/active_ride/bindings/active_ride_binding.dart';
 import '../modules/active_ride/views/active_ride_view.dart';
+import '../modules/passenger_account/bindings/passenger_account_binding.dart';
+import '../modules/passenger_account/views/passenger_account_views.dart';
 
 part 'app_routes.dart';
 
@@ -85,6 +89,86 @@ class AppPages {
       name: _Paths.DRIVER_HOME,
       page: () => const DriverHomeView(),
       binding: DriverHomeBinding(),
+    ),
+    GetPage(
+      name: _Paths.DRIVER_PROFILE,
+      page: () => const DriverProfileView(),
+      binding: DriverAccountBinding(),
+    ),
+    GetPage(
+      name: _Paths.DRIVER_EDIT_PROFILE,
+      page: () => const DriverEditProfileView(),
+      binding: DriverAccountBinding(),
+    ),
+    GetPage(
+      name: _Paths.DRIVER_VEHICLE,
+      page: () => const DriverVehicleView(),
+      binding: DriverAccountBinding(),
+    ),
+    GetPage(
+      name: _Paths.DRIVER_RIDE_HISTORY,
+      page: () => const DriverRideHistoryView(),
+      binding: DriverAccountBinding(),
+    ),
+    GetPage(
+      name: _Paths.DRIVER_RIDE_DETAILS,
+      page: () => const DriverRideDetailsView(),
+      binding: DriverAccountBinding(),
+    ),
+    GetPage(
+      name: _Paths.DRIVER_EARNINGS,
+      page: () => const DriverEarningsView(),
+      binding: DriverAccountBinding(),
+    ),
+    GetPage(
+      name: _Paths.DRIVER_PERFORMANCE,
+      page: () => const DriverPerformanceView(),
+      binding: DriverAccountBinding(),
+    ),
+    GetPage(
+      name: _Paths.DRIVER_CALL_HISTORY,
+      page: () => const DriverCallHistoryView(),
+      binding: DriverAccountBinding(),
+    ),
+    GetPage(
+      name: _Paths.DRIVER_SETTINGS,
+      page: () => const DriverSettingsView(),
+      binding: DriverAccountBinding(),
+    ),
+    GetPage(
+      name: _Paths.DRIVER_LANGUAGE,
+      page: () => const DriverLanguageView(),
+      binding: DriverAccountBinding(),
+    ),
+    GetPage(
+      name: _Paths.DRIVER_NOTIFICATION_PREFERENCES,
+      page: () => const DriverNotificationPreferencesView(),
+      binding: DriverAccountBinding(),
+    ),
+    GetPage(
+      name: _Paths.DRIVER_LEGAL,
+      page: () => const DriverLegalView(),
+      binding: DriverAccountBinding(),
+    ),
+    GetPage(
+      name: _Paths.DRIVER_SECURITY,
+      page: () => const DriverSecurityView(),
+      binding: DriverAccountBinding(),
+    ),
+    GetPage(
+      name: _Paths.DRIVER_HELP_SUPPORT,
+      page: () => const DriverHelpSupportView(),
+      binding: DriverAccountBinding(),
+    ),
+    GetPage(
+      name: _Paths.DRIVER_REPORT_PROBLEM,
+      page: () => const DriverReportProblemView(),
+      binding: DriverAccountBinding(),
+    ),
+    GetPage(
+      name: _Paths.DRIVER_ABOUT,
+      page: () => const DriverAboutView(),
+      binding: DriverAccountBinding(),
     ),
     GetPage(
       name: _Paths.USER_HOME,
@@ -150,6 +234,66 @@ class AppPages {
       name: _Paths.ACTIVE_RIDE,
       page: () => const ActiveRideView(),
       binding: ActiveRideBinding(),
+    ),
+    GetPage(
+      name: _Paths.PASSENGER_PROFILE,
+      page: () => const PassengerProfileView(),
+      binding: PassengerAccountBinding(),
+    ),
+    GetPage(
+      name: _Paths.EDIT_PROFILE,
+      page: () => const EditProfileView(),
+      binding: PassengerAccountBinding(),
+    ),
+    GetPage(
+      name: _Paths.SAVED_PLACES,
+      page: () => const SavedPlacesView(),
+      binding: PassengerAccountBinding(),
+    ),
+    GetPage(
+      name: _Paths.RIDE_HISTORY,
+      page: () => const RideHistoryView(),
+      binding: PassengerAccountBinding(),
+    ),
+    GetPage(
+      name: _Paths.RIDE_DETAILS,
+      page: () => const RideDetailsView(),
+      binding: PassengerAccountBinding(),
+    ),
+    GetPage(
+      name: _Paths.CALL_HISTORY,
+      page: () => const CallHistoryView(),
+      binding: PassengerAccountBinding(),
+    ),
+    GetPage(
+      name: _Paths.LANGUAGE_SETTINGS,
+      page: () => const LanguageSettingsView(),
+      binding: PassengerAccountBinding(),
+    ),
+    GetPage(
+      name: _Paths.NOTIFICATION_PREFERENCES,
+      page: () => const NotificationPreferencesView(),
+      binding: PassengerAccountBinding(),
+    ),
+    GetPage(
+      name: _Paths.LEGAL,
+      page: () => const LegalView(),
+      binding: PassengerAccountBinding(),
+    ),
+    GetPage(
+      name: _Paths.HELP_SUPPORT,
+      page: () => const HelpSupportView(),
+      binding: PassengerAccountBinding(),
+    ),
+    GetPage(
+      name: _Paths.REPORT_PROBLEM,
+      page: () => const ReportProblemView(),
+      binding: PassengerAccountBinding(),
+    ),
+    GetPage(
+      name: _Paths.ABOUT_DREWEL,
+      page: () => const AboutDrewelView(),
+      binding: PassengerAccountBinding(),
     ),
   ];
 }

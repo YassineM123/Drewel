@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { existsSync } from "node:fs";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import {
@@ -50,7 +51,7 @@ test("presence timing is configurable and timeout cannot be shorter than two hea
   try {
     assert.deepEqual(getDriverPresenceConfig(), {
       heartbeatIntervalMs: 30000,
-      timeoutMs: 120000,
+      timeoutMs: 600000,
       sweepIntervalMs: 2000,
     });
   } finally {
@@ -63,7 +64,7 @@ test("presence timing is configurable and timeout cannot be shorter than two hea
   }
 });
 
-test("presence timeout is capped so stale online sessions cannot last for days", () => {
+test("presence timeout has a bounded network-loss grace period", () => {
   const previous = {
     heartbeat: process.env.DRIVER_PRESENCE_HEARTBEAT_INTERVAL_MS,
     timeout: process.env.DRIVER_PRESENCE_TIMEOUT_MS,
@@ -71,13 +72,30 @@ test("presence timeout is capped so stale online sessions cannot last for days",
   process.env.DRIVER_PRESENCE_HEARTBEAT_INTERVAL_MS = "20000";
   process.env.DRIVER_PRESENCE_TIMEOUT_MS = String(7 * 24 * 60 * 60 * 1000);
   try {
-    assert.equal(getDriverPresenceConfig().timeoutMs, 300000);
+    assert.equal(getDriverPresenceConfig().timeoutMs, 1800000);
   } finally {
     if (previous.heartbeat === undefined) delete process.env.DRIVER_PRESENCE_HEARTBEAT_INTERVAL_MS;
     else process.env.DRIVER_PRESENCE_HEARTBEAT_INTERVAL_MS = previous.heartbeat;
     if (previous.timeout === undefined) delete process.env.DRIVER_PRESENCE_TIMEOUT_MS;
     else process.env.DRIVER_PRESENCE_TIMEOUT_MS = previous.timeout;
   }
+});
+
+test("android foreground presence requests battery optimization exemption", (t) => {
+  const manifestUrl = new URL("../../android/app/src/main/AndroidManifest.xml", import.meta.url);
+  const serviceUrl = new URL("../../lib/common/driver_online_service.dart", import.meta.url);
+  if (!existsSync(manifestUrl) || !existsSync(serviceUrl)) {
+    t.skip("Flutter source is not present in this backend-only checkout");
+    return;
+  }
+  const manifest = read("../../android/app/src/main/AndroidManifest.xml");
+  const service = read("../../lib/common/driver_online_service.dart");
+  assert.match(
+    manifest,
+    /android\.permission\.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS/
+  );
+  assert.match(service, /isIgnoringBatteryOptimizations/);
+  assert.match(service, /requestIgnoreBatteryOptimization\(\)/);
 });
 
 test("presence events expose a monotonic version and no session secret", () => {

@@ -100,6 +100,7 @@ class DriverOnlineService {
 
     if (!isAndroidPlatform) return true;
     _initCommon(intervalMs);
+    await _requestAndroidBackgroundSurvivalPermissions();
     await FlutterForegroundTask.saveData(
       key: _sessionTaskKey,
       value: sessionId,
@@ -157,6 +158,12 @@ class DriverOnlineService {
     }
   }
 
+  static Future<void> goOfflineForLogout() async {
+    final String sessionId = await currentSessionId() ?? '';
+    await _sendOfflineRequest(sessionId);
+    await stop();
+  }
+
   static Future<String?> currentSessionId() async {
     final SharedPreferences prefs = await SharedPreferences.getInstance();
     await prefs.reload();
@@ -169,6 +176,17 @@ class DriverOnlineService {
     await prefs.remove(_sessionPreferenceKey);
     if (isAndroidPlatform) {
       await FlutterForegroundTask.removeData(key: _sessionTaskKey);
+    }
+  }
+
+  static Future<void> _requestAndroidBackgroundSurvivalPermissions() async {
+    if (!isAndroidPlatform) return;
+    try {
+      if (!await FlutterForegroundTask.isIgnoringBatteryOptimizations) {
+        await FlutterForegroundTask.requestIgnoreBatteryOptimization();
+      }
+    } catch (error) {
+      debugPrint('Battery optimization permission unavailable: $error');
     }
   }
 }

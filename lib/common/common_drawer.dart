@@ -12,6 +12,9 @@ import 'package:get/get.dart';
 import 'package:responsive_sizer/responsive_sizer.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../app/modules/communication/controllers/call_state_controller.dart';
+import 'driver_online_service.dart';
+
 class CustomDrawer extends StatelessWidget {
   final Map<String, String> userData;
   const CustomDrawer({super.key, required this.userData});
@@ -33,7 +36,18 @@ class CustomDrawer extends StatelessWidget {
     }
   }
 
-  void _showDeleteConfirmationDialog(BuildContext context) {    showDialog(
+  Future<void> _clearRuntimeSession() async {
+    if (userData[ApiKeyConstants.type] == ApiKeyConstants.driver) {
+      await DriverOnlineService.goOfflineForLogout();
+    }
+    await _unregisterPushToken();
+    if (Get.isRegistered<CallStateController>()) {
+      await Get.find<CallStateController>().disposeForLogout();
+    }
+  }
+
+  void _showDeleteConfirmationDialog(BuildContext context) {
+    showDialog(
       context: context,
       barrierColor: Colors.black.withOpacity(0.6),
       builder: (BuildContext context) {
@@ -145,7 +159,7 @@ class CustomDrawer extends StatelessWidget {
 
       if (success) {
         // Clear preferences and navigate to user type screen
-        await _unregisterPushToken();
+        await _clearRuntimeSession();
         await prefs.clear();
         CommonWidgets.snackBarView(
             title: 'Account deleted successfully', success: true);
@@ -215,6 +229,48 @@ class CustomDrawer extends StatelessWidget {
               const Divider(
                 color: Colors.grey,
               ),
+              if (userData[ApiKeyConstants.type] != ApiKeyConstants.driver)
+                ListTile(
+                  selected: Get.currentRoute == Routes.PASSENGER_PROFILE,
+                  selectedTileColor: primaryColor.withOpacity(0.10),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10.px),
+                  ),
+                  contentPadding: EdgeInsets.zero,
+                  leading: Icon(
+                    Icons.person_outline_rounded,
+                    size: 25.px,
+                    color: primaryColor,
+                  ),
+                  title: Text(
+                    'Profile',
+                    style: MyTextStyle.titleStyle16b,
+                  ),
+                  onTap: () {
+                    _navigate(context, Routes.PASSENGER_PROFILE);
+                  },
+                ),
+              if (userData[ApiKeyConstants.type] == ApiKeyConstants.driver)
+                ListTile(
+                  selected: Get.currentRoute == Routes.DRIVER_PROFILE,
+                  selectedTileColor: primaryColor.withOpacity(0.10),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10.px),
+                  ),
+                  contentPadding: EdgeInsets.zero,
+                  leading: Icon(
+                    Icons.person_outline_rounded,
+                    size: 25.px,
+                    color: primaryColor,
+                  ),
+                  title: Text(
+                    'Driver Profile',
+                    style: MyTextStyle.titleStyle16b,
+                  ),
+                  onTap: () {
+                    _navigate(context, Routes.DRIVER_PROFILE);
+                  },
+                ),
               ListTile(
                 selected: Get.currentRoute == Routes.SUPPORT_CHAT,
                 selectedTileColor: primaryColor.withOpacity(0.10),
@@ -307,8 +363,8 @@ class CustomDrawer extends StatelessWidget {
                   onPressed: () async {
                     SharedPreferences prefs =
                         await SharedPreferences.getInstance();
-                    await _unregisterPushToken();
-                    prefs.clear();
+                    await _clearRuntimeSession();
+                    await prefs.clear();
                     Get.offNamedUntil(Routes.USER_TYPE, (routes) => false);
                   },
                   context: context,

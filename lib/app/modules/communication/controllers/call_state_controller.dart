@@ -910,6 +910,19 @@ class CallStateController extends GetxService with WidgetsBindingObserver {
     _agoraService.dispose();
     super.onClose();
   }
+
+  Future<void> disposeForLogout() async {
+    _durationTimer?.cancel();
+    _durationTimer = null;
+    _outgoingPollTimer?.cancel();
+    _outgoingPollTimer = null;
+    await _terminateLocalCall();
+    activeRide.value = null;
+    notifications.clear();
+    notificationUnread.value = 0;
+    conversationUnread.value = 0;
+    _socketService.disconnect();
+  }
 }
 
 class CommunicationBinding extends Bindings {

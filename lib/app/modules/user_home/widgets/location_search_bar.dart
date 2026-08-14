@@ -112,7 +112,7 @@ class _LocationSearchBarState extends State<LocationSearchBar> {
       ),
       child: Row(
         children: <Widget>[
-          SizedBox(width: 14),
+          const SizedBox(width: 14),
           Icon(
             Icons.location_on_rounded,
             color: _focused || _hasText ? primaryColor : Colors.black38,
@@ -177,7 +177,7 @@ class _LocationSearchBarState extends State<LocationSearchBar> {
     final Widget content;
     if (isLoading) {
       content = _buildStatusTile(
-        icon: SizedBox(
+        icon: const SizedBox(
           width: 18,
           height: 18,
           child: CircularProgressIndicator(
@@ -290,7 +290,7 @@ class _LocationSearchBarState extends State<LocationSearchBar> {
                   color: primaryColor.withOpacity(0.08),
                   shape: BoxShape.circle,
                 ),
-                child: Icon(
+                child: const Icon(
                   Icons.location_on_rounded,
                   color: primaryColor,
                   size: 20,

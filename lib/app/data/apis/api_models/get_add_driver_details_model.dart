@@ -35,6 +35,7 @@ class Driver {
   String? sId;
   String? countryCode;
   String? phone;
+  String? email;
   String? firstName;
   String? lastName;
   String? whatsappNumber;
@@ -76,15 +77,21 @@ class Driver {
   int? iV;
   String? city;
   bool? isOnline;
+  String? availabilityStatus;
   dynamic lat;
   dynamic long;
   String? vehicleType;
+  String? vehicleModel;
+  String? registration;
+  num? rating;
+  num? priceEstimate;
   DriverLogs? driverLogs;
 
   Driver({
     this.sId,
     this.countryCode,
     this.phone,
+    this.email,
     this.firstName,
     this.lastName,
     this.whatsappNumber,
@@ -126,9 +133,14 @@ class Driver {
     this.iV,
     this.city,
     this.isOnline,
+    this.availabilityStatus,
     this.lat,
     this.long,
     this.vehicleType,
+    this.vehicleModel,
+    this.registration,
+    this.rating,
+    this.priceEstimate,
     this.driverLogs,
   });
 
@@ -136,6 +148,7 @@ class Driver {
     sId = json['_id'];
     countryCode = json['countryCode'];
     phone = json['phone'];
+    email = json['email'];
     firstName = json['firstName'];
     lastName = json['lastName'];
     whatsappNumber = json['whatsappNumber'];
@@ -201,9 +214,14 @@ class Driver {
     iV = json['__v'];
     city = json['city'];
     isOnline = json['isOnline'];
+    availabilityStatus = json['availabilityStatus'];
     lat = json['lat'];
     long = json['long'];
     vehicleType = json['vehicleType'];
+    vehicleModel = json['vehicleModel'];
+    registration = json['registration'];
+    rating = json['rating'];
+    priceEstimate = json['priceEstimate'];
     driverLogs = json['driverLogs'] is Map<String, dynamic>
         ? DriverLogs.fromJson(json['driverLogs'])
         : null;
@@ -214,6 +232,7 @@ class Driver {
     data['_id'] = sId;
     data['countryCode'] = countryCode;
     data['phone'] = phone;
+    data['email'] = email;
     data['firstName'] = firstName;
     data['lastName'] = lastName;
     data['whatsappNumber'] = whatsappNumber;
@@ -255,9 +274,14 @@ class Driver {
     data['__v'] = iV;
     data['city'] = city;
     data['isOnline'] = isOnline;
+    data['availabilityStatus'] = availabilityStatus;
     data['lat'] = lat;
     data['long'] = long;
     data['vehicleType'] = vehicleType;
+    data['vehicleModel'] = vehicleModel;
+    data['registration'] = registration;
+    data['rating'] = rating;
+    data['priceEstimate'] = priceEstimate;
     if (driverLogs != null) {
       data['driverLogs'] = driverLogs!.toJson();
     }

@@ -434,7 +434,7 @@ class NotificationSoundService {
   // ---------------------------------------------------------------------
 
   AudioContext get _notificationContext => AudioContext(
-        android: AudioContextAndroid(
+        android: const AudioContextAndroid(
           isSpeakerphoneOn: false,
           stayAwake: false,
           contentType: AndroidContentType.sonification,
@@ -448,7 +448,7 @@ class NotificationSoundService {
       );
 
   AudioContext get _callContext => AudioContext(
-        android: AudioContextAndroid(
+        android: const AudioContextAndroid(
           isSpeakerphoneOn: true,
           stayAwake: false,
           contentType: AndroidContentType.sonification,

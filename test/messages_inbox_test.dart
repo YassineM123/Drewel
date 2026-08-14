@@ -1,6 +1,5 @@
 import 'dart:convert';
 
-import 'package:drewel/app/data/apis/api_models/ride_conversation_model.dart';
 import 'package:drewel/app/data/apis/communication_api_client.dart';
 import 'package:drewel/app/data/repositories/active_ride_repository.dart';
 import 'package:drewel/app/data/repositories/call_repository.dart';

@@ -387,7 +387,7 @@ class DriverHomeController extends GetxController with WidgetsBindingObserver {
             ? AndroidSettings(
                 accuracy: LocationAccuracy.bestForNavigation,
                 distanceFilter: 0,
-                intervalDuration: Duration(
+                intervalDuration: const Duration(
                   seconds: _locationUpdateIntervalSeconds,
                 ),
               )
@@ -814,14 +814,14 @@ class DriverHomeController extends GetxController with WidgetsBindingObserver {
 
         try {
           final Position position = await Geolocator.getCurrentPosition(
-            locationSettings: LocationSettings(
+            locationSettings: const LocationSettings(
               // Desktop browsers can wait indefinitely for a navigation-grade
               // fix. Their normal high-accuracy fix is sufficient in the
               // allowlisted Tunisia QA area.
               accuracy: kIsWeb
                   ? LocationAccuracy.high
                   : LocationAccuracy.bestForNavigation,
-              timeLimit: const Duration(seconds: 12),
+              timeLimit: Duration(seconds: 12),
             ),
           ).timeout(const Duration(seconds: 15));
           await _applyDriverPosition(

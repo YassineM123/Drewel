@@ -11,6 +11,23 @@ abstract class Routes {
   static const DRIVER_REGISTER = _Paths.DRIVER_REGISTER;
   static const DRIVER_COMPLETE_PROFILE = _Paths.DRIVER_COMPLETE_PROFILE;
   static const DRIVER_HOME = _Paths.DRIVER_HOME;
+  static const DRIVER_PROFILE = _Paths.DRIVER_PROFILE;
+  static const DRIVER_EDIT_PROFILE = _Paths.DRIVER_EDIT_PROFILE;
+  static const DRIVER_VEHICLE = _Paths.DRIVER_VEHICLE;
+  static const DRIVER_RIDE_HISTORY = _Paths.DRIVER_RIDE_HISTORY;
+  static const DRIVER_RIDE_DETAILS = _Paths.DRIVER_RIDE_DETAILS;
+  static const DRIVER_EARNINGS = _Paths.DRIVER_EARNINGS;
+  static const DRIVER_PERFORMANCE = _Paths.DRIVER_PERFORMANCE;
+  static const DRIVER_CALL_HISTORY = _Paths.DRIVER_CALL_HISTORY;
+  static const DRIVER_SETTINGS = _Paths.DRIVER_SETTINGS;
+  static const DRIVER_LANGUAGE = _Paths.DRIVER_LANGUAGE;
+  static const DRIVER_NOTIFICATION_PREFERENCES =
+      _Paths.DRIVER_NOTIFICATION_PREFERENCES;
+  static const DRIVER_LEGAL = _Paths.DRIVER_LEGAL;
+  static const DRIVER_SECURITY = _Paths.DRIVER_SECURITY;
+  static const DRIVER_HELP_SUPPORT = _Paths.DRIVER_HELP_SUPPORT;
+  static const DRIVER_REPORT_PROBLEM = _Paths.DRIVER_REPORT_PROBLEM;
+  static const DRIVER_ABOUT = _Paths.DRIVER_ABOUT;
   static const USER_HOME = _Paths.USER_HOME;
   static const SUPPORT = _Paths.SUPPORT;
   static const SUPPORT_CHAT = _Paths.SUPPORT_CHAT;
@@ -24,6 +41,18 @@ abstract class Routes {
   static const MY_POINTS = _Paths.MY_POINTS;
   static const BUY_POINTS = _Paths.BUY_POINTS;
   static const ACTIVE_RIDE = _Paths.ACTIVE_RIDE;
+  static const PASSENGER_PROFILE = _Paths.PASSENGER_PROFILE;
+  static const EDIT_PROFILE = _Paths.EDIT_PROFILE;
+  static const SAVED_PLACES = _Paths.SAVED_PLACES;
+  static const RIDE_HISTORY = _Paths.RIDE_HISTORY;
+  static const RIDE_DETAILS = _Paths.RIDE_DETAILS;
+  static const CALL_HISTORY = _Paths.CALL_HISTORY;
+  static const LANGUAGE_SETTINGS = _Paths.LANGUAGE_SETTINGS;
+  static const NOTIFICATION_PREFERENCES = _Paths.NOTIFICATION_PREFERENCES;
+  static const LEGAL = _Paths.LEGAL;
+  static const HELP_SUPPORT = _Paths.HELP_SUPPORT;
+  static const REPORT_PROBLEM = _Paths.REPORT_PROBLEM;
+  static const ABOUT_DREWEL = _Paths.ABOUT_DREWEL;
 }
 
 abstract class _Paths {
@@ -36,6 +65,23 @@ abstract class _Paths {
   static const DRIVER_REGISTER = '/driver-register';
   static const DRIVER_COMPLETE_PROFILE = '/driver-complete-profile';
   static const DRIVER_HOME = '/driver-home';
+  static const DRIVER_PROFILE = '/driver/profile';
+  static const DRIVER_EDIT_PROFILE = '/driver/profile/edit';
+  static const DRIVER_VEHICLE = '/driver/vehicle';
+  static const DRIVER_RIDE_HISTORY = '/driver/rides/history';
+  static const DRIVER_RIDE_DETAILS = '/driver/rides/details';
+  static const DRIVER_EARNINGS = '/driver/earnings';
+  static const DRIVER_PERFORMANCE = '/driver/performance';
+  static const DRIVER_CALL_HISTORY = '/driver/calls';
+  static const DRIVER_SETTINGS = '/driver/settings';
+  static const DRIVER_LANGUAGE = '/driver/language';
+  static const DRIVER_NOTIFICATION_PREFERENCES =
+      '/driver/notification-preferences';
+  static const DRIVER_LEGAL = '/driver/legal';
+  static const DRIVER_SECURITY = '/driver/security';
+  static const DRIVER_HELP_SUPPORT = '/driver/help';
+  static const DRIVER_REPORT_PROBLEM = '/driver/report-problem';
+  static const DRIVER_ABOUT = '/driver/about';
   static const USER_HOME = '/user-home';
   static const SUPPORT = '/support';
   static const SUPPORT_CHAT = '/support-chat';
@@ -49,4 +95,16 @@ abstract class _Paths {
   static const MY_POINTS = '/driver/points';
   static const BUY_POINTS = '/driver/points/buy';
   static const ACTIVE_RIDE = '/rides/active';
+  static const PASSENGER_PROFILE = '/passenger/profile';
+  static const EDIT_PROFILE = '/passenger/profile/edit';
+  static const SAVED_PLACES = '/passenger/saved-places';
+  static const RIDE_HISTORY = '/passenger/rides/history';
+  static const RIDE_DETAILS = '/passenger/rides/details';
+  static const CALL_HISTORY = '/passenger/calls';
+  static const LANGUAGE_SETTINGS = '/passenger/language';
+  static const NOTIFICATION_PREFERENCES = '/passenger/notification-preferences';
+  static const LEGAL = '/passenger/legal';
+  static const HELP_SUPPORT = '/passenger/help';
+  static const REPORT_PROBLEM = '/passenger/report-problem';
+  static const ABOUT_DREWEL = '/passenger/about';
 }

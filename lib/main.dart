@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:get/get.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'app/routes/app_pages.dart';
 import 'common/theme_data.dart';
@@ -17,6 +18,8 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   final NotificationSoundService soundService = NotificationSoundService();
   final PushNotificationService pushService = PushNotificationService();
+  final SharedPreferences prefs = await SharedPreferences.getInstance();
+  final String savedLanguage = prefs.getString('app_language') ?? '';
   WidgetsBinding.instance.addPostFrameCallback((_) {
     _startOptionalService(
       'Notification sounds',
@@ -41,7 +44,7 @@ Future<void> main() async {
       debugShowCheckedModeBanner: false,
       theme: MThemeData.themeData(),
       translations: PointsTranslations(),
-      locale: Get.deviceLocale,
+      locale: savedLanguage.isEmpty ? Get.deviceLocale : Locale(savedLanguage),
       fallbackLocale: const Locale('en'),
       supportedLocales: const <Locale>[Locale('en'), Locale('ar')],
       localizationsDelegates: const <LocalizationsDelegate<dynamic>>[

@@ -79,7 +79,7 @@ Uint8List render(
 
   for (final Tone tone in tones) {
     final int start = s(tone.start);
-    final double attack = 0.004;
+    const double attack = 0.004;
     final double decay = 1.0 / max(0.25, tone.duration - attack);
     for (int i = start;
         i < length && i < start + s(tone.duration);
@@ -319,7 +319,7 @@ Future<void> main() async {
     final File file = File('${outDir.path}/${entry.key}');
     file.writeAsBytesSync(entry.value);
     final int kb = (entry.value.length / 1024).round();
-    stdout.writeln('wrote ${file.path} (${kb} KB)');
+    stdout.writeln('wrote ${file.path} ($kb KB)');
   }
   stdout.writeln('Done: ${sounds.length} sounds generated.');
 }

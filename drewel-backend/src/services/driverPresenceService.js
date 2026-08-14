@@ -13,7 +13,8 @@ const parsePositiveInt = (value, fallback, minimum, maximum = Number.POSITIVE_IN
   return Math.min(parsed, maximum);
 };
 
-export const MAX_DRIVER_PRESENCE_TIMEOUT_MS = 300_000;
+export const DEFAULT_DRIVER_PRESENCE_TIMEOUT_MS = 600_000;
+export const MAX_DRIVER_PRESENCE_TIMEOUT_MS = 1_800_000;
 
 export const getDriverPresenceConfig = () => {
   const heartbeatIntervalMs = parsePositiveInt(
@@ -23,7 +24,7 @@ export const getDriverPresenceConfig = () => {
   );
   const timeoutMs = parsePositiveInt(
     process.env.DRIVER_PRESENCE_TIMEOUT_MS,
-    120_000,
+    DEFAULT_DRIVER_PRESENCE_TIMEOUT_MS,
     heartbeatIntervalMs * 2,
     Math.max(MAX_DRIVER_PRESENCE_TIMEOUT_MS, heartbeatIntervalMs * 2)
   );

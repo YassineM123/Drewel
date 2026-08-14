@@ -37,10 +37,10 @@ class DriverHomeView extends GetView<DriverHomeController> {
             appBar: DrewelAppBar(
               title: '',
               showMenuButton: true,
-              actions: <Widget>[
-                const NotificationAppBarButton(),
-                const MessagesAppBarButton(),
-                const SizedBox(width: 4),
+              actions: const <Widget>[
+                NotificationAppBarButton(),
+                MessagesAppBarButton(),
+                SizedBox(width: 4),
               ],
               onMenu: () {
                 controller.locationFocusNode.unfocus();
