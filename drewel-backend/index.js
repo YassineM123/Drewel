@@ -7,6 +7,7 @@ import Admin from "./src/models/Admin.js";
 import { loadEnv } from "./src/utils/loadEnv.js";
 import userRoutes from "./src/routes/userRoutes.js";
 import notificationRoutes from "./src/routes/notificationRoutes.js";
+import deviceTokenRoutes from "./src/routes/deviceTokenRoutes.js";
 import expensesRoutes from "./src/routes/expenseRoutes.js";
 import friendRoutes from "./src/routes/friendRoute.js";
 import groupRoutes from "./src/routes/groupRoutes.js";
@@ -98,6 +99,7 @@ const bootstrapLocalAdmin = async () => {
 
 app.use("/api/users", userRoutes);
 app.use("/api/notification", notificationRoutes);
+app.use("/api/device-tokens", deviceTokenRoutes);
 app.use("/api/expenses", expensesRoutes);
 app.use("/api/friend", friendRoutes);
 app.use("/api/group", groupRoutes);

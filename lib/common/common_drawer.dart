@@ -5,6 +5,7 @@ import 'package:drewel/app/data/constants/string_constants.dart';
 import 'package:drewel/app/routes/app_pages.dart';
 import 'package:drewel/common/colors.dart';
 import 'package:drewel/common/common_widgets.dart';
+import 'package:drewel/common/push_notification_service.dart';
 import 'package:drewel/common/text_styles.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
@@ -22,8 +23,17 @@ class CustomDrawer extends StatelessWidget {
     }
   }
 
-  void _showDeleteConfirmationDialog(BuildContext context) {
-    showDialog(
+  Future<void> _unregisterPushToken() async {
+    try {
+      if (Get.isRegistered<PushNotificationService>()) {
+        await Get.find<PushNotificationService>().unregisterForLogout();
+      }
+    } catch (_) {
+      // Logout must never be blocked by push token cleanup.
+    }
+  }
+
+  void _showDeleteConfirmationDialog(BuildContext context) {    showDialog(
       context: context,
       barrierColor: Colors.black.withOpacity(0.6),
       builder: (BuildContext context) {
@@ -135,6 +145,7 @@ class CustomDrawer extends StatelessWidget {
 
       if (success) {
         // Clear preferences and navigate to user type screen
+        await _unregisterPushToken();
         await prefs.clear();
         CommonWidgets.snackBarView(
             title: 'Account deleted successfully', success: true);
@@ -296,6 +307,7 @@ class CustomDrawer extends StatelessWidget {
                   onPressed: () async {
                     SharedPreferences prefs =
                         await SharedPreferences.getInstance();
+                    await _unregisterPushToken();
                     prefs.clear();
                     Get.offNamedUntil(Routes.USER_TYPE, (routes) => false);
                   },

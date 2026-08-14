@@ -9,33 +9,53 @@ import '../../../../common/drewel_app_bar.dart';
 import '../../../../common/drewel_pop_scope.dart';
 import '../../../../common/text_styles.dart';
 import '../../../data/apis/api_models/app_notification_model.dart';
-import '../../../data/constants/string_constants.dart';
+import '../../../data/repositories/notification_repository.dart';
 import '../../communication/controllers/call_state_controller.dart';
 
 class NotificationView extends GetView<CallStateController> {
   const NotificationView({super.key});
+
+  final ScrollController? _scrollController = null;
+
   @override
   Widget build(BuildContext context) {
     return DrewelPopScope(
       child: Scaffold(
-        appBar: const DrewelAppBar(
-          title: '',
+        appBar: DrewelAppBar(
+          title: 'Notifications',
           showBackButton: true,
+          actions: <Widget>[
+            IconButton(
+              tooltip: 'Mark all as read',
+              onPressed: controller.notificationUnread.value > 0
+                  ? controller.markAllNotificationsRead
+                  : null,
+              icon: const Icon(Icons.done_all_rounded),
+            ),
+            SizedBox(width: 4.px),
+          ],
         ),
         backgroundColor: primaryColor,
         body: Obx(() {
           final List<AppNotificationModel> items = controller.notifications;
           return Column(
-            mainAxisAlignment: MainAxisAlignment.end,
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Padding(
+                padding: EdgeInsets.fromLTRB(15.px, 6.px, 15.px, 0),
+                child: _FilterChips(
+                  selected: controller.notificationFilter.value ??
+                      NotificationFilter.all,
+                  onSelected: controller.setNotificationFilter,
+                ),
+              ),
               Expanded(
                 child: Container(
                   width: MediaQuery.of(context).size.width,
                   margin: EdgeInsets.only(top: 10.px),
                   padding: EdgeInsets.symmetric(
                     horizontal: 15.px,
-                    vertical: 20.px,
+                    vertical: 16.px,
                   ),
                   decoration: BoxDecoration(
                     color: primary3Color,
@@ -47,55 +67,186 @@ class NotificationView extends GetView<CallStateController> {
                   clipBehavior: Clip.hardEdge,
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        StringConstants.notifications,
-                        style: MyTextStyle.titleStyle18bb,
+                    children: <Widget>[
+                      Row(
+                        children: <Widget>[
+                          Expanded(
+                            child: Text(
+                              'All activity',
+                              style: MyTextStyle.titleStyle18bb,
+                            ),
+                          ),
+                          Obx(() {
+                            final int unread =
+                                controller.notificationUnread.value;
+                            return Text(
+                              unread > 0
+                                  ? '$unread unread'
+                                  : 'You are all caught up',
+                              style: TextStyle(
+                                fontSize: 12.px,
+                                color: unread > 0
+                                    ? primaryColor
+                                    : text2Color,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            );
+                          }),
+                        ],
                       ),
-                      const SizedBox(height: 6),
-                      Expanded(child: _notificationList(items)),
+                      const SizedBox(height: 10),
+                      Expanded(
+                        child: NotificationList(
+                          controller: controller,
+                          items: items,
+                          scrollController: _scrollController,
+                        ),
+                      ),
                     ],
                   ),
                 ),
-              )
+              ),
             ],
           );
         }),
       ),
     );
   }
+}
 
-  Widget _notificationList(List<AppNotificationModel> items) {
+class NotificationList extends StatefulWidget {
+  const NotificationList({
+    super.key,
+    required this.controller,
+    required this.items,
+    required this.scrollController,
+  });
+
+  final CallStateController controller;
+  final List<AppNotificationModel> items;
+  final ScrollController? scrollController;
+
+  @override
+  State<NotificationList> createState() => _NotificationListState();
+}
+
+class _NotificationListState extends State<NotificationList> {
+  late final ScrollController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = widget.scrollController ?? ScrollController();
+    _controller.addListener(_onScroll);
+  }
+
+  void _onScroll() {
+    if (!_controller.hasClients) return;
+    if (_controller.position.pixels >=
+        _controller.position.maxScrollExtent - 240) {
+      widget.controller.loadMoreNotifications();
+    }
+  }
+
+  @override
+  void dispose() {
+    if (widget.scrollController == null) {
+      _controller.dispose();
+    }
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final List<AppNotificationModel> items = widget.items;
     if (items.isEmpty) {
       return const _EmptyNotifications();
     }
     return RefreshIndicator(
-      onRefresh: controller.refreshNotifications,
+      onRefresh: widget.controller.refreshNotifications,
       child: ListView.separated(
+        controller: _controller,
         physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.only(top: 8),
-        itemCount: items.length,
+        padding: const EdgeInsets.only(bottom: 24),
+        itemCount: items.length + 1,
         separatorBuilder: (_, __) => Divider(
           height: 1.px,
           color: Colors.black.withValues(alpha: 0.08),
         ),
-        itemBuilder: (BuildContext context, int index) =>
-            _NotificationTile(
-          notification: items[index],
-          onTap: () => _openNotification(items[index]),
-        ),
+        itemBuilder: (BuildContext context, int index) {
+          if (index == items.length) {
+            return Obx(() => widget.controller.notificationsLoading.value
+                ? const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 16),
+                    child: Center(
+                      child: SizedBox(
+                        width: 22,
+                        height: 22,
+                        child: CircularProgressIndicator(strokeWidth: 2.4),
+                      ),
+                    ),
+                  )
+                : const SizedBox.shrink());
+          }
+          final AppNotificationModel notification = items[index];
+          return _NotificationTile(
+            notification: notification,
+            onTap: () => widget.controller.openNotification(notification),
+          );
+        },
       ),
     );
   }
+}
 
-  Future<void> _openNotification(AppNotificationModel notification) async {
-    if (!notification.read) {
-      await controller.markNotificationRead(notification.id);
-    }
-    final String rideId = notification.rideId ?? '';
-    if (rideId.isNotEmpty) {
-      controller.openConversation(rideId);
-    }
+class _FilterChips extends StatelessWidget {
+  const _FilterChips({required this.selected, required this.onSelected});
+
+  final NotificationFilter selected;
+  final ValueChanged<NotificationFilter> onSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: <NotificationFilter>[
+        NotificationFilter.all,
+        NotificationFilter.rides,
+        NotificationFilter.messages,
+        NotificationFilter.system,
+      ].map((NotificationFilter filter) {
+        final bool isActive = filter == selected;
+        return Padding(
+          padding: EdgeInsets.only(right: 8.px),
+          child: InkWell(
+            borderRadius: BorderRadius.circular(20.px),
+            onTap: () => onSelected(filter),
+            child: Container(
+              padding: EdgeInsets.symmetric(horizontal: 14.px, vertical: 7.px),
+              decoration: BoxDecoration(
+                color: isActive ? primaryColor : primary3Color,
+                borderRadius: BorderRadius.circular(20.px),
+                border: Border.all(
+                  color: isActive ? primaryColor : primaryColor.withValues(alpha: 0.3),
+                ),
+              ),
+              child: Text(
+                switch (filter) {
+                  NotificationFilter.all => 'All',
+                  NotificationFilter.rides => 'Rides',
+                  NotificationFilter.messages => 'Messages',
+                  NotificationFilter.system => 'System',
+                },
+                style: TextStyle(
+                  fontSize: 13.px,
+                  fontWeight: FontWeight.w600,
+                  color: isActive ? primary3Color : textColor,
+                ),
+              ),
+            ),
+          ),
+        );
+      }).toList(growable: false),
+    );
   }
 }
 
@@ -107,7 +258,7 @@ class _NotificationTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final bool unread = !notification.read;
+    final bool unread = notification.isUnread;
     return InkWell(
       onTap: onTap,
       child: Padding(
@@ -119,12 +270,14 @@ class _NotificationTile extends StatelessWidget {
               width: 44,
               height: 44,
               decoration: BoxDecoration(
-                color: primaryColor.withValues(alpha: 0.12),
+                color: (unread ? primaryColor : text2Color)
+                    .withValues(alpha: 0.12),
                 shape: BoxShape.circle,
               ),
               child: Icon(
                 _iconFor(notification.type),
-                color: primaryColor,
+                color: unread ? primaryColor : text2Color,
+                size: 22,
               ),
             ),
             SizedBox(width: 12.px),
@@ -136,7 +289,9 @@ class _NotificationTile extends StatelessWidget {
                     children: <Widget>[
                       Expanded(
                         child: Text(
-                          _titleFor(notification.type),
+                          notification.effectiveTitle,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                           style: TextStyle(
                             fontSize: 14.px,
                             fontWeight:
@@ -156,15 +311,39 @@ class _NotificationTile extends StatelessWidget {
                         ),
                     ],
                   ),
-                  const SizedBox(height: 2),
+                  const SizedBox(height: 3),
                   Text(
                     notification.message,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
                     style: TextStyle(
                       fontSize: 13.px,
                       color: unread ? textColor : text2Color,
                       fontWeight: unread ? FontWeight.w600 : FontWeight.w400,
                     ),
                   ),
+                  if (notification.effectiveDeepLink
+                      .startsWith('drewel://')) ...<Widget>[
+                    const SizedBox(height: 4),
+                    Row(
+                      children: <Widget>[
+                        Icon(
+                          Icons.open_in_new_rounded,
+                          size: 13,
+                          color: primaryColor.withValues(alpha: 0.7),
+                        ),
+                        SizedBox(width: 4.px),
+                        Text(
+                          _actionLabel(notification),
+                          style: TextStyle(
+                            fontSize: 12.px,
+                            color: primaryColor,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
                 ],
               ),
             ),
@@ -184,20 +363,49 @@ class _NotificationTile extends StatelessWidget {
     );
   }
 
+  String _actionLabel(AppNotificationModel notification) {
+    final String link = notification.effectiveDeepLink;
+    if (link.contains('/chat/')) return 'Open chat';
+    if (link.contains('/ride-request')) return 'View ride request';
+    if (link.contains('/active-ride')) return 'Open ride';
+    if (link.contains('/points')) return 'View points';
+    if (link.contains('/documents') || link.contains('/status')) {
+      return 'View status';
+    }
+    if (link.contains('/support')) return 'Get support';
+    if (link.contains('/ride-summary') || link.contains('/rides')) {
+      return 'View ride';
+    }
+    return 'Open';
+  }
+
   IconData _iconFor(String? type) => switch (type) {
         'RIDE_MESSAGE' => Icons.chat_bubble_rounded,
-        'RIDE_STATUS' => Icons.navigation_rounded,
-        'OFFER' => Icons.local_offer_rounded,
-        'CALL' => Icons.call_rounded,
+        'RIDE_REQUEST' => Icons.local_taxi_rounded,
+        'RIDE_CONFIRMED' ||
+        'RIDE_ACCEPTED' ||
+        'RIDE_ON_THE_WAY' ||
+        'DRIVER_ARRIVED' ||
+        'RIDE_STARTED' =>
+          Icons.navigation_rounded,
+        'RIDE_COMPLETED' => Icons.check_circle_rounded,
+        'RIDE_CANCELLED' ||
+        'RIDE_DRIVER_CANCELLED' ||
+        'RIDE_PASSENGER_CANCELLED' =>
+          Icons.cancel_rounded,
+        'RIDE_DISPUTED' => Icons.flag_rounded,
+        'CALL_MISSED' || 'MISSED_CALL' => Icons.call_missed_rounded,
+        'DRIVER_APPROVED' => Icons.verified_rounded,
+        'DRIVER_REJECTED' => Icons.gpp_bad_rounded,
+        'TRIP_OFFER_RECEIVED' || 'TRIP_OFFER_ACCEPTED' || 'TRIP_OFFER_UPDATED' =>
+          Icons.local_offer_rounded,
+        String type when type.startsWith('POINTS') ||
+            type.startsWith('OFFER_POINTS') ||
+            type.startsWith('RIDE_POINTS') ||
+            type.startsWith('WELCOME') ||
+            type == 'POINT_PURCHASE_REQUEST_UPDATED' =>
+          Icons.stars_rounded,
         _ => Icons.notifications_rounded,
-      };
-
-  String _titleFor(String? type) => switch (type) {
-        'RIDE_MESSAGE' => 'New message',
-        'RIDE_STATUS' => 'Ride update',
-        'OFFER' => 'Trip offer',
-        'CALL' => 'Call',
-        _ => 'Notification',
       };
 
   String _timeLabel(DateTime at) {

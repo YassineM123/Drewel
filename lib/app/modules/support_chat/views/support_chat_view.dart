@@ -18,7 +18,7 @@ class SupportChatView extends GetView<SupportChatController> {
     return DrewelPopScope(
       child: Scaffold(
         appBar: const DrewelAppBar(
-          title: '',
+          title: 'Support',
           showBackButton: true,
         ),
         backgroundColor: primaryColor,
@@ -39,8 +39,8 @@ class SupportChatView extends GetView<SupportChatController> {
                   decoration: BoxDecoration(
                     color: primary3Color,
                     borderRadius: BorderRadius.only(
-                      topRight: Radius.circular(40.px),
-                      topLeft: Radius.circular(40.px),
+                      topRight: Radius.circular(24.px),
+                      topLeft: Radius.circular(24.px),
                     ),
                   ),
                   clipBehavior: Clip.hardEdge,
@@ -50,8 +50,9 @@ class SupportChatView extends GetView<SupportChatController> {
                       _buildHeader(),
                       SizedBox(height: 10.px),
                       Divider(
-                          color: Colors.black.withValues(alpha: 0.2),
-                          thickness: 1.px),
+                        color: primaryColor.withValues(alpha: 0.14),
+                        thickness: 1.px,
+                      ),
                       Expanded(
                         child: showConversationList(),
                       ),
@@ -125,7 +126,7 @@ class SupportChatView extends GetView<SupportChatController> {
               color: Colors.grey.shade600,
             ),
             filled: true,
-            fillColor: primary3Color,
+            fillColor: const Color(0xFFF8F8F8),
             contentPadding: EdgeInsets.symmetric(
               horizontal: 16.px,
               vertical: 12.px,
@@ -133,13 +134,13 @@ class SupportChatView extends GetView<SupportChatController> {
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(28.px),
               borderSide: BorderSide(
-                color: backgroundColor.withValues(alpha: 0.25),
+                color: backgroundColor.withValues(alpha: 0.18),
               ),
             ),
             enabledBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(28.px),
               borderSide: BorderSide(
-                color: backgroundColor.withValues(alpha: 0.25),
+                color: backgroundColor.withValues(alpha: 0.18),
               ),
             ),
             focusedBorder: OutlineInputBorder(
@@ -204,7 +205,7 @@ class SupportChatView extends GetView<SupportChatController> {
             Icon(
               Icons.chat_bubble_outline,
               size: 60.px,
-              color: Colors.grey.withValues(alpha: 0.5),
+              color: primaryColor.withValues(alpha: 0.28),
             ),
             SizedBox(height: 16.px),
             Text(
@@ -243,7 +244,7 @@ class SupportChatView extends GetView<SupportChatController> {
                   ),
                   margin: EdgeInsets.symmetric(vertical: 4.px),
                   decoration: BoxDecoration(
-                    color: isMine ? primaryColor : Colors.grey.shade100,
+                    color: isMine ? primaryColor : const Color(0xFFF1F1F1),
                     border:
                         isMine ? null : Border.all(color: Colors.grey.shade300),
                     borderRadius: BorderRadius.only(

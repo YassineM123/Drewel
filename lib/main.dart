@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:get/get.dart';
@@ -5,13 +7,17 @@ import 'package:get/get.dart';
 import 'app/routes/app_pages.dart';
 import 'common/theme_data.dart';
 import 'common/notification_sound_service.dart';
+import 'common/push_notification_service.dart';
 import 'app/modules/communication/controllers/call_state_controller.dart';
 import 'app/modules/points/points_translations.dart';
 import 'app/modules/active_ride/bindings/active_ride_binding.dart';
 
-void main() {
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
   final NotificationSoundService soundService = NotificationSoundService();
-  soundService.init();
+  unawaited(soundService.init());
+  final PushNotificationService pushService = PushNotificationService();
+  unawaited(pushService.init());
   runApp(
     GetMaterialApp(
       title: "Drewel",
@@ -19,6 +25,7 @@ void main() {
       getPages: AppPages.routes,
       initialBinding: BindingsBuilder(() {
         Get.put<NotificationSoundService>(soundService, permanent: true);
+        Get.put<PushNotificationService>(pushService, permanent: true);
         CommunicationBinding().dependencies();
         ActiveRideBinding().dependencies();
       }),

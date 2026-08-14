@@ -33,6 +33,11 @@ import {
 } from "../services/rideTransitionService.js";
 import { computeRideRoute } from "../services/googleRoutesService.js";
 import { updateActiveRideLocation } from "../services/rideLocationService.js";
+import { emitNotificationNew, sendPushToUser } from "../services/notificationService.js";
+import {
+  notifyDriverOfNewRideRequest,
+  notifyRideTransition,
+} from "../services/rideNotificationService.js";
 
 const rideDto = (ride) => ({
   id: String(ride._id),
@@ -119,17 +124,7 @@ export const emitConversationUpdated = async (conversation) => {
   });
 };
 
-export const emitNotificationNew = (notification) => {
-  if (!notification) return;
-  io.to(String(notification.userId)).emit("notification:new", {
-    id: String(notification._id),
-    type: notification.type,
-    message: notification.message,
-    read: Boolean(notification.read),
-    data: notification.data || {},
-    createdAt: notification.createdAt,
-  });
-};
+export { emitNotificationNew }; // re-exported for existing call sites
 
 const publicRideDto = async (ride) => {
   const [passenger, driver] = await Promise.all([
@@ -239,6 +234,8 @@ export const createDriverContact = async (req, res) => {
     io.to(String(driverId)).emit("driver:contact", { rideId: String(ride._id), status: ride.status });
     const conversation = await ensureConversationForRide(ride);
     await emitConversationUpdated(conversation);
+    // High-priority realtime + push + in-app "New ride request" for the driver.
+    await notifyDriverOfNewRideRequest({ ride, passenger: principal.subject });
     // Opening a secure chat is not a booking. Re-assert the driver's current
     // marketplace projection only when they still satisfy the same fresh-GPS
     // availability predicate used by Find Now. A later accepted offer is the
@@ -427,6 +424,11 @@ export const confirmMission = async (req, res) => {
     });
     const conversation = await ensureConversationForRide(confirmedRide);
     await emitConversationUpdated(conversation);
+    await notifyRideTransition({
+      ride: confirmedRide,
+      toStatus: confirmedRide.status,
+      actorRole: principal.role,
+    });
     for (const contact of cancelledContacts) {
       await endActiveCallsForRide(contact._id, "contact_closed");
       io.to(String(contact.passengerId)).to(String(contact.driverId)).emit(
@@ -557,6 +559,11 @@ export const transitionRide = async (req, res) => {
     io.to(String(updated.passengerId)).to(String(updated.driverId)).emit("ride:state", payload);
     const conversation = await ensureConversationForRide(updated);
     await emitConversationUpdated(conversation);
+    await notifyRideTransition({
+      ride: updated,
+      toStatus: updated.status,
+      actorRole: principal.role,
+    });
     if (terminal) {
       const driver = await Driver.findById(updated.driverId).select("_id isOnline availabilityStatus updatedAt");
       if (driver) {
@@ -661,8 +668,28 @@ export const listRideMessages = async (req, res) => {
       if (!mongoose.isValidObjectId(req.query.before)) throw new CommunicationPolicyError("Invalid message cursor", 400, "INVALID_MESSAGE_CURSOR");
       filter._id = { $lt: req.query.before };
     }
+    const routeMetadata = [ride.pickup?.lat, ride.pickup?.long, ride.destination?.lat, ride.destination?.long]
+      .every(Number.isFinite)
+      ? { pickup: ride.pickup, destination: ride.destination }
+      : null;
     const messages = await RideMessage.find(filter).sort({ _id: -1 }).limit(limit).lean();
-    return res.json({ success: true, messages: messages.reverse() });
+    return res.json({
+      success: true,
+      messages: messages.reverse().map((message) => {
+        if (message.messageType !== "trip_request" || !routeMetadata) return message;
+        const metadata = message.metadata && typeof message.metadata === "object"
+          ? { ...message.metadata }
+          : {};
+        return {
+          ...message,
+          metadata: {
+            ...metadata,
+            pickup: metadata.pickup || routeMetadata.pickup,
+            destination: metadata.destination || routeMetadata.destination,
+          },
+        };
+      }),
+    });
   } catch (error) { return sendError(res, error); }
 };
 
@@ -727,6 +754,22 @@ export const sendRideMessage = async (req, res) => {
     await emitConversationUpdated(conversation);
     if (String(recipientId) === String(notification?.userId)) {
       emitNotificationNew(notification);
+      await sendPushToUser({
+        userId: recipientId,
+        title: "New message",
+        body: notification?.message || message.text || "",
+        data: notification
+          ? {
+              id: String(notification._id),
+              type: "RIDE_MESSAGE",
+              rideId: String(ride._id),
+              conversationId: String(notification.conversationId || ""),
+              messageId: String(notification.messageId || message._id),
+              deepLink: `drewel://chat/ride?conversationId=${String(notification.conversationId || "")}`,
+            }
+          : {},
+        type: "RIDE_MESSAGE",
+      });
     } else {
       io.to(String(recipientId)).emit("notification:new", {
         id: notification?._id ? String(notification._id) : "",

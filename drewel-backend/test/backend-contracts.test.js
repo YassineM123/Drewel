@@ -15,6 +15,7 @@ import {
   configureMongoSrvDns,
   parseMongoDnsServers,
 } from "../src/connection.js";
+import { buildAuthSubjectLookupFilter } from "../src/controllers/authController.js";
 import {
   buildAvailableDriverFilter as buildSharedAvailableDriverFilter,
   parseDriverDiscoveryQuery,
@@ -268,6 +269,21 @@ test("authentication responses strip secrets without mutating source", () => {
 
   assert.deepEqual(safe, { _id: "abc", phone: "123" });
   assert.equal(source.otpCode, "999999");
+});
+
+test("WhatsApp OTP driver login can resolve records by whatsappNumber", () => {
+  const candidates = ["501234567", "971501234567"];
+
+  assert.deepEqual(buildAuthSubjectLookupFilter("user", candidates), {
+    phone: { $in: candidates },
+  });
+  assert.deepEqual(buildAuthSubjectLookupFilter("driver", candidates), {
+    $or: [
+      { phone: { $in: candidates } },
+      { whatsappNumber: { $in: candidates } },
+    ],
+  });
+  assert.equal(buildAuthSubjectLookupFilter("admin", candidates), null);
 });
 
 test("mobile available-driver endpoint requires authentication", () => {

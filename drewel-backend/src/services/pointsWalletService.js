@@ -203,7 +203,9 @@ export const grantWelcomeBonusInSession = async (
           walletVersion: wallet.version,
           notification: {
             type: "WELCOME_POINTS_RECEIVED",
+            title: "Welcome bonus",
             message: `${points} welcome points received`,
+            deepLink: "drewel://driver/points",
           },
         },
       },

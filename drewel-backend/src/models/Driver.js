@@ -38,6 +38,8 @@ const driverSchema = new mongoose.Schema(
     whatsappNumber: {
       type: String,
       default: "",
+      trim: true,
+      set: (value) => String(value ?? "").replace(/\D/g, ""),
     },
     firstName: {
       type: String,

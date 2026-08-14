@@ -63,12 +63,12 @@ class NotificationSoundService {
     _init = true;
     await _loadPreferences();
     try {
-      _hasVibrator = await Vibration.hasVibrator() ?? false;
+      _hasVibrator = await Vibration.hasVibrator() == true;
     } catch (_) {
       _hasVibrator = false;
     }
     try {
-      await _player.setAudioContext(_lowLatencyContext(isCall: false));
+      await _player.setAudioContext(_notificationContext);
       await _player.setPlayerMode(PlayerMode.lowLatency);
       // Pre-cache so the first notification never waits on a file read.
       for (final String asset in <String>[
@@ -378,7 +378,7 @@ class NotificationSoundService {
   Future<void> _vibrateRideRequest() async {
     if (!_hasVibrator) return;
     try {
-      final bool? custom = await Vibration.hasCustomVibrationsSupport();
+      final bool custom = await Vibration.hasCustomVibrationsSupport() == true;
       if (custom == true) {
         await Vibration.vibrate(
           pattern: <int>[0, 220, 90, 200, 90, 360],
@@ -443,7 +443,7 @@ class NotificationSoundService {
         ),
         iOS: AudioContextIOS(
           category: AVAudioSessionCategory.ambient,
-          options: <AVAudioSessionOptions>{},
+          options: const <AVAudioSessionOptions>{},
         ),
       );
 
@@ -457,21 +457,7 @@ class NotificationSoundService {
         ),
         iOS: AudioContextIOS(
           category: AVAudioSessionCategory.playback,
-          options: <AVAudioSessionOptions>{},
-        ),
-      );
-
-  AudioContext _lowLatencyContext({required bool isCall}) => AudioContext(
-        android: AudioContextAndroid(
-          isSpeakerphoneOn: isCall,
-          stayAwake: false,
-          contentType: AndroidContentType.sonification,
-          usageType: AndroidUsageType.notificationEvent,
-          audioFocus: AndroidAudioFocus.gainTransient,
-        ),
-        iOS: AudioContextIOS(
-          category: AVAudioSessionCategory.ambient,
-          options: <AVAudioSessionOptions>{},
+          options: const <AVAudioSessionOptions>{},
         ),
       );
 

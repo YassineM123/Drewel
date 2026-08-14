@@ -6,6 +6,7 @@ import '../../../data/apis/api_methods/api_methods.dart';
 import '../../../data/apis/api_models/get_add_driver_details_model.dart';
 import '../../../data/apis/api_constants/api_key_constants.dart';
 import '../../../routes/app_pages.dart';
+import '../../../../common/auth_session_manager.dart';
 
 class SplashController extends GetxController with GetTickerProviderStateMixin {
   final count = 0.obs;
@@ -66,14 +67,34 @@ class SplashController extends GetxController with GetTickerProviderStateMixin {
     SharedPreferences prefs = await SharedPreferences.getInstance();
 
     if (prefs.getString(ApiKeyConstants.userId) != null) {
+      if (!await AuthSessionManager.hasStoredSession()) {
+        await AuthSessionManager.clearExpiredSession(showMessage: false);
+        return;
+      }
       if (prefs.getString(ApiKeyConstants.type) == ApiKeyConstants.user) {
+        int? responseStatus;
+        await ApiMethods.getUserDetailsApi(
+          userId: prefs.getString(ApiKeyConstants.userId) ?? '',
+          checkResponse: (int status) => responseStatus = status,
+        );
+        if (responseStatus == 401) {
+          await AuthSessionManager.clearExpiredSession(showMessage: false);
+          return;
+        }
         Get.offNamed(Routes.USER_REGISTER);
       } else {
         final String driverId = prefs.getString(ApiKeyConstants.userId) ?? '';
         AddDriverDetailModel? driverModel;
+        int? responseStatus;
         if (driverId.isNotEmpty) {
-          driverModel =
-              await ApiMethods.getDriverDetailsApi(driverId: driverId);
+          driverModel = await ApiMethods.getDriverDetailsApi(
+            driverId: driverId,
+            checkResponse: (int status) => responseStatus = status,
+          );
+        }
+        if (responseStatus == 401) {
+          await AuthSessionManager.clearExpiredSession(showMessage: false);
+          return;
         }
 
         final String status = _resolveDriverStatus(

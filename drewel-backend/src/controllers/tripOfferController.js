@@ -1,5 +1,4 @@
 import TripOffer from "../models/TripOffer.js";
-import Notification from "../models/Notification.js";
 import Ride from "../models/Ride.js";
 import { io } from "../socket/index.js";
 import { resolvePrincipal } from "../services/rideCommunicationPolicy.js";
@@ -8,6 +7,7 @@ import {
   syncConversationForRideId,
 } from "../services/conversationService.js";
 import { emitConversationUpdated } from "./rideController.js";
+import { dispatchNotification } from "../services/notificationService.js";
 import {
   acceptTripOffer,
   closeTripOffer,
@@ -93,22 +93,15 @@ export const sendTripOffer = async (req, res) => {
       });
     }
     if (error?.code === "INSUFFICIENT_AVAILABLE_POINTS" && authenticatedDriverId) {
-      const minute = new Date().toISOString().slice(0, 16);
-      const eventKey = `insufficient-points:${authenticatedDriverId}:${minute}`;
-      await Notification.findOneAndUpdate(
-        { eventKey },
-        {
-          $setOnInsert: {
-            userId: authenticatedDriverId,
-            recipientType: "driver",
-            type: "POINTS_INSUFFICIENT_BALANCE",
-            message: "You do not have enough available points to send this offer",
-            eventKey,
-            isValid: true,
-          },
-        },
-        { upsert: true, setDefaultsOnInsert: true }
-      ).catch(() => {});
+      await dispatchNotification({
+        userId: authenticatedDriverId,
+        recipientType: "driver",
+        type: "POINTS_INSUFFICIENT_BALANCE",
+        title: "Not enough points",
+        message: "You do not have enough available points to send this offer",
+        deepLink: "drewel://driver/points",
+        data: { action: "send_trip_offer" },
+      });
     }
     return sendError(res, error);
   }
@@ -215,6 +208,7 @@ export const acceptOffer = async (req, res) => {
     });
     const conversation = await ensureConversationForRide(result.ride);
     await emitConversationUpdated(conversation);
+    await notifyTripOfferAccepted({ ride: result.ride });
     const cancelledContacts = await Ride.find({
       _id: { $ne: result.ride._id },
       $or: [{ passengerId: principal.id }, { driverId: result.offer.driverId }],

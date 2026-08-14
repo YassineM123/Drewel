@@ -19,7 +19,10 @@ class ActiveRideCard extends GetView<ActiveRideController> {
           top: false,
           child: Material(
             color: primary3Color,
-            elevation: 8,
+            elevation: 0,
+            shape: Border(
+              top: BorderSide(color: primaryColor.withValues(alpha: 0.12)),
+            ),
             child: InkWell(
               onTap: () => Get.toNamed(Routes.ACTIVE_RIDE),
               child: Padding(
@@ -69,7 +72,7 @@ class ActiveRideCard extends GetView<ActiveRideController> {
                       const Padding(
                         padding: EdgeInsets.only(right: 8),
                         child: Tooltip(
-                          message: 'Offline — showing last known ride status',
+                          message: 'Offline - showing last known ride status',
                           child: Icon(Icons.cloud_off_rounded, size: 20),
                         ),
                       ),

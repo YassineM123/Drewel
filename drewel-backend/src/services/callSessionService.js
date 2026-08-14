@@ -5,6 +5,7 @@ import { assertRideParticipant, counterpartFor } from "./rideCommunicationPolicy
 import { buildAgoraToken, generateAgoraChannelName, generateAgoraUid } from "./agoraTokenService.js";
 import Driver from "../models/Driver.js";
 import { buildFreshDubaiMarketplaceAvailabilityFilter } from "../utils/availableDrivers.js";
+import { dispatchNotification } from "./notificationService.js";
 
 export class CallStateError extends Error {
   constructor(message, statusCode = 409, code = "INVALID_CALL_STATE") {
@@ -166,6 +167,16 @@ export const expireMissedCalls = async (now = new Date()) => {
     if (updated) {
       expired.push(updated);
       await audit({ rideId: updated.rideId, callId: updated._id, action: "call_missed", actorRole: "system", outcome: "success", reasonCode: "NO_ANSWER" });
+      await dispatchNotification({
+        userId: updated.callerId,
+        recipientType: updated.callerRole,
+        type: "CALL_MISSED",
+        title: "Missed call",
+        message: "Your call was not answered",
+        rideId: updated.rideId,
+        deepLink: `drewel://call/active?rideId=${String(updated.rideId)}&callId=${String(updated._id)}`,
+        data: { callId: String(updated._id), rideId: String(updated.rideId) },
+      });
     }
   }
   return expired;

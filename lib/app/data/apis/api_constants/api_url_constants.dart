@@ -81,6 +81,16 @@ class ApiUrlConstants {
       '${baseUrl}notification/get-notifications';
   static String markNotificationAsRead(String notificationId) =>
       '${baseUrl}notification/mark-as-read/$notificationId';
+  static String get endPointOfNotificationUnreadCount =>
+      '${baseUrl}notification/unread-count';
+  static String get endPointOfMarkAllNotificationsRead =>
+      '${baseUrl}notification/mark-all-as-read';
+
+  // Device push-token lifecycle (FCM).
+  static String get endPointOfRegisterDeviceToken =>
+      '${baseUrl}device-tokens/register';
+  static String get endPointOfUnregisterDeviceToken =>
+      '${baseUrl}device-tokens/unregister';
 
   // Delete account endpoints
   static String get endPointOfDeleteUser => '${baseUrl}users';

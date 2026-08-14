@@ -6,6 +6,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../../common/socket_services.dart';
 import '../../../../common/notification_sound_service.dart';
+import '../../../../common/push_notification_service.dart';
+import '../../../../common/deep_link_service.dart';
 
 import '../../../data/apis/api_constants/api_key_constants.dart';
 import '../../../data/apis/api_constants/api_url_constants.dart';
@@ -48,8 +50,12 @@ class CallStateController extends GetxService with WidgetsBindingObserver {
   final Rxn<CallSessionModel> currentCall = Rxn<CallSessionModel>();
   final Rxn<ActiveRideModel> pendingRide = Rxn<ActiveRideModel>();
   final RxInt conversationUnread = 0.obs;
+  final RxInt notificationUnread = 0.obs;
   final RxList<AppNotificationModel> notifications =
       <AppNotificationModel>[].obs;
+  final Rxn<NotificationFilter> notificationFilter = Rxn<NotificationFilter>();
+  final RxBool notificationsHasMore = false.obs;
+  final RxBool notificationsLoading = false.obs;
   final Rx<AgoraConnectionState> connectionState =
       AgoraConnectionState.idle.obs;
   final RxBool isBusy = false.obs;
@@ -71,6 +77,7 @@ class CallStateController extends GetxService with WidgetsBindingObserver {
   String _role = 'user';
   String _selfId = '';
   String _sessionToken = '';
+  String _pushRegisteredForSession = '';
   bool _socketEventInFlight = false;
 
   bool get hasAuthorizedRide => activeRide.value?.canCommunicate == true;
@@ -231,10 +238,31 @@ class CallStateController extends GetxService with WidgetsBindingObserver {
     super.onInit();
     WidgetsBinding.instance.addObserver(this);
     _agoraService.setTokenRenewalHandler(_renewAgoraToken);
+    _wirePushService();
     await configureSession();
     await refreshActiveRide();
     await refreshUnreadSummary();
     await refreshNotifications();
+  }
+
+  /// Connects the push pipeline to the live controller. FCM may be absent
+  /// (graceful fallback) but the wiring itself is always registered.
+  void _wirePushService() {
+    if (!Get.isRegistered<PushNotificationService>()) return;
+    final PushNotificationService push = Get.find<PushNotificationService>();
+    push.onForegroundMessage = _handleRemoteMessage;
+    push.onDeepLink = (String link) {
+      unawaited(DeepLinkService.instance.handle(link));
+    };
+  }
+
+  /// A push message arrived in the foreground. The data payload mirrors the
+  /// realtime `notification:new` shape, so it feeds the same pipeline.
+  Future<void> _handleRemoteMessage(Map<String, dynamic> data) async {
+    if (data.isEmpty) return;
+    final AppNotificationModel notification =
+        AppNotificationModel.fromJson(data);
+    await _absorbNotification(notification);
   }
 
   @override
@@ -284,6 +312,7 @@ class CallStateController extends GetxService with WidgetsBindingObserver {
     if (token.isNotEmpty && token != _sessionToken) {
       _socketService.disconnect();
       _sessionToken = token;
+      unawaited(_registerPushTokenOnce(token));
       _socketService.connect(ApiUrlConstants.socketUrl, token);
       _socketService.off('call:state');
       _socketService.off('ride:state');
@@ -298,6 +327,20 @@ class CallStateController extends GetxService with WidgetsBindingObserver {
     }
   }
 
+  /// Registers the FCM token once per session. The push service handles the
+  /// Firebase-absent case internally (token fetch just fails silently).
+  Future<void> _registerPushTokenOnce(String sessionToken) async {
+    if (_pushRegisteredForSession == sessionToken) return;
+    _pushRegisteredForSession = sessionToken;
+    try {
+      if (Get.isRegistered<PushNotificationService>()) {
+        await Get.find<PushNotificationService>().registerCurrentToken();
+      }
+    } catch (error) {
+      debugPrint('Push token registration failed: ${error.runtimeType}');
+    }
+  }
+
   Future<void> refreshUnreadSummary() async {
     try {
       final ConversationUnreadSummary summary =
@@ -306,14 +349,63 @@ class CallStateController extends GetxService with WidgetsBindingObserver {
     } catch (error) {
       debugPrint('Conversation unread refresh failed: ${error.runtimeType}');
     }
+    try {
+      notificationUnread.value = await notificationRepository.unreadCount();
+    } catch (error) {
+      debugPrint('Notification unread refresh failed: ${error.runtimeType}');
+    }
   }
 
+  /// Reloads the first page of notifications for the active filter.
   Future<void> refreshNotifications() async {
+    if (notificationsLoading.value) return;
+    notificationsLoading.value = true;
     try {
-      notifications.assignAll(await notificationRepository.list());
+      final NotificationFilter filter =
+          notificationFilter.value ?? NotificationFilter.all;
+      final NotificationListResult result =
+          await notificationRepository.list(filter: filter);
+      notifications.assignAll(result.notifications);
+      notificationsHasMore.value = result.hasMore;
+      notificationUnread.value = result.unreadCount;
     } catch (error) {
       debugPrint('Notification refresh failed: ${error.runtimeType}');
+    } finally {
+      notificationsLoading.value = false;
     }
+  }
+
+  /// Appends the next page of notifications (infinite scroll).
+  Future<void> loadMoreNotifications() async {
+    if (notificationsLoading.value || !notificationsHasMore.value) return;
+    notificationsLoading.value = true;
+    final int page =
+        (notifications.length / NotificationRepository.pageSize).ceil() + 1;
+    try {
+      final NotificationFilter filter =
+          notificationFilter.value ?? NotificationFilter.all;
+      final NotificationListResult result =
+          await notificationRepository.list(filter: filter, page: page);
+      final List<AppNotificationModel> fresh =
+          <AppNotificationModel>[...notifications];
+      final Set<String> existingIds =
+          fresh.map((AppNotificationModel item) => item.id).toSet();
+      fresh.addAll(result.notifications
+          .where((AppNotificationModel item) => !existingIds.contains(item.id)));
+      notifications.assignAll(fresh);
+      notificationsHasMore.value = result.hasMore;
+    } catch (error) {
+      debugPrint('Notification load more failed: ${error.runtimeType}');
+    } finally {
+      notificationsLoading.value = false;
+    }
+  }
+
+  /// Switches the visible filter and reloads.
+  Future<void> setNotificationFilter(NotificationFilter filter) async {
+    if (notificationFilter.value == filter) return;
+    notificationFilter.value = filter;
+    await refreshNotifications();
   }
 
   Future<void> _handleConversationUpdated(dynamic data) async {
@@ -328,6 +420,13 @@ class CallStateController extends GetxService with WidgetsBindingObserver {
       await refreshNotifications();
       return;
     }
+    await _absorbNotification(notification);
+  }
+
+  /// Inserts a realtime/foreground notification into the list, bumps the
+  /// unread badge and plays the matching sound. Shared by the socket event
+  /// and the foreground push handler.
+  Future<void> _absorbNotification(AppNotificationModel notification) async {
     notifications
       ..removeWhere(
         (AppNotificationModel existing) => existing.id == notification.id,
@@ -336,7 +435,9 @@ class CallStateController extends GetxService with WidgetsBindingObserver {
     if (notifications.length > 100) {
       notifications.removeRange(100, notifications.length);
     }
-    await refreshUnreadSummary();
+    if (notification.isUnread) {
+      notificationUnread.value++;
+    }
     await _playNotificationSound(notification);
   }
 
@@ -397,7 +498,8 @@ class CallStateController extends GetxService with WidgetsBindingObserver {
 
   Future<void> markNotificationRead(String notificationId) async {
     try {
-      await notificationRepository.markRead(notificationId);
+      final int unread = await notificationRepository.markRead(notificationId);
+      notificationUnread.value = unread;
       final int index = notifications.indexWhere(
         (AppNotificationModel item) => item.id == notificationId,
       );
@@ -409,10 +511,33 @@ class CallStateController extends GetxService with WidgetsBindingObserver {
     }
   }
 
+  Future<void> markAllNotificationsRead() async {
+    try {
+      notificationUnread.value = await notificationRepository.markAllAsRead();
+      for (int index = 0; index < notifications.length; index++) {
+        if (!notifications[index].read) {
+          notifications[index] = notifications[index].copyWith(read: true);
+        }
+      }
+    } catch (error) {
+      debugPrint('Mark all notifications read failed: ${error.runtimeType}');
+    }
+  }
+
   void openConversation(String rideId) {
     Get.toNamed(Routes.RIDE_CHAT, arguments: <String, dynamic>{
       'rideId': rideId,
     });
+  }
+
+  /// Opens a notification: marks it read and routes through its deep link.
+  /// Unknown or un-routable links fall back to the notifications center.
+  Future<void> openNotification(AppNotificationModel notification) async {
+    if (notification.isUnread) {
+      await markNotificationRead(notification.id);
+    }
+    final String link = notification.effectiveDeepLink;
+    await DeepLinkService.instance.handle(link);
   }
 
   Future<void> _handleCallStateEvent(dynamic data) async {

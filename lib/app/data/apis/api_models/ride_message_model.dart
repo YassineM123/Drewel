@@ -30,16 +30,26 @@ class RideMessageModel {
   final Map<String, dynamic>? metadata;
   final DateTime? createdAt;
 
-  bool get isTripRequest => messageType == 'trip_request';
+  bool get isTripRequest {
+    final String normalizedType = messageType.trim().toLowerCase();
+    if (normalizedType == 'trip_request') return true;
+    if (metadata?['pickup'] is Map || metadata?['destination'] is Map) {
+      return true;
+    }
+    return text.trim().toLowerCase().startsWith('trip request:');
+  }
 
   factory RideMessageModel.fromJson(Map<String, dynamic> json) =>
       RideMessageModel(
-        id: (json['_id'] ?? json['id'] ?? '').toString(),
+        id: (json['_id'] ?? json['id'] ?? json['messageId'] ?? '').toString(),
         rideId: (json['rideId'] ?? '').toString(),
         text: (json['text'] ?? '').toString(),
         senderId: (json['senderId'] ?? json['sender'] ?? '').toString(),
         status: RideMessageStatus.fromValue(json['status']),
-        messageType: (json['messageType'] ?? 'text').toString(),
+        messageType: (json['messageType'] ?? json['type'] ?? 'text')
+            .toString()
+            .trim()
+            .toLowerCase(),
         metadata: json['metadata'] is Map
             ? Map<String, dynamic>.from(json['metadata'] as Map)
             : null,

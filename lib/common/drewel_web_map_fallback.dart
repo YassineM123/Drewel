@@ -28,7 +28,7 @@ class _DrewelWebMapFallbackState extends State<DrewelWebMapFallback> {
   @override
   void initState() {
     super.initState();
-    _showOpenStreetMap = AppConfig.useOpenStreetMapOnWeb ||
+    _showOpenStreetMap = AppConfig.useOpenStreetMapForCurrentPlatform ||
         (kIsWeb && googleMapsAuthenticationFailed());
     if (kIsWeb && !_showOpenStreetMap) {
       _authFailureSubscription = googleMapsAuthenticationFailures().listen((_) {

@@ -184,7 +184,7 @@ class TripOfferStatusCard extends StatelessWidget {
                           color: Color(0xFF6E4A00),
                           fontSize: 12,
                           fontWeight: FontWeight.w800,
-                          letterSpacing: 0.6,
+                          letterSpacing: 0,
                         ),
                       ),
                     ),
@@ -347,7 +347,7 @@ class _TripOfferLocationRow extends StatelessWidget {
                   label,
                   style: const TextStyle(
                     fontSize: 10,
-                    letterSpacing: 0.7,
+                    letterSpacing: 0,
                     color: Color(0xFF8A7A7D),
                     fontWeight: FontWeight.w700,
                   ),

@@ -50,19 +50,42 @@ const getPhoneCandidates = (value = "", countryCode = "") => {
   if (normalizedCountryCode) {
     candidates.push(
       `${normalizedCountryCode}${localDigits}`,
-      `${normalizedCountryCode}${withoutLeadingZeros}`
+      `${normalizedCountryCode}${withoutLeadingZeros}`,
+      `+${normalizedCountryCode}${localDigits}`,
+      `+${normalizedCountryCode}${withoutLeadingZeros}`
     );
   }
 
   return [...new Set(candidates.filter(Boolean))];
 };
-const findAuthSubjectByType = async (type, phoneCandidates) => {
+export const buildAuthSubjectLookupFilter = (type, phoneCandidates) => {
+  const candidates = [...new Set((phoneCandidates || []).filter(Boolean))];
+
   if (type === "user") {
-    return User.findOne({ phone: { $in: phoneCandidates } });
+    return { phone: { $in: candidates } };
   }
 
   if (type === "driver") {
-    return Driver.findOne({ phone: { $in: phoneCandidates } });
+    return {
+      $or: [
+        { phone: { $in: candidates } },
+        { whatsappNumber: { $in: candidates } },
+      ],
+    };
+  }
+
+  return null;
+};
+const findAuthSubjectByType = async (type, phoneCandidates) => {
+  const filter = buildAuthSubjectLookupFilter(type, phoneCandidates);
+  if (!filter) return null;
+
+  if (type === "user") {
+    return User.findOne(filter);
+  }
+
+  if (type === "driver") {
+    return Driver.findOne(filter);
   }
 
   return null;
@@ -78,11 +101,14 @@ const provisionAuthSubject = async ({
   if (subject) {
     if (normalizedCountryCode) {
       subject.countryCode = normalizedCountryCode;
-      await subject.save();
     }
     if (type === "driver") {
+      if (!subject.whatsappNumber) {
+        subject.whatsappNumber = normalizedPhone;
+      }
       await grantWelcomeBonus(subject, { source: "driver_account_sign_in" });
     }
+    await subject.save();
     return subject;
   }
 
@@ -96,6 +122,7 @@ const provisionAuthSubject = async ({
   if (type === "driver") {
     const driver = await Driver.create({
       phone: normalizedPhone,
+      whatsappNumber: normalizedPhone,
       countryCode: normalizedCountryCode,
       status: "pending",
       basicRequestSubmittedAt: null,

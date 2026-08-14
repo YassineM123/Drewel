@@ -20,6 +20,12 @@ const notificationSchema = new mongoose.Schema(
       maxlength: 80,
       index: true,
     },
+    title: {
+      type: String,
+      default: "",
+      trim: true,
+      maxlength: 160,
+    },
     message: { type: String, required: true },
     read: { type: Boolean, default: false },
     readAt: { type: Date, default: null },
@@ -29,6 +35,30 @@ const notificationSchema = new mongoose.Schema(
       default: null,
       trim: true,
     },
+    deepLink: {
+      type: String,
+      default: "",
+      trim: true,
+      maxlength: 512,
+    },
+    rideId: {
+      type: mongoose.Schema.Types.ObjectId,
+      default: null,
+      index: true,
+    },
+    conversationId: {
+      type: mongoose.Schema.Types.ObjectId,
+      default: null,
+      index: true,
+    },
+    messageId: {
+      type: String,
+      default: "",
+      trim: true,
+      maxlength: 200,
+      index: true,
+    },
+    expiresAt: { type: Date, default: null, index: true },
     data: {
       type: mongoose.Schema.Types.Mixed,
       default: {},

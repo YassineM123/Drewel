@@ -3,6 +3,8 @@ import 'package:get/get.dart';
 import 'package:intl/intl.dart';
 
 import '../../../../common/colors.dart';
+import '../../../../common/drewel_app_bar.dart';
+import '../../../../common/text_styles.dart';
 import '../../../data/apis/api_models/ride_conversation_model.dart';
 import '../controllers/messages_controller.dart';
 
@@ -14,89 +16,113 @@ class MessagesView extends GetView<MessagesController> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.white,
-      appBar: AppBar(
-        title: const Text(
-          'Messages',
-          style: TextStyle(fontWeight: FontWeight.w700),
-        ),
-        bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(64),
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
-            child: Column(
-              children: <Widget>[
-                _SearchField(onChanged: controller.onSearchChanged),
-                const SizedBox(height: 8),
-                Obx(
-                  () => Row(
-                    children: <Widget>[
-                      for (final String filter in _filters)
-                        Expanded(
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 4),
-                            child: _FilterChip(
-                              label: switch (filter) {
-                                'active' => 'Active',
-                                'completed' => 'Completed',
-                                _ => 'All',
-                              },
-                              selected: controller.statusFilter.value == filter,
-                              onTap: () => controller.setStatusFilter(filter),
-                            ),
-                          ),
-                        ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
+      backgroundColor: const Color(0xFFFCFCFC),
+      appBar: const DrewelAppBar(title: 'Messages', showBackButton: true),
       body: SafeArea(
         top: false,
-        child: Obx(() {
-          if (controller.loading.value &&
-              controller.conversations.isEmpty) {
-            return const Center(child: CircularProgressIndicator());
-          }
-          if (controller.error.value.isNotEmpty &&
-              controller.conversations.isEmpty) {
-            return _ErrorState(
-              message: controller.error.value,
-              onRetry: controller.refreshList,
-            );
-          }
-          if (controller.conversations.isEmpty) {
-            return const _EmptyState();
-          }
-          return RefreshIndicator(
-            onRefresh: controller.refreshList,
-            child: ListView.separated(
-              physics: const AlwaysScrollableScrollPhysics(),
-              itemCount: controller.conversations.length,
-              separatorBuilder: (_, __) => const Divider(
-                height: 1,
-                indent: 84,
-                endIndent: 12,
-                color: Color(0xFFF0F0F0),
-              ),
-              itemBuilder: (BuildContext context, int index) {
-                final RideConversationModel conversation =
-                    controller.conversations[index];
-                return _ConversationTile(
-                  conversation: conversation,
-                  onTap: () =>
-                      controller.openConversation(conversation.rideId),
-                );
-              },
+        child: Column(
+          children: <Widget>[
+            _MessagesToolbar(
+              filters: _filters,
+              onSearchChanged: controller.onSearchChanged,
+              selectedFilter: controller.statusFilter,
+              onFilterChanged: controller.setStatusFilter,
             ),
-          );
-        }),
+            Expanded(
+              child: Obx(() {
+                if (controller.loading.value &&
+                    controller.conversations.isEmpty) {
+                  return const Center(
+                    child: CircularProgressIndicator(color: primaryColor),
+                  );
+                }
+                if (controller.error.value.isNotEmpty &&
+                    controller.conversations.isEmpty) {
+                  return _ErrorState(
+                    message: controller.error.value,
+                    onRetry: controller.refreshList,
+                  );
+                }
+                if (controller.conversations.isEmpty) {
+                  return const _EmptyState();
+                }
+                return RefreshIndicator(
+                  onRefresh: controller.refreshList,
+                  child: ListView.separated(
+                    padding: const EdgeInsets.only(bottom: 12),
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    itemCount: controller.conversations.length,
+                    separatorBuilder: (_, __) => const Divider(
+                      height: 1,
+                      indent: 84,
+                      endIndent: 12,
+                      color: Color(0xFFF0F0F0),
+                    ),
+                    itemBuilder: (BuildContext context, int index) {
+                      final RideConversationModel conversation =
+                          controller.conversations[index];
+                      return _ConversationTile(
+                        conversation: conversation,
+                        onTap: () =>
+                            controller.openConversation(conversation.rideId),
+                      );
+                    },
+                  ),
+                );
+              }),
+            ),
+          ],
+        ),
       ),
     );
   }
+}
+
+class _MessagesToolbar extends StatelessWidget {
+  const _MessagesToolbar({
+    required this.filters,
+    required this.onSearchChanged,
+    required this.selectedFilter,
+    required this.onFilterChanged,
+  });
+
+  final List<String> filters;
+  final ValueChanged<String> onSearchChanged;
+  final RxString selectedFilter;
+  final ValueChanged<String> onFilterChanged;
+
+  @override
+  Widget build(BuildContext context) => Container(
+        color: primary3Color,
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+        child: Column(
+          children: <Widget>[
+            _SearchField(onChanged: onSearchChanged),
+            const SizedBox(height: 10),
+            Obx(
+              () => Row(
+                children: <Widget>[
+                  for (final String filter in filters)
+                    Expanded(
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 4),
+                        child: _FilterChip(
+                          label: switch (filter) {
+                            'active' => 'Active',
+                            'completed' => 'Completed',
+                            _ => 'All',
+                          },
+                          selected: selectedFilter.value == filter,
+                          onTap: () => onFilterChanged(filter),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
 }
 
 class _SearchField extends StatelessWidget {
@@ -114,9 +140,9 @@ class _SearchField extends StatelessWidget {
         prefixIcon: const Icon(Icons.search_rounded, color: text2Color),
         filled: true,
         fillColor: const Color(0xFFF1F1F1),
-        contentPadding: const EdgeInsets.symmetric(vertical: 10),
+        contentPadding: const EdgeInsets.symmetric(vertical: 12),
         border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(24),
+          borderRadius: BorderRadius.circular(10),
           borderSide: BorderSide.none,
         ),
       ),
@@ -176,109 +202,114 @@ class _ConversationTile extends StatelessWidget {
         ? <String?>[
             counterpart?.vehicleType,
             counterpart?.vehicleModel,
-          ].where((String? value) => value != null && value.isNotEmpty).join(' · ')
+          ]
+            .where((String? value) => value != null && value.isNotEmpty)
+            .join(' · ')
         : null;
     final String subtitle = _subtitle(counterpart, vehicle);
     final bool unread = conversation.hasUnread;
 
-    return ListTile(
-      onTap: onTap,
-      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-      leading: Stack(
-        clipBehavior: Clip.none,
-        children: <Widget>[
-          CircleAvatar(
-            radius: 28,
-            backgroundColor: primaryColor.withValues(alpha: 0.12),
-            backgroundImage: image != null && image.isNotEmpty
-                ? NetworkImage(image)
-                : null,
-            child: image == null || image.isEmpty
-                ? Icon(
-                    isDriver ? Icons.local_taxi_rounded : Icons.person_rounded,
-                    color: primaryColor,
-                  )
-                : null,
-          ),
-          if (unread)
-            Positioned(
-              right: 0,
-              top: 0,
-              child: Container(
-                width: 12,
-                height: 12,
-                decoration: BoxDecoration(
-                  color: primaryColor,
-                  shape: BoxShape.circle,
-                  border: Border.all(color: Colors.white, width: 2),
-                ),
-              ),
-            ),
-        ],
-      ),
-      title: Row(
-        children: <Widget>[
-          Expanded(
-            child: Text(
-              counterpart?.displayName ?? 'Ride participant',
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: unread ? FontWeight.w800 : FontWeight.w600,
-                color: textColor,
-              ),
-            ),
-          ),
-          if (conversation.lastMessageAt != null)
-            Text(
-              _timeLabel(conversation.lastMessageAt!),
-              style: TextStyle(
-                fontSize: 12,
-                color: unread ? primaryColor : text2Color,
-                fontWeight: unread ? FontWeight.w700 : FontWeight.w500,
-              ),
-            ),
-        ],
-      ),
-      subtitle: Padding(
-        padding: const EdgeInsets.only(top: 2),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
+    return Material(
+      color: Colors.white,
+      child: ListTile(
+        onTap: onTap,
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        leading: Stack(
+          clipBehavior: Clip.none,
           children: <Widget>[
-            Expanded(
-              child: Text(
-                subtitle,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  fontSize: 14,
-                  color: unread ? textColor : text2Color,
-                  fontWeight: unread ? FontWeight.w600 : FontWeight.w400,
-                ),
-              ),
+            CircleAvatar(
+              radius: 28,
+              backgroundColor: primaryColor.withValues(alpha: 0.12),
+              backgroundImage: image != null && image.isNotEmpty
+                  ? NetworkImage(image)
+                  : null,
+              child: image == null || image.isEmpty
+                  ? Icon(
+                      isDriver
+                          ? Icons.local_taxi_rounded
+                          : Icons.person_rounded,
+                      color: primaryColor,
+                    )
+                  : null,
             ),
             if (unread)
-              Container(
-                margin: const EdgeInsets.only(left: 8),
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                decoration: BoxDecoration(
-                  color: primaryColor,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Text(
-                  conversation.myUnreadCount > 99
-                      ? '99+'
-                      : '${conversation.myUnreadCount}',
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w800,
+              Positioned(
+                right: 0,
+                top: 0,
+                child: Container(
+                  width: 12,
+                  height: 12,
+                  decoration: BoxDecoration(
+                    color: primaryColor,
+                    shape: BoxShape.circle,
+                    border: Border.all(color: Colors.white, width: 2),
                   ),
                 ),
               ),
           ],
+        ),
+        title: Row(
+          children: <Widget>[
+            Expanded(
+              child: Text(
+                counterpart?.displayName ?? 'Ride participant',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: MyTextStyle.titleStyle16bb.copyWith(
+                  fontWeight: unread ? FontWeight.w800 : FontWeight.w600,
+                ),
+              ),
+            ),
+            if (conversation.lastMessageAt != null)
+              Text(
+                _timeLabel(conversation.lastMessageAt!),
+                style: TextStyle(
+                  fontSize: 12,
+                  color: unread ? primaryColor : text2Color,
+                  fontWeight: unread ? FontWeight.w700 : FontWeight.w500,
+                ),
+              ),
+          ],
+        ),
+        subtitle: Padding(
+          padding: const EdgeInsets.only(top: 2),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Expanded(
+                child: Text(
+                  subtitle,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: unread ? textColor : text2Color,
+                    fontWeight: unread ? FontWeight.w600 : FontWeight.w400,
+                  ),
+                ),
+              ),
+              if (unread)
+                Container(
+                  margin: const EdgeInsets.only(left: 8),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: primaryColor,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Text(
+                    conversation.myUnreadCount > 99
+                        ? '99+'
+                        : '${conversation.myUnreadCount}',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ),
+            ],
+          ),
         ),
       ),
     );
@@ -297,8 +328,7 @@ class _ConversationTile extends StatelessWidget {
           ? '${counterpart.displayName} • Ride ${conversation.rideReference ?? ''}'
           : '$vehicle • ${conversation.rideReference ?? ''}'.trim();
     } else {
-      prefix =
-          'Rider • ${conversation.rideReference ?? 'Ride'}'.trim();
+      prefix = 'Rider • ${conversation.rideReference ?? 'Ride'}'.trim();
     }
     if (last == null || last.preview.trim().isEmpty) {
       return prefix.isEmpty ? 'No messages yet' : prefix;

@@ -7,6 +7,27 @@ bool shouldPreferOpenStreetMap({
 }) =>
     isWeb && (!googleWebMapEnabled || googleWebApiKey.trim().isEmpty);
 
+bool googleMapsFlutterSupportsPlatform({
+  required bool isWeb,
+  required TargetPlatform platform,
+}) =>
+    isWeb ||
+    platform == TargetPlatform.android ||
+    platform == TargetPlatform.iOS;
+
+bool shouldUseOpenStreetMap({
+  required bool isWeb,
+  required TargetPlatform platform,
+  required bool googleWebMapEnabled,
+  required String googleWebApiKey,
+}) =>
+    !googleMapsFlutterSupportsPlatform(isWeb: isWeb, platform: platform) ||
+    shouldPreferOpenStreetMap(
+      isWeb: isWeb,
+      googleWebMapEnabled: googleWebMapEnabled,
+      googleWebApiKey: googleWebApiKey,
+    );
+
 class AppConfig {
   // Legacy Places lookup only. Never add a default secret here. Map display
   // keys belong in the native Android/iOS build configuration.
@@ -32,6 +53,12 @@ class AppConfig {
   );
   static final bool useOpenStreetMapOnWeb = shouldPreferOpenStreetMap(
     isWeb: kIsWeb,
+    googleWebMapEnabled: enableGoogleWebMap,
+    googleWebApiKey: googleMapsApiKey,
+  );
+  static final bool useOpenStreetMapForCurrentPlatform = shouldUseOpenStreetMap(
+    isWeb: kIsWeb,
+    platform: defaultTargetPlatform,
     googleWebMapEnabled: enableGoogleWebMap,
     googleWebApiKey: googleMapsApiKey,
   );

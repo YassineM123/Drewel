@@ -4,6 +4,7 @@ import DriverLogs from "../models/Driverlogs.js";
 import bcrypt from "bcryptjs";
 import jwt from 'jsonwebtoken';
 import { buildActiveDriverPresenceFilter } from "../services/driverPresenceService.js";
+import { dispatchNotification } from "../services/notificationService.js";
 
 const deriveLegacyStatus = (driver) => {
   const hasDocs =
@@ -328,6 +329,34 @@ export const updateDriverReviewStatus = async (req, res) => {
 
     driver.fullName = [driver.firstName, driver.lastName].filter(Boolean).join(" ").trim();
     await driver.save();
+
+    const driverNotification =
+      status === "approved"
+        ? {
+            type: "DRIVER_APPROVED",
+            title: "Application approved",
+            message: "Your driver application has been approved. You can start accepting rides.",
+            deepLink: "drewel://driver/status",
+          }
+        : status === "rejected"
+          ? {
+              type: "DRIVER_REJECTED",
+              title: "Application not approved",
+              message: String(rejection_reason || "").trim() || "Your driver application was not approved.",
+              deepLink: "drewel://driver/status",
+            }
+          : null;
+    if (driverNotification) {
+      await dispatchNotification({
+        userId: driver._id,
+        recipientType: "driver",
+        type: driverNotification.type,
+        title: driverNotification.title,
+        message: driverNotification.message,
+        deepLink: driverNotification.deepLink,
+        data: { status, rejectionReason: driverNotification.type === "DRIVER_REJECTED" ? driver.rejectionReason : "" },
+      });
+    }
 
     return res.status(200).json({
       success: true,

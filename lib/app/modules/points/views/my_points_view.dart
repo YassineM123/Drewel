@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 
 import '../../../../common/colors.dart';
+import '../../../../common/drewel_app_bar.dart';
+import '../../../../common/text_styles.dart';
 import '../../../data/apis/api_models/driver_points_models.dart';
 import '../../../routes/app_pages.dart';
 import '../controllers/driver_points_controller.dart';
@@ -11,7 +13,11 @@ class MyPointsView extends GetView<DriverPointsController> {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-        appBar: AppBar(title: Text('points.my_points'.tr)),
+        backgroundColor: const Color(0xFFFCFCFC),
+        appBar: DrewelAppBar(
+          title: 'points.my_points'.tr,
+          showBackButton: true,
+        ),
         body: SafeArea(
           child: Obx(() {
             final wallet = controller.wallet.value;
@@ -30,12 +36,25 @@ class MyPointsView extends GetView<DriverPointsController> {
               onRefresh: controller.refreshAll,
               child: ListView(
                 key: const Key('my-points-list'),
-                padding: const EdgeInsets.all(16),
+                padding: EdgeInsets.fromLTRB(
+                  16,
+                  16,
+                  16,
+                  16 + MediaQuery.of(context).padding.bottom,
+                ),
                 children: <Widget>[
                   _BalanceCard(wallet: wallet),
                   const SizedBox(height: 12),
                   if (wallet.welcomeBonusGranted)
                     Card(
+                      elevation: 0,
+                      color: Colors.white,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                        side: BorderSide(
+                          color: primaryColor.withValues(alpha: 0.14),
+                        ),
+                      ),
                       child: ListTile(
                         leading: const CircleAvatar(
                           backgroundColor: Color(0x1FBE1B2C),
@@ -65,9 +84,7 @@ class MyPointsView extends GetView<DriverPointsController> {
                   const SizedBox(height: 24),
                   Text(
                     'points.history'.tr,
-                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                          fontWeight: FontWeight.bold,
-                        ),
+                    style: MyTextStyle.titleStyle18bb,
                   ),
                   const SizedBox(height: 8),
                   if (controller.transactions.isEmpty)
@@ -93,7 +110,8 @@ class _BalanceCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Card(
         color: primaryColor,
-        elevation: 4,
+        elevation: 0,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
         child: Padding(
           padding: const EdgeInsets.all(18),
           child: Column(
@@ -192,6 +210,12 @@ class _TransactionTile extends StatelessWidget {
             : Colors.green.shade700;
     final String? reference = transaction.rideId ?? transaction.offerId;
     return Card(
+      elevation: 0,
+      color: Colors.white,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(10),
+        side: BorderSide(color: Colors.black.withValues(alpha: 0.06)),
+      ),
       child: ListTile(
         leading: CircleAvatar(
           backgroundColor: amountColor.withValues(alpha: 0.12),
@@ -238,8 +262,8 @@ class _WalletSkeleton extends StatelessWidget {
               height: index == 0 ? 190 : 72,
               margin: const EdgeInsets.only(bottom: 12),
               decoration: BoxDecoration(
-                color: Colors.grey.shade200,
-                borderRadius: BorderRadius.circular(12),
+                color: const Color(0xFFF1F1F1),
+                borderRadius: BorderRadius.circular(10),
               ),
             ),
           ),
@@ -288,6 +312,12 @@ class _EmptyCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Card(
+        elevation: 0,
+        color: Colors.white,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(10),
+          side: BorderSide(color: Colors.black.withValues(alpha: 0.06)),
+        ),
         child: Padding(
           padding: const EdgeInsets.all(24),
           child: Center(child: Text(message)),

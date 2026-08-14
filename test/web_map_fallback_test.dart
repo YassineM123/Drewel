@@ -1,4 +1,5 @@
 import 'package:drewel/app/data/config/app_config.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -34,6 +35,39 @@ void main() {
     expect(
       shouldPreferOpenStreetMap(
         isWeb: false,
+        googleWebMapEnabled: false,
+        googleWebApiKey: '',
+      ),
+      isFalse,
+    );
+  });
+
+  test(
+      'native desktop platforms use OpenStreetMap because GoogleMap is unsupported',
+      () {
+    expect(
+      googleMapsFlutterSupportsPlatform(
+        isWeb: false,
+        platform: TargetPlatform.windows,
+      ),
+      isFalse,
+    );
+    expect(
+      shouldUseOpenStreetMap(
+        isWeb: false,
+        platform: TargetPlatform.windows,
+        googleWebMapEnabled: true,
+        googleWebApiKey: 'restricted-browser-key',
+      ),
+      isTrue,
+    );
+  });
+
+  test('native mobile platforms keep Google Maps available', () {
+    expect(
+      shouldUseOpenStreetMap(
+        isWeb: false,
+        platform: TargetPlatform.android,
         googleWebMapEnabled: false,
         googleWebApiKey: '',
       ),

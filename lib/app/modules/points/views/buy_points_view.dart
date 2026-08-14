@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 
 import '../../../../common/colors.dart';
+import '../../../../common/drewel_app_bar.dart';
 import '../../../../common/responsive_primary_button.dart';
+import '../../../../common/text_styles.dart';
 import '../../../data/apis/api_models/driver_points_models.dart';
 import '../../../routes/app_pages.dart';
 import '../controllers/driver_points_controller.dart';
@@ -12,7 +14,11 @@ class BuyPointsView extends GetView<DriverPointsController> {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-        appBar: AppBar(title: Text('points.buy'.tr)),
+        backgroundColor: const Color(0xFFFCFCFC),
+        appBar: DrewelAppBar(
+          title: 'points.buy'.tr,
+          showBackButton: true,
+        ),
         body: SafeArea(
           child: Obx(
             () => RefreshIndicator(
@@ -28,6 +34,10 @@ class BuyPointsView extends GetView<DriverPointsController> {
                 children: <Widget>[
                   Card(
                     color: primaryColor,
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
                     child: ListTile(
                       leading:
                           const Icon(Icons.toll_rounded, color: Colors.white),
@@ -36,7 +46,7 @@ class BuyPointsView extends GetView<DriverPointsController> {
                         style: const TextStyle(color: Colors.white),
                       ),
                       trailing: Text(
-                        '${controller.wallet.value?.availablePoints ?? '—'}',
+                        '${controller.wallet.value?.availablePoints ?? '-'}',
                         style: const TextStyle(
                           color: Colors.white,
                           fontSize: 24,
@@ -48,9 +58,7 @@ class BuyPointsView extends GetView<DriverPointsController> {
                   const SizedBox(height: 20),
                   Text(
                     'points.packs'.tr,
-                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                          fontWeight: FontWeight.bold,
-                        ),
+                    style: MyTextStyle.titleStyle18bb,
                   ),
                   const SizedBox(height: 8),
                   if (controller.isLoadingPacks.value &&
@@ -84,9 +92,7 @@ class BuyPointsView extends GetView<DriverPointsController> {
                   const SizedBox(height: 24),
                   Text(
                     'points.requests'.tr,
-                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                          fontWeight: FontWeight.bold,
-                        ),
+                    style: MyTextStyle.titleStyle18bb,
                   ),
                   const SizedBox(height: 8),
                   if (controller.isLoadingPurchaseRequests.value &&
@@ -181,6 +187,12 @@ class _PointPackCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Card(
+        elevation: 0,
+        color: Colors.white,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(10),
+          side: BorderSide(color: Colors.black.withValues(alpha: 0.06)),
+        ),
         child: Padding(
           padding: const EdgeInsets.all(16),
           child: LayoutBuilder(
@@ -267,6 +279,12 @@ class _PurchaseRequestTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Card(
+        elevation: 0,
+        color: Colors.white,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(10),
+          side: BorderSide(color: Colors.black.withValues(alpha: 0.06)),
+        ),
         child: ListTile(
           leading: const Icon(Icons.receipt_long_rounded),
           title: Text(
@@ -295,6 +313,12 @@ class _MessageCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Card(
+        elevation: 0,
+        color: Colors.white,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(10),
+          side: BorderSide(color: Colors.black.withValues(alpha: 0.06)),
+        ),
         child: Padding(
           padding: const EdgeInsets.all(20),
           child: Center(child: Text(message)),
@@ -334,6 +358,12 @@ class _CustomAmountCardState extends State<_CustomAmountCard> {
 
   @override
   Widget build(BuildContext context) => Card(
+        elevation: 0,
+        color: Colors.white,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(10),
+          side: BorderSide(color: Colors.black.withValues(alpha: 0.06)),
+        ),
         child: Padding(
           padding: const EdgeInsets.all(16),
           child: LayoutBuilder(
@@ -408,8 +438,14 @@ class _LoadingCard extends StatelessWidget {
   const _LoadingCard();
 
   @override
-  Widget build(BuildContext context) => const Card(
-        child: Padding(
+  Widget build(BuildContext context) => Card(
+        elevation: 0,
+        color: Colors.white,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(10),
+          side: BorderSide(color: Colors.black.withValues(alpha: 0.06)),
+        ),
+        child: const Padding(
           padding: EdgeInsets.all(20),
           child: Center(child: CircularProgressIndicator()),
         ),
@@ -424,6 +460,12 @@ class _ErrorCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Card(
+        elevation: 0,
+        color: Colors.white,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(10),
+          side: BorderSide(color: Colors.black.withValues(alpha: 0.06)),
+        ),
         child: Padding(
           padding: const EdgeInsets.all(20),
           child: Column(

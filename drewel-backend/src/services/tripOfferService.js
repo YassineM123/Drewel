@@ -16,6 +16,7 @@ import {
 } from "./pointsWalletService.js";
 import { createPickupPin, decryptPickupPin } from "./rideTransitionService.js";
 import { buildFreshDubaiMarketplaceAvailabilityFilter } from "../utils/availableDrivers.js";
+import { notifyRideTransition } from "./rideNotificationService.js";
 
 const offerTtlMs = (seconds) => seconds * 1000;
 
@@ -174,10 +175,13 @@ export const createTripOffer = async ({
           recipientType: "User",
           payload: {
             offerId: String(offer._id),
+            rideId: String(contact._id),
             status: offer.status,
             notification: {
               type: "TRIP_OFFER_RECEIVED",
+              title: "New trip offer",
               message: "You received a new trip offer",
+              deepLink: `drewel://chat/ride?rideId=${String(contact._id)}`,
             },
           },
         },
@@ -194,7 +198,9 @@ export const createTripOffer = async ({
             walletVersion: reservation.wallet.version,
             notification: {
               type: "POINTS_RESERVED",
+              title: "Points reserved",
               message: `${offer.pointsCost} points reserved for the trip offer`,
+              deepLink: "drewel://driver/points",
             },
           },
         },
@@ -215,7 +221,9 @@ export const createTripOffer = async ({
           walletVersion: reservation.wallet.version,
           notification: {
             type: "POINTS_LOW_BALANCE",
+            title: "Points getting low",
             message: "Your available points are too low to send another offer",
+            deepLink: "drewel://driver/points",
           },
         },
       });
@@ -453,7 +461,9 @@ export const acceptTripOffer = async ({ offerId, passengerId, idempotencyKey }) 
             walletVersion: charge.wallet.version,
             notification: {
               type: "RIDE_POINTS_CHARGED",
+              title: "Points charged",
               message: `${offer.pointsCost} points charged for the confirmed ride`,
+              deepLink: "drewel://driver/points",
             },
           },
         },
@@ -470,7 +480,9 @@ export const acceptTripOffer = async ({ offerId, passengerId, idempotencyKey }) 
             status: "accepted",
             notification: {
               type: "TRIP_OFFER_ACCEPTED",
+              title: "Trip offer accepted",
               message: "Trip offer accepted",
+              deepLink: `drewel://chat/ride?rideId=${String(ride._id)}`,
             },
           },
         },
@@ -485,6 +497,19 @@ export const acceptTripOffer = async ({ offerId, passengerId, idempotencyKey }) 
       idempotent: false,
     };
   });
+
+/**
+ * Notifies both participants once a trip offer is accepted and the ride is
+ * confirmed. Invoked outside the points transaction so notification failures
+ * can never roll back a successful ride confirmation.
+ */
+export const notifyTripOfferAccepted = async ({ ride }) => {
+  try {
+    await notifyRideTransition({ ride, toStatus: "confirmed", actorRole: "passenger" });
+  } catch (error) {
+    console.error("[notification] trip offer accepted notification failed", error.message);
+  }
+};
 
 const terminalTimestamp = (status) => ({
   ...(status === "declined" ? { declinedAt: new Date() } : {}),
@@ -541,7 +566,9 @@ export const closeTripOfferInSession = async ({
           walletVersion: release.wallet.version,
           notification: {
             type: "OFFER_POINTS_RELEASED",
+            title: "Points released",
             message: `${offer.pointsCost} reserved points released`,
+            deepLink: "drewel://driver/points",
           },
         },
       },
@@ -557,7 +584,9 @@ export const closeTripOfferInSession = async ({
           status: terminalStatus,
           notification: {
             type: "TRIP_OFFER_UPDATED",
+            title: "Trip offer updated",
             message: `Trip offer ${terminalStatus}`,
+            deepLink: "drewel://rides",
           },
         },
       },

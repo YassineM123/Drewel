@@ -55,10 +55,16 @@ class RideMessageRepository {
     final String idempotencyKey = clientMessageId ?? newClientMessageId();
     final String priceLabel =
         '${proposedPrice.toStringAsFixed(2)} ${currency.toUpperCase()}';
+    final String pickupLabel = _routePointText('Pickup', pickup);
+    final String destinationLabel = _routePointText('Destination', destination);
     final Map<String, dynamic> response = await _api.post(
       ApiUrlConstants.rideMessages(rideId),
       <String, dynamic>{
-        'text': 'Trip request: $priceLabel',
+        'text': <String>[
+          'Trip request: $priceLabel',
+          pickupLabel,
+          destinationLabel,
+        ].join('\n'),
         'clientMessageId': idempotencyKey,
         'messageType': 'trip_request',
         'metadata': <String, dynamic>{
@@ -72,6 +78,19 @@ class RideMessageRepository {
     );
     final dynamic raw = response['message'] ?? response['data'];
     return RideMessageModel.fromJson(Map<String, dynamic>.from(raw as Map));
+  }
+
+  static String _routePointText(String label, Map<String, dynamic> point) {
+    final String address = (point['address'] ?? '').toString().trim();
+    final double? lat = point['lat'] is num
+        ? (point['lat'] as num).toDouble()
+        : double.tryParse((point['lat'] ?? '').toString());
+    final double? long = point['long'] is num
+        ? (point['long'] as num).toDouble()
+        : double.tryParse((point['long'] ?? '').toString());
+    final String name = address.isEmpty ? 'Pinned location' : address;
+    if (lat == null || long == null) return '$label: $name';
+    return '$label: $name (${lat.toStringAsFixed(6)}, ${long.toStringAsFixed(6)})';
   }
 
   Future<RideMessageModel> markReceipt(

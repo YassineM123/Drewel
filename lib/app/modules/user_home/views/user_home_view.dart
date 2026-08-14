@@ -22,6 +22,7 @@ import '../controllers/user_home_controller.dart';
 import '../../communication/controllers/call_state_controller.dart';
 import '../../communication/widgets/secure_communication_panel.dart';
 import '../../messages/widgets/messages_app_bar_button.dart';
+import '../../notification/widgets/notification_app_bar_button.dart';
 import '../widgets/location_search_bar.dart';
 import '../widgets/marketplace_driver_card.dart';
 import '../../active_ride/widgets/active_ride_card.dart';
@@ -131,6 +132,7 @@ class _UserHomeViewState extends State<UserHomeView> {
               showBackButton: true,
               showMenuButton: true,
               actions: const <Widget>[
+                NotificationAppBarButton(),
                 MessagesAppBarButton(),
                 SizedBox(width: 4),
               ],
@@ -322,7 +324,11 @@ class _UserHomeViewState extends State<UserHomeView> {
               ],
             ),
             child: controller.driversList.isEmpty
-                ? _buildDriversPlaceholderState(context)
+                ? SingleChildScrollView(
+                    controller: scrollController,
+                    physics: const ClampingScrollPhysics(),
+                    child: _buildDriversPlaceholderState(context),
+                  )
                 : ListView.builder(
                     controller: scrollController, // ✅ MUST be used
                     itemCount: displayIndexes.length + 1,

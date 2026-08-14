@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 
 import '../../../../common/colors.dart';
 import '../../../../common/drewel_osm_map.dart';
+import '../../../data/config/app_config.dart';
 
 class TripRouteRequest {
   const TripRouteRequest({required this.pickup, required this.destination});
@@ -96,7 +96,7 @@ Future<TripRouteRequest?> showTripRequestMapSheet(
                 ),
               ),
               Expanded(
-                child: kIsWeb
+                child: AppConfig.useOpenStreetMapForCurrentPlatform
                     ? DrewelOsmMap(
                         center: editingPickup
                             ? selectedPickup

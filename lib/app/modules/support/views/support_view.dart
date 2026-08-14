@@ -8,7 +8,6 @@ import '../../../../common/common_widgets.dart';
 import '../../../../common/drewel_app_bar.dart';
 import '../../../../common/drewel_pop_scope.dart';
 import '../../../../common/text_styles.dart';
-import '../../../data/constants/image_constants.dart';
 import '../../../data/constants/string_constants.dart';
 import '../controllers/support_controller.dart';
 
@@ -63,6 +62,7 @@ class SupportView extends GetView<SupportController> {
                           StringConstants.yourConversation,
                           style: MyTextStyle.titleStyle18b,
                         ),
+                        SizedBox(height: 10.px),
                         showConversationList()
                       ],
                     ),
@@ -75,49 +75,38 @@ class SupportView extends GetView<SupportController> {
   }
 
   Widget showConversationList() {
-    return ListView.builder(
-      itemCount: 5,
-      shrinkWrap: true,
-      padding: EdgeInsets.zero,
-      physics: const NeverScrollableScrollPhysics(),
-      itemBuilder: (context, index) {
-        return Container(
-          width: MediaQuery.of(context).size.width,
-          padding: EdgeInsets.all(20.px),
-          margin: EdgeInsets.symmetric(vertical: 5.px),
-          decoration: BoxDecoration(
-            color: primary3Color,
-            border: Border.all(
-                color: backgroundColor.withOpacity(0.5), width: 1.px),
-            borderRadius: BorderRadius.circular(10.px),
+    return Container(
+      width: double.infinity,
+      padding: EdgeInsets.all(20.px),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF8F8F8),
+        border: Border.all(
+          color: backgroundColor.withValues(alpha: 0.18),
+          width: 1.px,
+        ),
+        borderRadius: BorderRadius.circular(10.px),
+      ),
+      child: Column(
+        children: [
+          Icon(
+            Icons.support_agent_rounded,
+            size: 42.px,
+            color: primaryColor,
           ),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              CommonWidgets.appIcons(
-                assetName: ImageConstants.imgBoy,
-                height: 40.px,
-                width: 40.px,
-              ),
-              Expanded(
-                child: Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 10.px),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text('Kyal Samuels', style: MyTextStyle.titleStyle14bb),
-                      Text('Hi Harold, how can i help you',
-                          style: MyTextStyle.titleStyle12b),
-                    ],
-                  ),
-                ),
-              ),
-              Text('2 hours ago', style: MyTextStyle.titleStyle12b),
-            ],
+          SizedBox(height: 10.px),
+          Text(
+            'No support conversations yet',
+            textAlign: TextAlign.center,
+            style: MyTextStyle.titleStyle14bb,
           ),
-        );
-      },
+          SizedBox(height: 4.px),
+          Text(
+            'Start a new chat when you need help from Drewel Support.',
+            textAlign: TextAlign.center,
+            style: MyTextStyle.titleStyle12b.copyWith(color: text2Color),
+          ),
+        ],
+      ),
     );
   }
 }

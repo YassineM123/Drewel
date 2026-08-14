@@ -19,6 +19,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:ui' as ui;
 import 'dart:io';
 import '../../../../common/colors.dart';
+import '../../../../common/auth_session_manager.dart';
 import '../../../../common/common_widgets.dart';
 import '../../../../common/vehicle_assets.dart';
 import '../../../../common/text_styles.dart';
@@ -2036,8 +2037,15 @@ class UserHomeController extends GetxController
       SharedPreferences pref = await SharedPreferences.getInstance();
       if (!_canUpdateView) return;
       String userId = pref.getString(ApiKeyConstants.userId) ?? '';
-      LoginModel? loginModel =
-          await ApiMethods.getUserDetailsApi(userId: userId);
+      if (!await AuthSessionManager.hasStoredSession()) {
+        await AuthSessionManager.clearExpiredSession();
+        return;
+      }
+      int? responseStatus;
+      LoginModel? loginModel = await ApiMethods.getUserDetailsApi(
+        userId: userId,
+        checkResponse: (int status) => responseStatus = status,
+      );
       if (!_canUpdateView) return;
       if (loginModel != null &&
           loginModel.success != null &&
@@ -2050,6 +2058,8 @@ class UserHomeController extends GetxController
           ApiKeyConstants.fullName: loginModel.user?.fullName ?? '',
         };
         print('User details loaded successfully');
+      } else if (responseStatus == 401) {
+        await AuthSessionManager.clearExpiredSession();
       } else {
         CommonWidgets.snackBarView(
             title: loginModel?.message ?? 'Get user data Failed ...');
@@ -2121,9 +2131,7 @@ class UserHomeController extends GetxController
                     : 'A fresh precise GPS location is required.'),
           );
         } else if (responseStatus == 401) {
-          isDriverServiceUnavailable.value = true;
-          driverServiceMessage.value =
-              'Your session expired. Please sign in again.';
+          await AuthSessionManager.clearExpiredSession();
         } else if (responseStatus == 404) {
           isDriverServiceUnavailable.value = true;
           driverServiceMessage.value =

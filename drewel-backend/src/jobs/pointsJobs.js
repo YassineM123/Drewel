@@ -2,6 +2,7 @@ import crypto from "node:crypto";
 import Notification from "../models/Notification.js";
 import PointsOutboxEvent from "../models/PointsOutboxEvent.js";
 import { io } from "../socket/index.js";
+import { sendPushToUser } from "../services/notificationService.js";
 import { closeTripOffer, expireTripOffers } from "../services/tripOfferService.js";
 
 const workerId = `${process.pid}:${crypto.randomBytes(4).toString("hex")}`;
@@ -39,7 +40,9 @@ export const dispatchNextPointsOutboxEvent = async () => {
             userId: event.recipientId,
             recipientType: event.recipientType.toLowerCase(),
             type: notification.type || "POINTS_UPDATE",
+            title: String(notification.title || "Points update").slice(0, 120),
             message: String(notification.message).slice(0, 1000),
+            deepLink: String(notification.deepLink || "drewel://driver/points"),
             eventKey: `${event.eventKey}:notification`,
             data: safeEventPayload(event.payload),
             read: false,
@@ -52,6 +55,17 @@ export const dispatchNextPointsOutboxEvent = async () => {
     const socketEvent =
       event.type === "points:notification" ? "notification:new" : event.type;
     io.to(String(event.recipientId)).emit(socketEvent, safeEventPayload(event.payload));
+    if (notification?.message && event.type === "points:notification") {
+      sendPushToUser({
+        userId: event.recipientId,
+        type: notification.type || "POINTS_UPDATE",
+        title: String(notification.title || "Points update").slice(0, 120),
+        body: String(notification.message).slice(0, 1000),
+        deepLink: String(notification.deepLink || "drewel://driver/points"),
+      }).catch((error) =>
+        console.error("Points notification push failed", error.message)
+      );
+    }
     await PointsOutboxEvent.updateOne(
       { _id: event._id, status: "processing", lockedBy: workerId },
       {

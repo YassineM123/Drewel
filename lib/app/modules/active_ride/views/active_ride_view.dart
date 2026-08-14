@@ -3,6 +3,9 @@ import 'package:get/get.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 
 import '../../../../common/colors.dart';
+import '../../../../common/drewel_app_bar.dart';
+import '../../../../common/drewel_osm_map.dart';
+import '../../../../common/drewel_web_map_fallback.dart';
 import '../../../data/apis/api_models/active_ride_model.dart';
 import '../../communication/controllers/call_state_controller.dart';
 import '../controllers/active_ride_controller.dart';
@@ -14,8 +17,10 @@ class ActiveRideView extends GetView<ActiveRideController> {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-        appBar: AppBar(
-          title: const Text('Active ride'),
+        backgroundColor: const Color(0xFFFCFCFC),
+        appBar: DrewelAppBar(
+          title: 'Active ride',
+          showBackButton: true,
           actions: <Widget>[
             Obx(
               () => PopupMenuButton<String>(
@@ -62,7 +67,7 @@ class ActiveRideView extends GetView<ActiveRideController> {
                 MaterialBanner(
                   leading: const Icon(Icons.cloud_off_rounded),
                   content: const Text(
-                    'Offline — showing the last known ride. Actions will be '
+                    'Offline - showing the last known ride. Actions will be '
                     'available when the connection returns.',
                   ),
                   actions: <Widget>[
@@ -215,32 +220,76 @@ class _RideMap extends StatelessWidget {
         ),
     };
     final List<LatLng> points = controller.polylinePoints;
-    return GoogleMap(
-      initialCameraPosition: CameraPosition(
-        target: initial?.isValid == true
-            ? LatLng(initial!.latitude, initial.longitude)
-            : const LatLng(25.2048, 55.2708),
+    final LatLng center = initial?.isValid == true
+        ? LatLng(initial!.latitude, initial.longitude)
+        : const LatLng(25.2048, 55.2708);
+    return DrewelWebMapFallback(
+      openStreetMap: DrewelOsmMap(
+        center: center,
         zoom: 14,
-      ),
-      onMapCreated: controller.attachMap,
-      onCameraMoveStarted: () => controller.isFollowingDriver.value = false,
-      myLocationEnabled: controller.isDriver,
-      myLocationButtonEnabled: false,
-      compassEnabled: true,
-      markers: markers,
-      polylines: points.isEmpty
-          ? const <Polyline>{}
-          : <Polyline>{
-              Polyline(
-                polylineId: const PolylineId('active-ride-route'),
-                points: points,
-                color: primaryColor,
-                width: 6,
-                startCap: Cap.roundCap,
-                endCap: Cap.roundCap,
-                jointType: JointType.round,
+        polylines:
+            points.isEmpty ? const <List<LatLng>>[] : <List<LatLng>>[points],
+        markers: <DrewelOsmMarker>[
+          if (ride.pickup?.isValid == true)
+            DrewelOsmMarker(
+              id: 'pickup',
+              position: LatLng(ride.pickup!.latitude, ride.pickup!.longitude),
+              child: const Icon(
+                Icons.radio_button_checked,
+                color: Colors.green,
+                size: 36,
               ),
-            },
+            ),
+          if (ride.destination?.isValid == true)
+            DrewelOsmMarker(
+              id: 'destination',
+              position: LatLng(
+                ride.destination!.latitude,
+                ride.destination!.longitude,
+              ),
+              child: const Icon(
+                Icons.location_on,
+                color: primaryColor,
+                size: 40,
+              ),
+            ),
+          if (driver?.isValid == true)
+            DrewelOsmMarker(
+              id: 'driver',
+              position: LatLng(driver!.latitude, driver.longitude),
+              child: const Icon(
+                Icons.local_shipping,
+                color: Colors.blue,
+                size: 34,
+              ),
+            ),
+        ],
+      ),
+      googleMap: GoogleMap(
+        initialCameraPosition: CameraPosition(
+          target: center,
+          zoom: 14,
+        ),
+        onMapCreated: controller.attachMap,
+        onCameraMoveStarted: () => controller.isFollowingDriver.value = false,
+        myLocationEnabled: controller.isDriver,
+        myLocationButtonEnabled: false,
+        compassEnabled: true,
+        markers: markers,
+        polylines: points.isEmpty
+            ? const <Polyline>{}
+            : <Polyline>{
+                Polyline(
+                  polylineId: const PolylineId('active-ride-route'),
+                  points: points,
+                  color: primaryColor,
+                  width: 6,
+                  startCap: Cap.roundCap,
+                  endCap: Cap.roundCap,
+                  jointType: JointType.round,
+                ),
+              },
+      ),
     );
   }
 }
@@ -257,9 +306,9 @@ class _NavigationInstruction extends StatelessWidget {
     final RideNavigationStepModel? step =
         route?.steps.isNotEmpty == true ? route!.steps.first : null;
     return Material(
-      elevation: 5,
+      elevation: 0,
       color: primary3Color,
-      borderRadius: BorderRadius.circular(14),
+      borderRadius: BorderRadius.circular(10),
       child: Padding(
         padding: const EdgeInsets.all(14),
         child: Row(
@@ -279,7 +328,7 @@ class _NavigationInstruction extends StatelessWidget {
                     style: const TextStyle(fontWeight: FontWeight.w700),
                   ),
                   if (route != null)
-                    Text('${route.distanceLabel} • ${route.etaLabel}'),
+                    Text('${route.distanceLabel} - ${route.etaLabel}'),
                   if (controller.routeError.value.isNotEmpty)
                     Text(
                       controller.routeError.value,
@@ -335,7 +384,10 @@ class _RideActionSheet extends StatelessWidget {
       top: false,
       child: Material(
         color: primary3Color,
-        elevation: 10,
+        elevation: 0,
+        shape: Border(
+          top: BorderSide(color: primaryColor.withValues(alpha: 0.12)),
+        ),
         child: Padding(
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
           child: Column(
@@ -398,14 +450,14 @@ class _RideActionSheet extends StatelessWidget {
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
                       color: primaryColor.withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(12),
+                      borderRadius: BorderRadius.circular(10),
                     ),
                     child: Text(
                       'Pickup PIN: ${ride.pickupPin}',
                       textAlign: TextAlign.center,
                       style: Theme.of(context).textTheme.titleLarge?.copyWith(
                             fontWeight: FontWeight.w800,
-                            letterSpacing: 4,
+                            letterSpacing: 0,
                           ),
                     ),
                   ),
@@ -456,8 +508,7 @@ class _RideActionSheet extends StatelessWidget {
   }
 
   Future<void> _callParticipant(BuildContext context) async {
-    final CallStateController communication =
-        Get.find<CallStateController>();
+    final CallStateController communication = Get.find<CallStateController>();
     final String name =
         communication.counterpart?.firstName ?? 'ride participant';
     if (await communication.confirmDrewelCall(name)) {

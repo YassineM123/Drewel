@@ -320,8 +320,13 @@ export const touchConversationWithMessage = async ({ ride, message, participantR
         userId: recipientId,
         recipientType,
         type: "RIDE_MESSAGE",
+        title: senderDisplayName,
         message: `${senderDisplayName}: ${String(message.text || "").slice(0, 120)}`,
         eventKey,
+        rideId: ride._id,
+        conversationId: conversation._id,
+        messageId: String(message._id),
+        deepLink: `drewel://chat/ride?conversationId=${String(conversation._id)}`,
         data: {
           rideId: String(ride._id),
           rideReference: conversation.rideReference,

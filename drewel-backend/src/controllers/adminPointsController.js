@@ -694,7 +694,9 @@ export const updatePointPurchaseRequest = async (req, res) => {
               status,
               notification: {
                 type: "POINT_PURCHASE_REQUEST_UPDATED",
+                title: "Purchase request updated",
                 message: `Point purchase request updated to ${status}`,
+                deepLink: "drewel://driver/points",
               },
             },
           },
@@ -837,7 +839,9 @@ export const creditVerifiedPointPurchaseRequest = async (req, res) => {
               purchaseRequestId: String(purchaseRequest._id),
               notification: {
                 type: "PURCHASED_POINTS_CREDITED",
+                title: "Points purchased",
                 message: `${points} points credited`,
+                deepLink: "drewel://driver/points",
               },
             },
           },
@@ -1115,7 +1119,9 @@ export const creditDriverPoints = async (req, res) => {
                 purchaseRequestId,
                 notification: {
                   type: purchased ? "PURCHASED_POINTS_CREDITED" : "POINTS_CREDITED",
+                  title: purchased ? "Points purchased" : "Points credited",
                   message: `${input.points} points credited`,
+                  deepLink: "drewel://driver/points",
                 },
               },
             },
@@ -1265,7 +1271,9 @@ export const debitDriverPoints = async (req, res) => {
                 reason: input.reason,
                 notification: {
                   type: "POINTS_ADJUSTED",
+                  title: "Points deducted",
                   message: `${input.points} points deducted by Drewel`,
+                  deepLink: "drewel://driver/points",
                 },
               },
             },
