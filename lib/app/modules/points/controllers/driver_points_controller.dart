@@ -72,6 +72,7 @@ class DriverPointsController extends GetxController
       <PointPurchaseRequest>[].obs;
   final RxList<TripOffer> offers = <TripOffer>[].obs;
   final RxBool isSendingOffer = false.obs;
+  String? lastSendOfferError;
   final RxBool isCreatingPurchaseRequest = false.obs;
   final RxBool isSocketConnected = false.obs;
   final RxBool isLoadingPacks = false.obs;
@@ -237,11 +238,13 @@ class DriverPointsController extends GetxController
 
   Future<SendOfferResult> sendOffer(TripOfferDraft draft) async {
     if (isSendingOffer.value) return SendOfferResult.failed;
+    lastSendOfferError = null;
     final currentWallet = wallet.value;
     if (currentWallet == null) {
       await refreshWallet();
     }
     if (wallet.value?.canSendOffer != true) {
+      lastSendOfferError = 'points.insufficient'.tr;
       return SendOfferResult.insufficientPoints;
     }
     isSendingOffer.value = true;
@@ -264,10 +267,13 @@ class DriverPointsController extends GetxController
     } on CommunicationApiException catch (error) {
       if (error.code == 'INSUFFICIENT_AVAILABLE_POINTS') {
         await refreshWallet(silent: true);
+        lastSendOfferError = 'points.insufficient'.tr;
         return SendOfferResult.insufficientPoints;
       }
+      lastSendOfferError = error.message;
       return SendOfferResult.failed;
-    } catch (_) {
+    } catch (error) {
+      lastSendOfferError = error.toString();
       return SendOfferResult.failed;
     } finally {
       isSendingOffer.value = false;

@@ -1,23 +1,147 @@
 import { RideTransitionError } from "./rideTransitionService.js";
 
 const ROUTES_URL = "https://routes.googleapis.com/directions/v2:computeRoutes";
+const OSRM_URL = "https://router.project-osrm.org/route/v1/driving";
+const AVERAGE_CITY_SPEED_MPS = 8.5;
 
 const point = (value) => ({
   location: { latLng: { latitude: value.lat, longitude: value.long } },
 });
 
-export const computeRideRoute = async ({ ride, phase, driverLocation, signal }) => {
-  const apiKey = String(process.env.GOOGLE_ROUTES_API_KEY || "").trim();
-  if (!apiKey) {
-    throw new RideTransitionError("Google Routes is not configured", 503, "ROUTES_NOT_CONFIGURED");
+const validPoint = (value) =>
+  Number.isFinite(value?.lat) &&
+  value.lat >= -90 &&
+  value.lat <= 90 &&
+  Number.isFinite(value?.long) &&
+  value.long >= -180 &&
+  value.long <= 180;
+
+const distanceMetersBetween = (a, b) => {
+  const radius = 6371000;
+  const toRadians = (degrees) => (degrees * Math.PI) / 180;
+  const lat1 = toRadians(a.lat);
+  const lat2 = toRadians(b.lat);
+  const deltaLat = toRadians(b.lat - a.lat);
+  const deltaLong = toRadians(b.long - a.long);
+  const h =
+    Math.sin(deltaLat / 2) ** 2 +
+    Math.cos(lat1) * Math.cos(lat2) * Math.sin(deltaLong / 2) ** 2;
+  return Math.round(radius * 2 * Math.atan2(Math.sqrt(h), Math.sqrt(1 - h)));
+};
+
+const encodePolyline = (points) => {
+  let previousLat = 0;
+  let previousLong = 0;
+  let encoded = "";
+  const encodeValue = (value) => {
+    let shifted = value < 0 ? ~(value << 1) : value << 1;
+    let chunk = "";
+    while (shifted >= 0x20) {
+      chunk += String.fromCharCode((0x20 | (shifted & 0x1f)) + 63);
+      shifted >>= 5;
+    }
+    return chunk + String.fromCharCode(shifted + 63);
+  };
+  for (const item of points) {
+    const lat = Math.round(item.lat * 1e5);
+    const long = Math.round(item.long * 1e5);
+    encoded += encodeValue(lat - previousLat);
+    encoded += encodeValue(long - previousLong);
+    previousLat = lat;
+    previousLong = long;
   }
+  return encoded;
+};
+
+const basicRoute = ({ phase, origin, destination, provider = "straight_line" }) => {
+  const distanceMeters = distanceMetersBetween(origin, destination);
+  const durationSeconds = Math.max(60, Math.round(distanceMeters / AVERAGE_CITY_SPEED_MPS));
+  return {
+    phase,
+    distanceMeters,
+    duration: `${durationSeconds}s`,
+    staticDuration: `${durationSeconds}s`,
+    durationSeconds,
+    encodedPolyline: encodePolyline([origin, destination]),
+    steps: [
+      {
+        instruction:
+          phase === "pickup"
+            ? "Follow the live route to pickup"
+            : "Follow the live route to destination",
+        distanceMeters,
+        durationSeconds,
+      },
+    ],
+    provider,
+    trafficAware: false,
+    fallback: true,
+    calculatedAt: new Date().toISOString(),
+  };
+};
+
+const osrmRoute = async ({ phase, origin, destination, signal }) => {
+  const url =
+    `${OSRM_URL}/${origin.long},${origin.lat};${destination.long},${destination.lat}` +
+    "?overview=full&geometries=polyline&steps=true";
+  let response;
+  try {
+    response = await fetch(url, {
+      method: "GET",
+      signal: signal || AbortSignal.timeout(8000),
+      headers: { Accept: "application/json" },
+    });
+  } catch {
+    return basicRoute({ phase, origin, destination });
+  }
+  if (!response.ok) return basicRoute({ phase, origin, destination });
+  const payload = await response.json().catch(() => null);
+  const route = payload?.routes?.[0];
+  if (!route?.geometry) return basicRoute({ phase, origin, destination });
+  const durationSeconds = Math.max(0, Math.round(Number(route.duration) || 0));
+  const distanceMeters = Math.max(0, Math.round(Number(route.distance) || 0));
+  return {
+    phase,
+    distanceMeters,
+    duration: `${durationSeconds}s`,
+    staticDuration: `${durationSeconds}s`,
+    durationSeconds,
+    encodedPolyline: route.geometry,
+    steps: (route.legs || []).flatMap((leg) =>
+      (leg.steps || []).map((step) => ({
+        instruction: step.maneuver?.modifier
+          ? `${step.maneuver.type || "Continue"} ${step.maneuver.modifier}`
+          : step.name
+            ? `Continue on ${step.name}`
+            : "Continue",
+        maneuver: step.maneuver?.type || "",
+        distanceMeters: Math.round(Number(step.distance) || 0),
+        durationSeconds: Math.round(Number(step.duration) || 0),
+      }))
+    ),
+    provider: "osrm",
+    trafficAware: false,
+    fallback: true,
+    calculatedAt: new Date().toISOString(),
+  };
+};
+
+export const computeRideRoute = async ({ ride, phase, driverLocation, signal }) => {
+  const liveDriverLocation = driverLocation || ride.lastDriverLocation;
   const origin =
     phase === "pickup"
-      ? driverLocation || ride.lastDriverLocation
-      : ride.pickup;
+      ? liveDriverLocation
+      : liveDriverLocation || ride.pickup;
   const destination = phase === "pickup" ? ride.pickup : ride.destination;
-  if (!Number.isFinite(origin?.lat) || !Number.isFinite(origin?.long)) {
+  if (!validPoint(origin)) {
     throw new RideTransitionError("Driver location is unavailable", 409, "DRIVER_LOCATION_UNAVAILABLE");
+  }
+  if (!validPoint(destination)) {
+    throw new RideTransitionError("Route destination is unavailable", 409, "ROUTE_DESTINATION_UNAVAILABLE");
+  }
+  const apiKey = String(process.env.GOOGLE_ROUTES_API_KEY || "").trim();
+  if (!apiKey) {
+    return osrmRoute({ phase, origin, destination, signal });
   }
   let response;
   try {
@@ -41,15 +165,15 @@ export const computeRideRoute = async ({ ride, phase, driverLocation, signal }) 
       }),
     });
   } catch {
-    throw new RideTransitionError("Route provider is temporarily unavailable", 502, "ROUTES_PROVIDER_FAILED");
+    return osrmRoute({ phase, origin, destination, signal });
   }
   if (!response.ok) {
-    throw new RideTransitionError("Route provider is temporarily unavailable", 502, "ROUTES_PROVIDER_FAILED");
+    return osrmRoute({ phase, origin, destination, signal });
   }
   const payload = await response.json();
   const route = payload.routes?.[0];
   if (!route) {
-    throw new RideTransitionError("No route is available", 404, "ROUTE_NOT_FOUND");
+    return osrmRoute({ phase, origin, destination, signal });
   }
   return {
     phase,
@@ -59,7 +183,9 @@ export const computeRideRoute = async ({ ride, phase, driverLocation, signal }) 
     encodedPolyline: route.polyline?.encodedPolyline || "",
     legs: route.legs || [],
     steps: (route.legs || []).flatMap((leg) => leg.steps || []),
+    provider: "google_routes",
     trafficAware: true,
+    fallback: false,
     calculatedAt: new Date().toISOString(),
   };
 };

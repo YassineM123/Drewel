@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'dart:math';
+import 'dart:ui' as ui;
 
+import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:get/get.dart';
@@ -9,12 +11,14 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../../common/socket_services.dart';
 import '../../../../common/notification_sound_service.dart';
+import '../../../../common/vehicle_assets.dart';
 import '../../../data/apis/api_constants/api_key_constants.dart';
 import '../../../data/apis/api_constants/api_url_constants.dart';
 import '../../../data/apis/api_models/active_ride_model.dart';
 import '../../../data/apis/communication_api_client.dart';
 import '../../../data/repositories/active_ride_repository.dart';
 import '../../communication/controllers/call_state_controller.dart';
+import '../../../routes/app_pages.dart';
 
 class ActiveRideController extends GetxService with WidgetsBindingObserver {
   ActiveRideController({
@@ -27,6 +31,7 @@ class ActiveRideController extends GetxService with WidgetsBindingObserver {
   final SocketService _socket;
 
   final Rxn<ActiveRideModel> ride = Rxn<ActiveRideModel>();
+  final Rxn<ActiveRideModel> lastCompletedRide = Rxn<ActiveRideModel>();
   final Rxn<RideRouteModel> route = Rxn<RideRouteModel>();
   final RxBool isLoading = false.obs;
   final RxBool isActionLoading = false.obs;
@@ -38,6 +43,9 @@ class ActiveRideController extends GetxService with WidgetsBindingObserver {
   final RxString routeError = ''.obs;
   final RxString role = 'user'.obs;
   final Rxn<RideCoordinateModel> currentPosition = Rxn<RideCoordinateModel>();
+  final RxInt driverVehicleMarkerVersion = 0.obs;
+  final Map<String, BitmapDescriptor> _driverVehicleMarkerCache =
+      <String, BitmapDescriptor>{};
 
   GoogleMapController? mapController;
   StreamSubscription<Position>? _positionSubscription;
@@ -45,10 +53,13 @@ class ActiveRideController extends GetxService with WidgetsBindingObserver {
   Timer? _routeRefreshTimer;
   DateTime? _lastLocationSentAt;
   DateTime? _lastDeviationRefreshAt;
+  DateTime? _lastLiveRouteRefreshAt;
   RideCoordinateModel? _lastLocationSent;
   String _token = '';
   String? _joinedRideId;
   int _latestEventVersion = -1;
+  int _cameraAnimationGeneration = 0;
+  bool _isProgrammaticCameraMove = false;
   final Set<String> _actionKeys = <String>{};
 
   NotificationSoundService? get _soundsService =>
@@ -60,6 +71,7 @@ class ActiveRideController extends GetxService with WidgetsBindingObserver {
   RideStatus get status => ride.value?.rideStatus ?? RideStatus.unknown;
   bool get isDriver => role.value == ApiKeyConstants.driver;
   bool get hasRide => ride.value?.isRecoverable == true;
+  String get homeRoute => isDriver ? Routes.DRIVER_HOME : Routes.USER_HOME;
   bool get shouldTrackDriver =>
       isDriver &&
       const <RideStatus>{
@@ -76,6 +88,35 @@ class ActiveRideController extends GetxService with WidgetsBindingObserver {
     super.onInit();
     WidgetsBinding.instance.addObserver(this);
     await recover(showLoader: false);
+  }
+
+  BitmapDescriptor driverVehicleMarkerFor(String? vehicleType) {
+    final String assetPath = vehicleMarkerAssetPath(vehicleType);
+    final BitmapDescriptor? cached = _driverVehicleMarkerCache[assetPath];
+    if (cached != null) return cached;
+    unawaited(_loadDriverVehicleMarker(vehicleType));
+    return BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueAzure);
+  }
+
+  Future<void> _loadDriverVehicleMarker(String? vehicleType) async {
+    final String assetPath = vehicleMarkerAssetPath(vehicleType);
+    if (_driverVehicleMarkerCache.containsKey(assetPath)) return;
+    try {
+      final ByteData data = await rootBundle.load(assetPath);
+      final ui.Codec codec = await ui.instantiateImageCodec(
+        data.buffer.asUint8List(),
+        targetWidth: 104,
+      );
+      final ui.FrameInfo frame = await codec.getNextFrame();
+      final ByteData? bytes =
+          await frame.image.toByteData(format: ui.ImageByteFormat.png);
+      if (bytes == null) return;
+      _driverVehicleMarkerCache[assetPath] =
+          BitmapDescriptor.bytes(bytes.buffer.asUint8List());
+      driverVehicleMarkerVersion.value++;
+    } catch (error) {
+      debugPrint('Failed to load active ride vehicle marker: $error');
+    }
   }
 
   Future<void> recover({bool showLoader = true}) async {
@@ -162,6 +203,8 @@ class ActiveRideController extends GetxService with WidgetsBindingObserver {
             Map<String, dynamic>.from(rawLocation));
         if (location.isValid) {
           ride.value = ride.value!.copyWith(lastDriverLocation: location);
+          _refreshRouteAfterLiveLocation(location);
+          if (isFollowingDriver.value) recenter();
         }
       }
       return;
@@ -183,9 +226,11 @@ class ActiveRideController extends GetxService with WidgetsBindingObserver {
     // Anything else is a status changing event. Compare against the last known
     // status so a sound is emitted exactly once per transition, regardless of
     // how many sockets/polls observe the new status later.
-    final RideStatus previousStatus = ride.value?.rideStatus ?? RideStatus.unknown;
+    final RideStatus previousStatus =
+        ride.value?.rideStatus ?? RideStatus.unknown;
     await recover(showLoader: false);
-    final RideStatus currentStatus = ride.value?.rideStatus ?? RideStatus.unknown;
+    final RideStatus currentStatus =
+        ride.value?.rideStatus ?? RideStatus.unknown;
     if (previousStatus != currentStatus) {
       await _playStatusTransitionSound(previousStatus, currentStatus);
     }
@@ -217,28 +262,34 @@ class ActiveRideController extends GetxService with WidgetsBindingObserver {
 
   Future<void> _setRide(ActiveRideModel? value) async {
     final String? previousId = ride.value?.id;
-    if (previousId != null && previousId != value?.id) {
+    if (value?.rideStatus == RideStatus.completed) {
+      lastCompletedRide.value = value;
+    }
+    final ActiveRideModel? activeValue =
+        value?.rideStatus.isTerminal == true ? null : value;
+    if (previousId != null && previousId != activeValue?.id) {
       _socket.leaveRide(previousId);
       _joinedRideId = null;
     }
-    ride.value = value;
+    ride.value = activeValue;
     if (Get.isRegistered<CallStateController>()) {
-      Get.find<CallStateController>().activeRide.value = value;
+      Get.find<CallStateController>().activeRide.value = activeValue;
     }
-    if (value == null || value.rideStatus.isTerminal) {
+    if (activeValue == null) {
       route.value = null;
       await _stopLocationTracking();
       _routeRefreshTimer?.cancel();
       return;
     }
-    _latestEventVersion = value.stateVersion;
-    _joinRide(value.id);
+    _latestEventVersion = activeValue.stateVersion;
+    unawaited(_loadDriverVehicleMarker(activeValue.vehicleType));
+    _joinRide(activeValue.id);
     if (shouldTrackDriver) {
       await _startLocationTracking();
     } else {
       await _stopLocationTracking();
     }
-    if (value.rideStatus.isActive) {
+    if (activeValue.rideStatus.isActive) {
       await refreshRoute(silent: true);
       _startRouteRefresh();
     }
@@ -388,6 +439,30 @@ class ActiveRideController extends GetxService with WidgetsBindingObserver {
     }
   }
 
+  Future<bool> submitReview({
+    required ActiveRideModel completedRide,
+    required int rating,
+    String comment = '',
+  }) async {
+    if (isActionLoading.value) return false;
+    isActionLoading.value = true;
+    errorMessage.value = '';
+    try {
+      final ActiveRideModel reviewed = await _repository.submitReview(
+        completedRide.id,
+        rating: rating,
+        comment: comment,
+      );
+      lastCompletedRide.value = reviewed;
+      return true;
+    } on CommunicationApiException catch (error) {
+      errorMessage.value = error.message;
+      return false;
+    } finally {
+      isActionLoading.value = false;
+    }
+  }
+
   String _actionKey(String rideId, String action) {
     final String prefix = '$rideId:$action:';
     final String existing = _actionKeys.firstWhere(
@@ -446,8 +521,43 @@ class ActiveRideController extends GetxService with WidgetsBindingObserver {
     currentPosition.value = location;
     isOffline.value = false;
     _sendLocation(location);
+    _refreshRouteAfterLiveLocation(location);
     _refreshIfOffRoute(location);
     if (isFollowingDriver.value) recenter();
+  }
+
+  void _refreshRouteAfterLiveLocation(RideCoordinateModel location) {
+    final ActiveRideModel? current = ride.value;
+    if (current == null ||
+        !current.rideStatus.isActive ||
+        !location.isValid ||
+        isRouteLoading.value) {
+      return;
+    }
+    final RideCoordinateModel? target =
+        routePhase == 'destination' ? current.destination : current.pickup;
+    if (target?.isValid != true) return;
+    final List<LatLng> points = polylinePoints;
+    final bool needsFirstRoute = points.isEmpty || routeError.value.isNotEmpty;
+    final bool routeStartsBehindDriver = !needsFirstRoute &&
+        Geolocator.distanceBetween(
+              location.latitude,
+              location.longitude,
+              points.first.latitude,
+              points.first.longitude,
+            ) >
+            60;
+    if (!needsFirstRoute && !routeStartsBehindDriver) return;
+    final DateTime now = DateTime.now();
+    final Duration minimumRefreshGap = needsFirstRoute
+        ? const Duration(seconds: 12)
+        : const Duration(seconds: 30);
+    if (_lastLiveRouteRefreshAt != null &&
+        now.difference(_lastLiveRouteRefreshAt!) < minimumRefreshGap) {
+      return;
+    }
+    _lastLiveRouteRefreshAt = now;
+    unawaited(refreshRoute(silent: true));
   }
 
   void _refreshIfOffRoute(RideCoordinateModel location) {
@@ -526,6 +636,7 @@ class ActiveRideController extends GetxService with WidgetsBindingObserver {
     _lastLocationSentAt = null;
     _lastLocationSent = null;
     _lastDeviationRefreshAt = null;
+    _lastLiveRouteRefreshAt = null;
   }
 
   void attachMap(GoogleMapController controller) {
@@ -533,15 +644,25 @@ class ActiveRideController extends GetxService with WidgetsBindingObserver {
     fitRouteOverview();
   }
 
+  void handleMapMoveStarted() {
+    if (_isProgrammaticCameraMove) return;
+    isFollowingDriver.value = false;
+  }
+
   void recenter() {
     final RideCoordinateModel? location =
         currentPosition.value ?? ride.value?.lastDriverLocation;
     if (location == null || !location.isValid) return;
     isFollowingDriver.value = true;
-    mapController?.animateCamera(
-      CameraUpdate.newLatLngZoom(
-        LatLng(location.latitude, location.longitude),
-        16,
+    final CameraPosition position = CameraPosition(
+      target: _navigationCameraTarget(location, polylinePoints),
+      zoom: 17,
+      bearing: _navigationBearing(location, polylinePoints),
+      tilt: 45,
+    );
+    unawaited(
+      _animateRideCamera(
+        CameraUpdate.newCameraPosition(position),
       ),
     );
   }
@@ -559,8 +680,8 @@ class ActiveRideController extends GetxService with WidgetsBindingObserver {
       return;
     }
     isFollowingDriver.value = false;
-    mapController?.animateCamera(
-      CameraUpdate.newLatLngBounds(
+    unawaited(
+      _animateRideCamera(CameraUpdate.newLatLngBounds(
         LatLngBounds(
           southwest: LatLng(
             min(origin.latitude, target.latitude),
@@ -572,12 +693,118 @@ class ActiveRideController extends GetxService with WidgetsBindingObserver {
           ),
         ),
         64,
-      ),
+      )),
     );
   }
 
   List<LatLng> get polylinePoints =>
       decodePolyline(route.value?.encodedPolyline ?? '');
+
+  Future<void> _animateRideCamera(CameraUpdate update) async {
+    final GoogleMapController? controller = mapController;
+    if (controller == null) return;
+    final int generation = ++_cameraAnimationGeneration;
+    _isProgrammaticCameraMove = true;
+    try {
+      await controller.animateCamera(update);
+    } catch (error) {
+      debugPrint('Skipped active ride camera update: $error');
+    } finally {
+      Timer(const Duration(milliseconds: 350), () {
+        if (_cameraAnimationGeneration == generation) {
+          _isProgrammaticCameraMove = false;
+        }
+      });
+    }
+  }
+
+  @visibleForTesting
+  static LatLng navigationCameraTargetForTest(
+    RideCoordinateModel location,
+    List<LatLng> routePoints,
+  ) =>
+      _navigationCameraTarget(location, routePoints);
+
+  @visibleForTesting
+  static double navigationBearingForTest(
+    RideCoordinateModel location,
+    List<LatLng> routePoints,
+  ) =>
+      _navigationBearing(location, routePoints);
+
+  static LatLng _navigationCameraTarget(
+    RideCoordinateModel location,
+    List<LatLng> routePoints,
+  ) {
+    final LatLng driver = LatLng(location.latitude, location.longitude);
+    final LatLng? lookAhead = _routeLookAheadPoint(driver, routePoints);
+    if (lookAhead == null) return driver;
+    return LatLng(
+      driver.latitude + (lookAhead.latitude - driver.latitude) * 0.35,
+      driver.longitude + (lookAhead.longitude - driver.longitude) * 0.35,
+    );
+  }
+
+  static double _navigationBearing(
+    RideCoordinateModel location,
+    List<LatLng> routePoints,
+  ) {
+    final double? heading = location.heading;
+    if (heading != null && heading.isFinite) return heading % 360;
+    final LatLng driver = LatLng(location.latitude, location.longitude);
+    final LatLng? lookAhead = _routeLookAheadPoint(driver, routePoints);
+    if (lookAhead == null) return 0;
+    return Geolocator.bearingBetween(
+      driver.latitude,
+      driver.longitude,
+      lookAhead.latitude,
+      lookAhead.longitude,
+    );
+  }
+
+  static LatLng? _routeLookAheadPoint(
+    LatLng driver,
+    List<LatLng> routePoints,
+  ) {
+    if (routePoints.length < 2) return null;
+    int nearestIndex = 0;
+    double nearestMeters = double.infinity;
+    for (int i = 0; i < routePoints.length; i++) {
+      final LatLng point = routePoints[i];
+      final double distance = Geolocator.distanceBetween(
+        driver.latitude,
+        driver.longitude,
+        point.latitude,
+        point.longitude,
+      );
+      if (distance < nearestMeters) {
+        nearestMeters = distance;
+        nearestIndex = i;
+      }
+    }
+    const double lookAheadMeters = 140;
+    double travelled = 0;
+    LatLng previous = nearestIndex == 0 ? driver : routePoints[nearestIndex];
+    for (int i = max(1, nearestIndex + 1); i < routePoints.length; i++) {
+      final LatLng next = routePoints[i];
+      final double segmentMeters = Geolocator.distanceBetween(
+        previous.latitude,
+        previous.longitude,
+        next.latitude,
+        next.longitude,
+      );
+      if (travelled + segmentMeters >= lookAheadMeters && segmentMeters > 0) {
+        final double ratio = (lookAheadMeters - travelled) / segmentMeters;
+        return LatLng(
+          previous.latitude + (next.latitude - previous.latitude) * ratio,
+          previous.longitude + (next.longitude - previous.longitude) * ratio,
+        );
+      }
+      travelled += segmentMeters;
+      previous = next;
+    }
+    return routePoints.last;
+  }
 
   @visibleForTesting
   static List<LatLng> decodePolyline(String encoded) {

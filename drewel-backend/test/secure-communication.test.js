@@ -79,6 +79,17 @@ test("call idempotency lookup is scoped to ride, caller and key", () => {
   assert.match(source, /findOne\(\{ rideId: ride\._id, callerId: principal\.id, idempotencyKey: key \}\)/);
 });
 
+test("call initiation relies on ride communication policy, not driver discovery availability", () => {
+  const source = fs.readFileSync(new URL("../src/services/callSessionService.js", import.meta.url), "utf8");
+  const start = source.indexOf("export const initiateCall");
+  const end = source.indexOf("export const getAuthorizedCall", start);
+  const block = source.slice(start, end);
+  assert.match(block, /assertRideParticipant\(principal, rideId, \{ requireContact: true \}\)/);
+  assert.doesNotMatch(block, /buildFreshDubaiMarketplaceAvailabilityFilter/);
+  assert.doesNotMatch(block, /Driver\.exists/);
+  assert.doesNotMatch(block, /DRIVER_NOT_AVAILABLE/);
+});
+
 test("call DTO never exposes Agora credentials or idempotency data", () => {
   const call = new CallSession({
     rideId: "69ca8d07657eef3a66dd6a11",

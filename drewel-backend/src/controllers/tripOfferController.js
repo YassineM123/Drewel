@@ -33,6 +33,21 @@ const sendError = (res, error) => {
   });
 };
 
+const parseMissionPoint = (value, field) => {
+  if (!value || typeof value !== "object") return null;
+  const lat = Number(value.lat);
+  const long = Number(value.long);
+  const address = String(value.address || "").trim();
+  if (
+    !Number.isFinite(lat) || lat < -90 || lat > 90 ||
+    !Number.isFinite(long) || long < -180 || long > 180 ||
+    address.length > 300
+  ) {
+    throw new PointsValidationError(`${field} must contain valid lat and long`);
+  }
+  return { lat, long, address };
+};
+
 const parseOfferPayload = (body = {}) => {
   const offeredPrice = Number(body.offeredPrice);
   if (!Number.isFinite(offeredPrice) || offeredPrice < 0 || offeredPrice > 1_000_000_000) {
@@ -50,6 +65,8 @@ const parseOfferPayload = (body = {}) => {
       max: 200,
       pattern: /^[A-Za-z0-9][A-Za-z0-9._:-]+$/,
     }),
+    pickup: parseMissionPoint(body.pickup, "pickup"),
+    destination: parseMissionPoint(body.destination, "destination"),
     offeredPrice,
     currency,
     vehicleType: String(body.vehicleType || "").trim().slice(0, 120),
@@ -59,6 +76,7 @@ const parseOfferPayload = (body = {}) => {
 
 export const sendTripOffer = async (req, res) => {
   let authenticatedDriverId = null;
+  let createdOfferId = null;
   try {
     const principal = await resolvePrincipal(req.user?._id);
     if (principal.role !== "driver") {
@@ -78,13 +96,76 @@ export const sendTripOffer = async (req, res) => {
       idempotencyKey,
       requestFingerprint,
     });
-    return res.status(result.idempotent ? 200 : 201).json({
+    createdOfferId = result.offer._id;
+    const accepted = await acceptTripOffer({
+      offerId: result.offer._id,
+      passengerId: result.offer.passengerId,
+      idempotencyKey,
+      confirmedBy: principal.id,
+      actorRole: "driver",
+    });
+    if (accepted.expired) {
+      return res.status(410).json({
+        success: false,
+        code: "TRIP_OFFER_EXPIRED",
+        offer: toTripOfferDto(accepted.offer),
+      });
+    }
+    const rideEvent = {
+      rideId: String(accepted.ride._id),
+      offerId: String(accepted.offer._id),
+      status: accepted.ride.status,
+    };
+    io.to(`ride:${accepted.ride._id}`)
+      .to(String(accepted.offer.driverId))
+      .to(String(accepted.offer.passengerId))
+      .emit(accepted.idempotent ? "ride:status_changed" : "ride:created", rideEvent);
+    io.to(String(accepted.offer.driverId))
+      .to(String(accepted.offer.passengerId))
+      .emit("ride:state", rideEvent);
+    io.emit("driver:availability", {
+      driverId: String(accepted.offer.driverId),
+      status: "Busy",
+      isAvailable: false,
+    });
+    const conversation = await ensureConversationForRide(accepted.ride);
+    await emitConversationUpdated(conversation);
+    await notifyTripOfferAccepted({ ride: accepted.ride, actorRole: "driver" });
+    const cancelledContacts = await Ride.find({
+      _id: { $ne: accepted.ride._id },
+      $or: [{ passengerId: accepted.offer.passengerId }, { driverId: accepted.offer.driverId }],
+      status: { $regex: /^cancelled/ },
+    })
+      .select("_id")
+      .lean();
+    for (const contact of cancelledContacts) {
+      const synced = await syncConversationForRideId(contact._id);
+      await emitConversationUpdated(synced);
+    }
+    return res.status(result.idempotent || accepted.idempotent ? 200 : 201).json({
       success: true,
-      offer: toTripOfferDto(result.offer),
-      wallet: getOfferWalletDto(result.wallet, result.offer.pointsCost),
-      idempotent: result.idempotent,
+      offer: toTripOfferDto(accepted.offer),
+      ride: accepted.ride,
+      wallet: accepted.wallet
+        ? getOfferWalletDto(accepted.wallet, accepted.offer.pointsCost)
+        : null,
+      idempotent: result.idempotent || accepted.idempotent,
+      pickupPin: accepted.pickupPin,
     });
   } catch (error) {
+    if (createdOfferId) {
+      try {
+        await closeTripOffer({
+          offerId: createdOfferId,
+          actorId: authenticatedDriverId,
+          actorRole: "driver",
+          terminalStatus: "delivery_failed",
+          reason: "Trip offer auto-confirmation failed",
+        });
+      } catch (closeError) {
+        console.error("Trip offer auto-confirm cleanup failed", closeError.message);
+      }
+    }
     if (error?.code === 11000) {
       return res.status(409).json({
         success: false,

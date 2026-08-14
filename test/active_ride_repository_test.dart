@@ -52,4 +52,46 @@ void main() {
     expect(body['status'], 'driver_on_the_way');
     expect((body['location'] as Map)['lat'], 36.8);
   });
+
+  test('submit review sends bounded rating and trimmed comment', () async {
+    late http.Request captured;
+    final ActiveRideRepository repository = ActiveRideRepository(
+      CommunicationApiClient(
+        client: MockClient((http.Request request) async {
+          captured = request;
+          return http.Response(
+            jsonEncode(<String, dynamic>{
+              'ride': <String, dynamic>{
+                'id': 'ride-1',
+                'status': 'completed',
+                'contactAllowed': false,
+                'reviews': <String, dynamic>{
+                  'driver': <String, dynamic>{
+                    'rating': 5,
+                    'comment': 'Great passenger',
+                  },
+                },
+              },
+            }),
+            200,
+            headers: <String, String>{'content-type': 'application/json'},
+          );
+        }),
+      ),
+    );
+
+    final ActiveRideModel ride = await repository.submitReview(
+      'ride-1',
+      rating: 5,
+      comment: '  Great passenger  ',
+    );
+
+    expect(captured.method, 'POST');
+    expect(captured.url.path.endsWith('/rides/ride-1/review'), isTrue);
+    final Map<String, dynamic> body =
+        Map<String, dynamic>.from(jsonDecode(captured.body) as Map);
+    expect(body['rating'], 5);
+    expect(body['comment'], 'Great passenger');
+    expect(ride.driverReview?.rating, 5);
+  });
 }

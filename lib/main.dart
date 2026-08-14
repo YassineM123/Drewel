@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:get/get.dart';
@@ -15,9 +16,17 @@ import 'app/modules/active_ride/bindings/active_ride_binding.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   final NotificationSoundService soundService = NotificationSoundService();
-  unawaited(soundService.init());
   final PushNotificationService pushService = PushNotificationService();
-  unawaited(pushService.init());
+  WidgetsBinding.instance.addPostFrameCallback((_) {
+    _startOptionalService(
+      'Notification sounds',
+      soundService.init,
+    );
+    _startOptionalService(
+      'Push notifications',
+      pushService.init,
+    );
+  });
   runApp(
     GetMaterialApp(
       title: "Drewel",
@@ -41,5 +50,17 @@ Future<void> main() async {
         GlobalCupertinoLocalizations.delegate,
       ],
     ),
+  );
+}
+
+void _startOptionalService(
+  String label,
+  Future<void> Function() init,
+) {
+  unawaited(
+    init().catchError((Object error, StackTrace stackTrace) {
+      debugPrint('$label unavailable: $error');
+      if (kDebugMode) debugPrintStack(stackTrace: stackTrace);
+    }),
   );
 }

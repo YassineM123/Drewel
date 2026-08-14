@@ -133,6 +133,21 @@ class ActiveRideRepository {
         ),
       );
 
+  Future<ActiveRideModel> submitReview(
+    String rideId, {
+    required int rating,
+    String comment = '',
+  }) async =>
+      _readRide(
+        await _api.post(
+          '${ApiUrlConstants.baseUrl}rides/$rideId/review',
+          <String, dynamic>{
+            'rating': rating,
+            if (comment.trim().isNotEmpty) 'comment': comment.trim(),
+          },
+        ),
+      );
+
   Future<void> updateDriverLocation(
     String rideId,
     RideCoordinateModel location,

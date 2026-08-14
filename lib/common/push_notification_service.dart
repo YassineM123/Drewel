@@ -65,7 +65,8 @@ class PushNotificationService extends GetxService {
     AndroidNotificationChannel(
       'drewel_rides',
       'Ride updates',
-      description: 'General ride updates such as driver accepted and ride completed.',
+      description:
+          'General ride updates such as driver accepted and ride completed.',
       importance: Importance.defaultImportance,
     ),
     AndroidNotificationChannel(
@@ -79,7 +80,10 @@ class PushNotificationService extends GetxService {
   static AndroidNotificationChannel channelForType(String type) {
     final String t = type.toUpperCase();
     if (t == 'RIDE_REQUEST' || t == 'NEW_RIDE') return channels[0];
-    if (t == 'CALL' || t == 'INCOMING_CALL' || t == 'MISSED_CALL' || t == 'CALL_MISSED') {
+    if (t == 'CALL' ||
+        t == 'INCOMING_CALL' ||
+        t == 'MISSED_CALL' ||
+        t == 'CALL_MISSED') {
       return channels[1];
     }
     if (t == 'RIDE_MESSAGE' || t == 'CHAT') return channels[2];
@@ -95,7 +99,10 @@ class PushNotificationService extends GetxService {
   static String soundAssetForType(String type) {
     final String t = type.toUpperCase();
     if (t == 'RIDE_REQUEST' || t == 'NEW_RIDE') return 'drewel_ride_request';
-    if (t == 'CALL' || t == 'INCOMING_CALL' || t == 'MISSED_CALL' || t == 'CALL_MISSED') {
+    if (t == 'CALL' ||
+        t == 'INCOMING_CALL' ||
+        t == 'MISSED_CALL' ||
+        t == 'CALL_MISSED') {
       return 'drewel_call';
     }
     if (t == 'RIDE_MESSAGE' || t == 'CHAT') return 'drewel_message';
@@ -127,13 +134,12 @@ class PushNotificationService extends GetxService {
             requestSoundPermission: false,
           ),
         ),
-        onDidReceiveNotificationResponse:
-            (NotificationResponse response) => _handleTap(response.payload),
+        onDidReceiveNotificationResponse: (NotificationResponse response) =>
+            _handleTap(response.payload),
       );
       final AndroidFlutterLocalNotificationsPlugin? android =
-          _localNotifications!
-              .resolvePlatformSpecificImplementation<
-                  AndroidFlutterLocalNotificationsPlugin>();
+          _localNotifications!.resolvePlatformSpecificImplementation<
+              AndroidFlutterLocalNotificationsPlugin>();
       for (final AndroidNotificationChannel channel in channels) {
         try {
           await android?.createNotificationChannel(channel);
@@ -217,7 +223,8 @@ class PushNotificationService extends GetxService {
     if (plugin == null) return;
     final String type = (data['type'] ?? 'GENERAL').toString();
     final String title = (data['title'] ?? '').toString().trim();
-    final String body = (data['body'] ?? data['message'] ?? '').toString().trim();
+    final String body =
+        (data['body'] ?? data['message'] ?? '').toString().trim();
     if (title.isEmpty && body.isEmpty) return;
     final String idString = (data['id'] ?? data['messageId'] ?? '').toString();
     final int id = idString.hashCode & 0x7fffffff;
@@ -251,6 +258,7 @@ class PushNotificationService extends GetxService {
 
   /// Registers the FCM token for the current session (if signed in).
   Future<void> registerCurrentToken() async {
+    if (!_fcmAvailable) return;
     try {
       await _registerToken(await FirebaseMessaging.instance.getToken());
     } catch (error) {

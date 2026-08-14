@@ -24,6 +24,13 @@ void main() {
           'stateVersion': 7,
           'contactAllowed': true,
           'pickupPin': '4217',
+          'reviews': <String, dynamic>{
+            'passenger': <String, dynamic>{
+              'rating': 4,
+              'comment': 'Good trip',
+              'submittedAt': '2026-08-14T10:00:00.000Z',
+            },
+          },
           'pickup': <String, dynamic>{
             'lat': 36.8,
             'long': 10.18,
@@ -59,6 +66,8 @@ void main() {
       expect(ride.route?.durationSeconds, 600);
       expect(ride.route?.steps.single.instruction, 'Turn right');
       expect(ride.stateVersion, 7);
+      expect(ride.passengerReview?.rating, 4);
+      expect(ride.passengerReview?.comment, 'Good trip');
     });
 
     test('rejects malformed coordinates locally', () {

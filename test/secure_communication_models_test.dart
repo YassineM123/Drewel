@@ -57,6 +57,35 @@ void main() {
       expect(call.credentials?.channelName, 'random-channel');
     });
 
+    test('merges call state without dropping temporary credentials', () {
+      final CallSessionModel accepted = CallSessionModel.fromJson(
+        <String, dynamic>{
+          '_id': 'call-1',
+          'rideId': 'ride-1',
+          'status': 'accepted',
+          'credentials': <String, dynamic>{
+            'appId': 'public-app-id',
+            'channelName': 'random-channel',
+            'uid': 42,
+            'token': 'temporary-token',
+          },
+        },
+      );
+      final CallSessionModel connected = accepted.mergeRuntimeState(
+        CallSessionModel.fromJson(<String, dynamic>{
+          '_id': 'call-1',
+          'rideId': 'ride-1',
+          'status': 'connected',
+          'connectedAt': '2026-08-14T12:00:00.000Z',
+        }),
+      );
+
+      expect(connected.status, CallSessionStatus.connected);
+      expect(connected.credentials?.token, 'temporary-token');
+      expect(connected.connectedAt?.toUtc().toIso8601String(),
+          '2026-08-14T12:00:00.000Z');
+    });
+
     test('defaults unknown message status to sent', () {
       final RideMessageModel message = RideMessageModel.fromJson(
         <String, dynamic>{

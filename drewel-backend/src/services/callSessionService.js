@@ -3,8 +3,6 @@ import mongoose from "mongoose";
 import CommunicationAudit from "../models/CommunicationAudit.js";
 import { assertRideParticipant, counterpartFor } from "./rideCommunicationPolicy.js";
 import { buildAgoraToken, generateAgoraChannelName, generateAgoraUid } from "./agoraTokenService.js";
-import Driver from "../models/Driver.js";
-import { buildFreshDubaiMarketplaceAvailabilityFilter } from "../utils/availableDrivers.js";
 import { dispatchNotification } from "./notificationService.js";
 
 export class CallStateError extends Error {
@@ -44,15 +42,6 @@ export const toCallDto = (call) => ({
 export const initiateCall = async ({ principal, rideId, idempotencyKey = "" }) => {
   const { ride, participantRole } = await assertRideParticipant(principal, rideId, { requireContact: true });
   const counterpart = counterpartFor(ride, participantRole);
-  if (ride.status === "contacting") {
-    const availableDriver = await Driver.exists({
-      _id: ride.driverId,
-      ...buildFreshDubaiMarketplaceAvailabilityFilter(),
-    });
-    if (!availableDriver) {
-      throw new CallStateError("Driver is unavailable", 409, "DRIVER_NOT_AVAILABLE");
-    }
-  }
   const key = String(idempotencyKey || "").trim().slice(0, 100);
   if (key) {
     const existing = await CallSession.findOne({ rideId: ride._id, callerId: principal.id, idempotencyKey: key });

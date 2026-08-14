@@ -61,6 +61,22 @@ const rideDto = (ride) => ({
   pickupConfirmedAt: ride.pickupConfirmedAt,
   lastDriverLocation: ride.lastDriverLocation,
   cancellation: ride.cancellation,
+  reviews: {
+    passenger: ride.reviews?.passenger
+      ? {
+          rating: ride.reviews.passenger.rating,
+          comment: ride.reviews.passenger.comment || "",
+          submittedAt: ride.reviews.passenger.submittedAt,
+        }
+      : null,
+    driver: ride.reviews?.driver
+      ? {
+          rating: ride.reviews.driver.rating,
+          comment: ride.reviews.driver.comment || "",
+          submittedAt: ride.reviews.driver.submittedAt,
+        }
+      : null,
+  },
   ...(ride.status !== "contacting"
     ? {
         pickup: ride.pickup,
@@ -157,6 +173,39 @@ const sendError = (res, error) => res.status(error.statusCode || 500).json({
   code: error.code || "INTERNAL_ERROR",
   message: error.statusCode ? error.message : "Internal server error",
 });
+
+const normalizeReviewInput = (body = {}) => {
+  const rating = Number(body.rating);
+  if (!Number.isInteger(rating) || rating < 1 || rating > 5) {
+    throw new CommunicationPolicyError("Rating must be a whole number from 1 to 5", 400, "INVALID_RATING");
+  }
+  const comment = String(body.comment || "").trim().replace(/\s+/g, " ");
+  if (comment.length > 500) {
+    throw new CommunicationPolicyError("Review comment must be 500 characters or less", 400, "REVIEW_COMMENT_TOO_LONG");
+  }
+  return { rating, comment };
+};
+
+const recalculateDriverRating = async (driverId) => {
+  const [summary] = await Ride.aggregate([
+    {
+      $match: {
+        driverId: new mongoose.Types.ObjectId(String(driverId)),
+        "reviews.passenger.rating": { $gte: 1, $lte: 5 },
+      },
+    },
+    {
+      $group: {
+        _id: "$driverId",
+        averageRating: { $avg: "$reviews.passenger.rating" },
+      },
+    },
+  ]);
+  await Driver.updateOne(
+    { _id: driverId },
+    { $set: { rating: summary ? Math.round(summary.averageRating * 10) / 10 : null } }
+  );
+};
 
 const hasMissionPointInput = (value) =>
   value && (value.lat !== undefined || value.long !== undefined || value.address !== undefined);
@@ -593,6 +642,55 @@ export const cancelRide = async (req, res) => {
           : "cancelled_by_admin";
     req.body = { ...req.body, status: nextStatus };
     return transitionRide(req, res);
+  } catch (error) {
+    return sendError(res, error);
+  }
+};
+
+export const submitRideReview = async (req, res) => {
+  try {
+    const principal = await resolvePrincipal(req.user?._id);
+    if (principal.role === "admin") {
+      throw new CommunicationPolicyError("Admins cannot submit participant ride reviews", 403, "PARTICIPANT_REQUIRED");
+    }
+    const { ride, participantRole } = await assertRideParticipant(principal, req.params.rideId);
+    if (ride.status !== "completed") {
+      throw new CommunicationPolicyError("Ride reviews are available after completion only", 409, "RIDE_NOT_COMPLETED");
+    }
+    const reviewPath = `reviews.${participantRole}`;
+    if (ride.reviews?.[participantRole]?.rating != null) {
+      throw new CommunicationPolicyError("You already reviewed this ride", 409, "REVIEW_ALREADY_SUBMITTED");
+    }
+    const input = normalizeReviewInput(req.body);
+    const updated = await Ride.findOneAndUpdate(
+      {
+        _id: ride._id,
+        status: "completed",
+        [reviewPath]: null,
+      },
+      {
+        $set: {
+          [reviewPath]: {
+            rating: input.rating,
+            comment: input.comment,
+            submittedBy: principal.id,
+            submittedAt: new Date(),
+          },
+        },
+      },
+      { new: true, runValidators: true }
+    );
+    if (!updated) {
+      throw new CommunicationPolicyError("You already reviewed this ride", 409, "REVIEW_ALREADY_SUBMITTED");
+    }
+    if (participantRole === "passenger") {
+      await recalculateDriverRating(updated.driverId);
+    }
+    io.to(String(updated.passengerId)).to(String(updated.driverId)).emit("ride:reviewed", {
+      rideId: String(updated._id),
+      reviewerRole: participantRole,
+    });
+    return res.json({ success: true, ride: await participantRideDto(updated, principal) });
   } catch (error) {
     return sendError(res, error);
   }

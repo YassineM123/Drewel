@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:get/get.dart';
@@ -75,7 +76,15 @@ class _RideChatScreenState extends State<RideChatScreen> {
   /// read-only just because that global controller has not refreshed yet.
   // `contactAllowed` is the backend policy result for this exact ride. It
   // intentionally supports the server-defined post-completion grace period.
-  bool get _canChat => _routeRide?.contactAllowed == true;
+  bool get _canChat => _routeRide?.canCommunicate == true;
+
+  bool get _isDesktopPlatform =>
+      !kIsWeb &&
+      <TargetPlatform>{
+        TargetPlatform.windows,
+        TargetPlatform.macOS,
+        TargetPlatform.linux,
+      }.contains(defaultTargetPlatform);
 
   String get _chatTitle {
     final RideConversationModel? conversation = _conversation;
@@ -152,6 +161,7 @@ class _RideChatScreenState extends State<RideChatScreen> {
         _incomingOffers
           ..clear()
           ..addAll(incoming);
+        if (_failedMessageText == null) _error = null;
         if (showLoader) _loading = false;
       });
       for (final RideMessageModel message in messages.where(
@@ -311,12 +321,6 @@ class _RideChatScreenState extends State<RideChatScreen> {
                       ? const SizedBox.shrink()
                       : TripOfferStatusCard(
                           offer: offer,
-                          onAccept: _offerActionLoading == offer.id
-                              ? null
-                              : () => _respondToOffer(offer, accept: true),
-                          onDecline: _offerActionLoading == offer.id
-                              ? null
-                              : () => _respondToOffer(offer, accept: false),
                         );
                 }),
               for (final TripOffer offer in _incomingOffers)
@@ -512,22 +516,30 @@ class _RideChatScreenState extends State<RideChatScreen> {
     final String? rideId = _rideId;
     if (rideId == null || _sending) return;
     final RideCoordinateModel? existingPickup = _routeRide?.pickup;
-    LatLng pickup;
-    String pickupAddress;
-    if (existingPickup?.isValid == true) {
-      pickup = LatLng(existingPickup!.latitude, existingPickup.longitude);
-      pickupAddress = existingPickup.address;
+    TripRouteRequest? route;
+    if (existingPickup?.isValid != true && _isDesktopPlatform) {
+      route = await _showManualTripRouteDialog();
     } else {
-      final Position? position = await _currentPassengerPosition();
-      if (position == null || !mounted) return;
-      pickup = LatLng(position.latitude, position.longitude);
-      pickupAddress = 'Current location';
+      LatLng pickup;
+      String pickupAddress;
+      if (existingPickup?.isValid == true) {
+        pickup = LatLng(existingPickup!.latitude, existingPickup.longitude);
+        pickupAddress = existingPickup.address;
+      } else {
+        final Position? position = await _currentPassengerPosition();
+        if (position == null || !mounted) return;
+        pickup = LatLng(position.latitude, position.longitude);
+        pickupAddress = 'Current location';
+      }
+      route = await showTripRequestMapSheet(
+        context,
+        pickup: pickup,
+        pickupAddress: pickupAddress,
+      );
     }
-    final TripRouteRequest? route = await showTripRequestMapSheet(
-      context,
-      pickup: pickup,
-      pickupAddress: pickupAddress,
-    );
+    if (route == null && _isDesktopPlatform && mounted) {
+      route = await _showManualTripRouteDialog();
+    }
     if (route == null || !mounted) return;
     final TextEditingController price = TextEditingController();
     final TextEditingController currency = TextEditingController(text: 'AED');
@@ -620,6 +632,160 @@ class _RideChatScreenState extends State<RideChatScreen> {
     }
   }
 
+  Future<TripRouteRequest?> _showManualTripRouteDialog() async {
+    final TextEditingController pickup = TextEditingController(
+      text: _routeRide?.pickup?.address ?? '',
+    );
+    final TextEditingController pickupLat = TextEditingController(
+      text: _routeRide?.pickup?.isValid == true
+          ? _routeRide!.pickup!.latitude.toStringAsFixed(6)
+          : '',
+    );
+    final TextEditingController pickupLong = TextEditingController(
+      text: _routeRide?.pickup?.isValid == true
+          ? _routeRide!.pickup!.longitude.toStringAsFixed(6)
+          : '',
+    );
+    final TextEditingController destination = TextEditingController(
+      text: _routeRide?.destination?.address ?? '',
+    );
+    final TextEditingController destinationLat = TextEditingController(
+      text: _routeRide?.destination?.isValid == true
+          ? _routeRide!.destination!.latitude.toStringAsFixed(6)
+          : '',
+    );
+    final TextEditingController destinationLong = TextEditingController(
+      text: _routeRide?.destination?.isValid == true
+          ? _routeRide!.destination!.longitude.toStringAsFixed(6)
+          : '',
+    );
+    final bool? confirmed = await showDialog<bool>(
+      context: context,
+      builder: (BuildContext dialogContext) => AlertDialog(
+        icon: const CircleAvatar(
+          backgroundColor: Color(0x1FBE1B2C),
+          child: Icon(Icons.route_rounded, color: primaryColor),
+        ),
+        title: const Text('Trip route'),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              TextField(
+                controller: pickup,
+                decoration: const InputDecoration(labelText: 'Pickup address'),
+              ),
+              Row(
+                children: <Widget>[
+                  Expanded(
+                    child: TextField(
+                      controller: pickupLat,
+                      keyboardType:
+                          const TextInputType.numberWithOptions(decimal: true),
+                      decoration:
+                          const InputDecoration(labelText: 'Pickup lat'),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: TextField(
+                      controller: pickupLong,
+                      keyboardType:
+                          const TextInputType.numberWithOptions(decimal: true),
+                      decoration:
+                          const InputDecoration(labelText: 'Pickup long'),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              TextField(
+                controller: destination,
+                decoration:
+                    const InputDecoration(labelText: 'Destination address'),
+              ),
+              Row(
+                children: <Widget>[
+                  Expanded(
+                    child: TextField(
+                      controller: destinationLat,
+                      keyboardType:
+                          const TextInputType.numberWithOptions(decimal: true),
+                      decoration:
+                          const InputDecoration(labelText: 'Destination lat'),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: TextField(
+                      controller: destinationLong,
+                      keyboardType:
+                          const TextInputType.numberWithOptions(decimal: true),
+                      decoration:
+                          const InputDecoration(labelText: 'Destination long'),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+        actions: <Widget>[
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () {
+              final bool valid = pickup.text.trim().isNotEmpty &&
+                  destination.text.trim().isNotEmpty &&
+                  double.tryParse(pickupLat.text.trim()) != null &&
+                  double.tryParse(pickupLong.text.trim()) != null &&
+                  double.tryParse(destinationLat.text.trim()) != null &&
+                  double.tryParse(destinationLong.text.trim()) != null;
+              if (!valid) return;
+              Navigator.pop(dialogContext, true);
+            },
+            child: const Text('Continue'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) {
+      _disposeControllers(<TextEditingController>[
+        pickup,
+        pickupLat,
+        pickupLong,
+        destination,
+        destinationLat,
+        destinationLong,
+      ]);
+      return null;
+    }
+    final TripRouteRequest route = TripRouteRequest(
+      pickup: <String, dynamic>{
+        'address': pickup.text.trim(),
+        'lat': double.parse(pickupLat.text.trim()),
+        'long': double.parse(pickupLong.text.trim()),
+      },
+      destination: <String, dynamic>{
+        'address': destination.text.trim(),
+        'lat': double.parse(destinationLat.text.trim()),
+        'long': double.parse(destinationLong.text.trim()),
+      },
+    );
+    _disposeControllers(<TextEditingController>[
+      pickup,
+      pickupLat,
+      pickupLong,
+      destination,
+      destinationLat,
+      destinationLong,
+    ]);
+    return route;
+  }
+
   Future<Position?> _currentPassengerPosition() async {
     try {
       if (!await Geolocator.isLocationServiceEnabled()) {
@@ -707,10 +873,24 @@ class _RideChatScreenState extends State<RideChatScreen> {
           content: Text(
             result == SendOfferResult.insufficientPoints
                 ? 'points.insufficient'.tr
-                : 'points.send_failed'.tr,
+                : pointsController.lastSendOfferError?.trim().isNotEmpty == true
+                    ? pointsController.lastSendOfferError!.trim()
+                    : 'points.send_failed'.tr,
           ),
         ),
       );
+      return;
+    }
+    await _openConfirmedRide();
+  }
+
+  Future<void> _openConfirmedRide() async {
+    if (Get.isRegistered<ActiveRideController>()) {
+      await Get.find<ActiveRideController>().recover(showLoader: false);
+    }
+    await _communication.refreshActiveRide();
+    if (mounted) {
+      Get.offNamed(Routes.ACTIVE_RIDE);
     }
   }
 
@@ -1115,11 +1295,15 @@ class _RideChatScreenState extends State<RideChatScreen> {
           content: Text(
             result == SendOfferResult.insufficientPoints
                 ? 'points.insufficient'.tr
-                : 'points.send_failed'.tr,
+                : pointsController.lastSendOfferError?.trim().isNotEmpty == true
+                    ? pointsController.lastSendOfferError!.trim()
+                    : 'points.send_failed'.tr,
           ),
         ),
       );
+      return;
     }
+    await _openConfirmedRide();
   }
 
   void _disposeControllers(List<TextEditingController> controllers) {
@@ -2038,6 +2222,7 @@ class _IncomingOfferCard extends StatelessWidget {
     final String price = offer.offeredPrice == null
         ? 'Price to be confirmed'
         : '${offer.offeredPrice!.toStringAsFixed(2)} ${offer.currency ?? ''}';
+    final bool canRespond = offer.status == 'pending';
     return Card(
       margin: const EdgeInsets.fromLTRB(12, 8, 12, 0),
       elevation: 0,
@@ -2096,45 +2281,57 @@ class _IncomingOfferCard extends StatelessWidget {
               Text(offer.note!, style: const TextStyle(color: text2Color)),
             ],
             const SizedBox(height: 16),
-            Row(
-              children: <Widget>[
-                Expanded(
-                  child: OutlinedButton(
-                    style: OutlinedButton.styleFrom(
-                      minimumSize: const Size.fromHeight(48),
-                      foregroundColor: textColor,
-                      side: const BorderSide(color: Color(0xFFD9D1D3)),
+            if (canRespond) ...<Widget>[
+              Row(
+                children: <Widget>[
+                  Expanded(
+                    child: OutlinedButton(
+                      style: OutlinedButton.styleFrom(
+                        minimumSize: const Size.fromHeight(48),
+                        foregroundColor: textColor,
+                        side: const BorderSide(color: Color(0xFFD9D1D3)),
+                      ),
+                      onPressed: loading ? null : onDetails,
+                      child: const Text('Details'),
                     ),
-                    onPressed: loading ? null : onDetails,
-                    child: const Text('Details'),
                   ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: FilledButton(
-                    style: FilledButton.styleFrom(
-                      backgroundColor: primaryColor,
-                      foregroundColor: Colors.white,
-                      minimumSize: const Size.fromHeight(48),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: FilledButton(
+                      style: FilledButton.styleFrom(
+                        backgroundColor: primaryColor,
+                        foregroundColor: Colors.white,
+                        minimumSize: const Size.fromHeight(48),
+                      ),
+                      onPressed: loading ? null : onAccept,
+                      child: loading
+                          ? const SizedBox.square(
+                              dimension: 18,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Colors.white,
+                              ),
+                            )
+                          : const Text('Confirm drive'),
                     ),
-                    onPressed: loading ? null : onAccept,
-                    child: loading
-                        ? const SizedBox.square(
-                            dimension: 18,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: Colors.white,
-                            ),
-                          )
-                        : const Text('Confirm drive'),
                   ),
+                ],
+              ),
+              TextButton(
+                onPressed: loading ? null : onDecline,
+                child: const Text('Decline this offer'),
+              ),
+            ] else
+              FilledButton.icon(
+                style: FilledButton.styleFrom(
+                  backgroundColor: primaryColor,
+                  foregroundColor: Colors.white,
+                  minimumSize: const Size.fromHeight(48),
                 ),
-              ],
-            ),
-            TextButton(
-              onPressed: loading ? null : onDecline,
-              child: const Text('Decline this offer'),
-            ),
+                onPressed: onDetails,
+                icon: const Icon(Icons.check_circle_rounded),
+                label: const Text('Ride confirmed'),
+              ),
           ],
         ),
       ),

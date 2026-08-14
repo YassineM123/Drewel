@@ -74,6 +74,11 @@ class CallSessionModel {
 
   CallSessionModel copyWith({
     CallSessionStatus? status,
+    DateTime? startedAt,
+    DateTime? connectedAt,
+    DateTime? endedAt,
+    int? durationSeconds,
+    String? endReason,
     AgoraCredentialsModel? credentials,
   }) =>
       CallSessionModel(
@@ -82,12 +87,30 @@ class CallSessionModel {
         status: status ?? this.status,
         callerId: callerId,
         receiverId: receiverId,
-        startedAt: startedAt,
-        connectedAt: connectedAt,
-        endedAt: endedAt,
-        durationSeconds: durationSeconds,
-        endReason: endReason,
+        startedAt: startedAt ?? this.startedAt,
+        connectedAt: connectedAt ?? this.connectedAt,
+        endedAt: endedAt ?? this.endedAt,
+        durationSeconds: durationSeconds ?? this.durationSeconds,
+        endReason: endReason ?? this.endReason,
         credentials: credentials ?? this.credentials,
+      );
+
+  CallSessionModel mergeRuntimeState(CallSessionModel latest) =>
+      CallSessionModel(
+        id: latest.id,
+        rideId: latest.rideId,
+        status: latest.status,
+        callerId:
+            latest.callerId?.isNotEmpty == true ? latest.callerId : callerId,
+        receiverId: latest.receiverId?.isNotEmpty == true
+            ? latest.receiverId
+            : receiverId,
+        startedAt: latest.startedAt ?? startedAt,
+        connectedAt: latest.connectedAt ?? connectedAt,
+        endedAt: latest.endedAt ?? endedAt,
+        durationSeconds: latest.durationSeconds,
+        endReason: latest.endReason ?? endReason,
+        credentials: latest.credentials ?? credentials,
       );
 
   factory CallSessionModel.fromJson(Map<String, dynamic> json) {

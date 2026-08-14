@@ -386,12 +386,13 @@ class CallStateController extends GetxService with WidgetsBindingObserver {
           notificationFilter.value ?? NotificationFilter.all;
       final NotificationListResult result =
           await notificationRepository.list(filter: filter, page: page);
-      final List<AppNotificationModel> fresh =
-          <AppNotificationModel>[...notifications];
+      final List<AppNotificationModel> fresh = <AppNotificationModel>[
+        ...notifications
+      ];
       final Set<String> existingIds =
           fresh.map((AppNotificationModel item) => item.id).toSet();
-      fresh.addAll(result.notifications
-          .where((AppNotificationModel item) => !existingIds.contains(item.id)));
+      fresh.addAll(result.notifications.where(
+          (AppNotificationModel item) => !existingIds.contains(item.id)));
       notifications.assignAll(fresh);
       notificationsHasMore.value = result.hasMore;
     } catch (error) {
@@ -553,7 +554,8 @@ class CallStateController extends GetxService with WidgetsBindingObserver {
         return;
       }
       if (currentCall.value?.id != latest.id) return;
-      currentCall.value = latest;
+      currentCall.value =
+          currentCall.value?.mergeRuntimeState(latest) ?? latest;
       if (latest.status == CallSessionStatus.accepted &&
           Get.currentRoute == Routes.OUTGOING_CALL) {
         await connectOutgoingWhenAccepted();
@@ -612,6 +614,9 @@ class CallStateController extends GetxService with WidgetsBindingObserver {
   }
 
   Future<void> showIncomingCall(CallSessionModel call) async {
+    if (!hasAuthorizedRide || call.rideId != activeRide.value?.id) {
+      await refreshActiveRide();
+    }
     if (!hasAuthorizedRide || call.rideId != activeRide.value?.id) return;
     currentCall.value = call;
     // Start the looping ringtone before navigating. Duplicate ringing events
@@ -702,7 +707,8 @@ class CallStateController extends GetxService with WidgetsBindingObserver {
     try {
       final CallSessionModel latest = await callRepository.getCall(local.id);
       if (currentCall.value?.id != latest.id) return;
-      currentCall.value = latest;
+      currentCall.value =
+          currentCall.value?.mergeRuntimeState(latest) ?? latest;
       if (latest.status == CallSessionStatus.accepted) {
         _outgoingPollTimer?.cancel();
         await connectOutgoingWhenAccepted();
@@ -728,7 +734,9 @@ class CallStateController extends GetxService with WidgetsBindingObserver {
     if (call == null || _connectedAcknowledged) return;
     _connectedAcknowledged = true;
     try {
-      currentCall.value = await callRepository.connected(call.id);
+      final CallSessionModel connected =
+          await callRepository.connected(call.id);
+      currentCall.value = call.mergeRuntimeState(connected);
     } on CommunicationApiException catch (error) {
       _connectedAcknowledged = false;
       userFacingError.value = error.message;
@@ -736,8 +744,55 @@ class CallStateController extends GetxService with WidgetsBindingObserver {
   }
 
   Future<void> declineCall() => _finishRemoteAction(callRepository.decline);
-  Future<void> cancelCall() => _finishRemoteAction(callRepository.cancel);
+  Future<void> cancelCall() => _cancelOutgoingCall();
   Future<void> endCall() => _finishRemoteAction(callRepository.end);
+
+  Future<void> _cancelOutgoingCall() async {
+    final CallSessionModel? call = currentCall.value;
+    if (call == null || isBusy.value) return;
+    if (call.status == CallSessionStatus.accepted ||
+        call.status == CallSessionStatus.connected) {
+      await _finishRemoteAction(callRepository.end);
+      return;
+    }
+    isBusy.value = true;
+    bool shouldClose = false;
+    try {
+      final CallSessionModel latest = await callRepository.cancel(call.id);
+      currentCall.value = call.mergeRuntimeState(latest);
+      shouldClose = true;
+    } on CommunicationApiException catch (error) {
+      if (error.code == 'INVALID_CALL_STATE' || error.statusCode == 409) {
+        shouldClose = await _resolveCancelRace(call);
+      } else {
+        userFacingError.value = error.message;
+      }
+    } finally {
+      isBusy.value = false;
+    }
+    if (shouldClose) {
+      await _closeCallRoute();
+    }
+  }
+
+  Future<bool> _resolveCancelRace(CallSessionModel call) async {
+    try {
+      final CallSessionModel latest = await callRepository.getCall(call.id);
+      currentCall.value = call.mergeRuntimeState(latest);
+      if (latest.status == CallSessionStatus.accepted ||
+          latest.status == CallSessionStatus.connected) {
+        final CallSessionModel ended = await callRepository.end(call.id);
+        currentCall.value = latest.mergeRuntimeState(ended);
+        return true;
+      }
+      if (!latest.status.isActive) return true;
+      userFacingError.value = 'The call state changed. Please try again.';
+      return false;
+    } on CommunicationApiException catch (error) {
+      userFacingError.value = error.message;
+      return false;
+    }
+  }
 
   Future<void> _finishRemoteAction(
     Future<CallSessionModel> Function(String callId) action,
@@ -747,7 +802,8 @@ class CallStateController extends GetxService with WidgetsBindingObserver {
     isBusy.value = true;
     bool succeeded = false;
     try {
-      currentCall.value = await action(call.id);
+      final CallSessionModel latest = await action(call.id);
+      currentCall.value = call.mergeRuntimeState(latest);
       succeeded = true;
     } on CommunicationApiException catch (error) {
       userFacingError.value = error.message;
@@ -755,22 +811,28 @@ class CallStateController extends GetxService with WidgetsBindingObserver {
       isBusy.value = false;
     }
     if (succeeded) {
-      await _soundsService?.stopCallSound();
-      await _terminateLocalCall();
-      if (Get.currentRoute == Routes.ACTIVE_CALL ||
-          Get.currentRoute == Routes.INCOMING_CALL ||
-          Get.currentRoute == Routes.OUTGOING_CALL) {
-        Get.back<void>();
-      }
+      await _closeCallRoute();
+    }
+  }
+
+  Future<void> _closeCallRoute() async {
+    await _soundsService?.stopCallSound();
+    await _terminateLocalCall();
+    if (Get.currentRoute == Routes.ACTIVE_CALL ||
+        Get.currentRoute == Routes.INCOMING_CALL ||
+        Get.currentRoute == Routes.OUTGOING_CALL) {
+      Get.back<void>();
     }
   }
 
   Future<void> toggleMute() async {
+    if (currentCall.value == null) return;
     isMuted.toggle();
     await _agoraService.setMuted(isMuted.value);
   }
 
   Future<void> toggleSpeaker() async {
+    if (currentCall.value == null) return;
     isSpeakerEnabled.toggle();
     await _agoraService.setSpeakerEnabled(isSpeakerEnabled.value);
   }

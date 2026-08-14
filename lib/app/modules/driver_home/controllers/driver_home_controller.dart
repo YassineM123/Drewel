@@ -138,6 +138,7 @@ class DriverHomeController extends GetxController with WidgetsBindingObserver {
     });
     Get.find<CallStateController>().refreshActiveRide();
     WidgetsBinding.instance.addObserver(this);
+    DriverOnlineService.initUiCallbacks(_handlePresenceServiceEvent);
     loadCustomMarker();
     checkPermission();
     callingGetDriverDetails();
@@ -152,8 +153,17 @@ class DriverHomeController extends GetxController with WidgetsBindingObserver {
     _stopPresenceHeartbeatTimer();
     _stopRealtimeLocationTracking();
     _placesDebounce?.cancel();
+    DriverOnlineService.removeUiCallback(_handlePresenceServiceEvent);
     socketService.disconnect();
     super.onClose();
+  }
+
+  void _handlePresenceServiceEvent(Object data) {
+    if (!DriverOnlineService.isOfflineEvent(data)) return;
+    isGoOnline.value = true;
+    _stopLocationUpdates();
+    _stopPresenceHeartbeatTimer();
+    _stopRealtimeLocationTracking();
   }
 
   @override

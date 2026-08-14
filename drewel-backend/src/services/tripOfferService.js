@@ -3,6 +3,7 @@ import Driver from "../models/Driver.js";
 import User from "../models/User.js";
 import Ride from "../models/Ride.js";
 import RideAudit from "../models/RideAudit.js";
+import RideMessage from "../models/RideMessage.js";
 import TripOffer from "../models/TripOffer.js";
 import PointsSettings from "../models/PointsSettings.js";
 import {
@@ -56,6 +57,8 @@ export const createTripOffer = async ({
   clientOfferId,
   idempotencyKey,
   requestFingerprint,
+  pickup: requestedPickup,
+  destination: requestedDestination,
   offeredPrice,
   currency,
   vehicleType,
@@ -100,10 +103,44 @@ export const createTripOffer = async ({
         "OFFER_CONVERSATION_FORBIDDEN"
       );
     }
-    const pickup = contact.pickup;
-    const destination = contact.destination;
-    const hasRequestedRoute = [pickup?.lat, pickup?.long, destination?.lat, destination?.long]
+    let pickup = contact.pickup;
+    let destination = contact.destination;
+    let hasRequestedRoute = [pickup?.lat, pickup?.long, destination?.lat, destination?.long]
       .every(Number.isFinite);
+    if (!hasRequestedRoute && requestedPickup && requestedDestination) {
+      const latestTripRequest = await RideMessage.findOne({
+        rideId: contact._id,
+        senderId: contact.passengerId,
+        senderRole: "passenger",
+        messageType: "trip_request",
+      })
+        .sort({ createdAt: -1, _id: -1 })
+        .session(session)
+        .lean();
+      const passengerPickup = latestTripRequest?.metadata?.pickup;
+      const passengerDestination = latestTripRequest?.metadata?.destination;
+      const samePoint = (left, right) =>
+        Number.isFinite(Number(left?.lat)) &&
+        Number.isFinite(Number(left?.long)) &&
+        Math.abs(Number(left.lat) - Number(right?.lat)) < 0.000001 &&
+        Math.abs(Number(left.long) - Number(right?.long)) < 0.000001;
+      if (
+        samePoint(passengerPickup, requestedPickup) &&
+        samePoint(passengerDestination, requestedDestination)
+      ) {
+        pickup = passengerPickup;
+        destination = passengerDestination;
+      } else if (!latestTripRequest) {
+        pickup = requestedPickup;
+        destination = requestedDestination;
+      }
+      if (pickup && destination) {
+        contact.pickup = pickup;
+        contact.destination = destination;
+        await contact.save({ session });
+        hasRequestedRoute = true;
+      }
+    }
     if (!hasRequestedRoute) {
       throw new PointsError(
         "The passenger must choose pickup and destination before an offer can be sent",
@@ -285,7 +322,13 @@ const releaseCompetingOffers = async (acceptedOffer, session) => {
   }
 };
 
-export const acceptTripOffer = async ({ offerId, passengerId, idempotencyKey }) =>
+export const acceptTripOffer = async ({
+  offerId,
+  passengerId,
+  idempotencyKey,
+  confirmedBy,
+  actorRole = "passenger",
+}) =>
   runPointsTransaction(async (session) => {
     const offer = await TripOffer.findById(offerId).session(session);
     if (!offer) throw new PointsError("Trip offer not found", 404, "TRIP_OFFER_NOT_FOUND");
@@ -368,7 +411,7 @@ export const acceptTripOffer = async ({ offerId, passengerId, idempotencyKey }) 
           acceptedAt: now,
           acceptanceIdempotencyKey: idempotencyKey,
           confirmedAt: now,
-          confirmedBy: passengerId,
+          confirmedBy: confirmedBy || passengerId,
           pickup: offer.pickup,
           destination: offer.destination,
           vehicleType: offer.vehicleType || driver.vehicleType || "",
@@ -426,8 +469,8 @@ export const acceptTripOffer = async ({ offerId, passengerId, idempotencyKey }) 
           action: "ride_confirmed",
           fromStatus: "contacting",
           toStatus: "confirmed",
-          actorId: passengerId,
-          actorRole: "passenger",
+          actorId: confirmedBy || passengerId,
+          actorRole,
           idempotencyKey: offer.idempotencyKey,
         },
       ],
@@ -503,9 +546,9 @@ export const acceptTripOffer = async ({ offerId, passengerId, idempotencyKey }) 
  * confirmed. Invoked outside the points transaction so notification failures
  * can never roll back a successful ride confirmation.
  */
-export const notifyTripOfferAccepted = async ({ ride }) => {
+export const notifyTripOfferAccepted = async ({ ride, actorRole = "passenger" }) => {
   try {
-    await notifyRideTransition({ ride, toStatus: "confirmed", actorRole: "passenger" });
+    await notifyRideTransition({ ride, toStatus: "confirmed", actorRole });
   } catch (error) {
     console.error("[notification] trip offer accepted notification failed", error.message);
   }

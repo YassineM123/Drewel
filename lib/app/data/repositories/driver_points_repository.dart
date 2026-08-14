@@ -119,6 +119,8 @@ class ApiDriverPointsRepository implements DriverPointsRepository {
       <String, dynamic>{
         'contactRideId': draft.contactRideId,
         'clientOfferId': clientOfferId,
+        'pickup': draft.pickup,
+        'destination': draft.destination,
         'offeredPrice': draft.offeredPrice,
         'currency': draft.currency,
         if (draft.vehicleType.trim().isNotEmpty)

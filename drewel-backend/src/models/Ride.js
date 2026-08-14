@@ -38,6 +38,16 @@ export const TERMINAL_RIDE_STATUSES = [
   "cancelled_by_admin",
 ];
 
+const rideReviewSchema = new mongoose.Schema(
+  {
+    rating: { type: Number, required: true, min: 1, max: 5 },
+    comment: { type: String, default: "", maxlength: 500 },
+    submittedBy: { type: mongoose.Schema.Types.ObjectId, required: true },
+    submittedAt: { type: Date, default: Date.now },
+  },
+  { _id: false, versionKey: false }
+);
+
 const rideSchema = new mongoose.Schema(
   {
     passengerId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true, index: true },
@@ -107,6 +117,10 @@ const rideSchema = new mongoose.Schema(
         enum: ["not_required", "pending", "resolved", ""],
         default: "",
       },
+    },
+    reviews: {
+      passenger: { type: rideReviewSchema, default: null },
+      driver: { type: rideReviewSchema, default: null },
     },
   },
   { timestamps: true, versionKey: false }

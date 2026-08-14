@@ -9,6 +9,7 @@ import {
   RideTransitionError,
 } from "../src/services/rideTransitionService.js";
 import { validateDriverLocation } from "../src/services/rideLocationService.js";
+import { computeRideRoute } from "../src/services/googleRoutesService.js";
 
 test("authoritative ride lifecycle includes every required state", () => {
   for (const status of [
@@ -77,6 +78,7 @@ test("REST and Socket.IO expose protected lifecycle contracts", () => {
     'router.get("/:rideId/route"',
     'router.post("/:rideId/location"',
     'router.post("/:rideId/cancel"',
+    'router.post("/:rideId/review"',
   ]) {
     assert.match(routes, new RegExp(fragment.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
   }
@@ -84,6 +86,110 @@ test("REST and Socket.IO expose protected lifecycle contracts", () => {
     assert.ok(socket.includes(`"${event}"`), event);
   }
   assert.match(socket, /status:\s*\{\s*\$in:\s*ACTIVE_RIDE_STATUSES\s*\}/);
+});
+
+test("completed rides persist one bounded review per participant", () => {
+  const passengerRating = Ride.schema.path("reviews.passenger.rating");
+  const passengerComment = Ride.schema.path("reviews.passenger.comment");
+  const driverRating = Ride.schema.path("reviews.driver.rating");
+
+  assert.equal(passengerRating.options.min, 1);
+  assert.equal(passengerRating.options.max, 5);
+  assert.equal(passengerComment.options.maxlength, 500);
+  assert.equal(driverRating.options.min, 1);
+  assert.equal(driverRating.options.max, 5);
+});
+
+test("ride route falls back to an OSRM road polyline when Google Routes is not configured", async () => {
+  const previousKey = process.env.GOOGLE_ROUTES_API_KEY;
+  const previousFetch = globalThis.fetch;
+  delete process.env.GOOGLE_ROUTES_API_KEY;
+  let requestedUrl = "";
+  globalThis.fetch = async (url) => {
+    requestedUrl = String(url);
+    return {
+      ok: true,
+      async json() {
+        return {
+          routes: [
+            {
+              distance: 1260.4,
+              duration: 220.2,
+              geometry: "gfo}EtohhUxD@bAxJmGF",
+              legs: [{ steps: [] }],
+            },
+          ],
+        };
+      },
+    };
+  };
+  try {
+    const route = await computeRideRoute({
+      phase: "pickup",
+      ride: {
+        lastDriverLocation: { lat: 36.4515, long: 10.7382 },
+        pickup: { lat: 36.4489, long: 10.7425 },
+        destination: { lat: 36.45, long: 10.75 },
+      },
+    });
+    assert.match(requestedUrl, /router\.project-osrm\.org/);
+    assert.equal(route.provider, "osrm");
+    assert.equal(route.fallback, true);
+    assert.equal(route.distanceMeters, 1260);
+    assert.equal(route.duration, "220s");
+    assert.ok(route.encodedPolyline);
+  } finally {
+    if (previousKey == null) {
+      delete process.env.GOOGLE_ROUTES_API_KEY;
+    } else {
+      process.env.GOOGLE_ROUTES_API_KEY = previousKey;
+    }
+    globalThis.fetch = previousFetch;
+  }
+});
+
+test("destination route follows the live driver location after pickup", async () => {
+  const previousKey = process.env.GOOGLE_ROUTES_API_KEY;
+  const previousFetch = globalThis.fetch;
+  delete process.env.GOOGLE_ROUTES_API_KEY;
+  let requestedUrl = "";
+  globalThis.fetch = async (url) => {
+    requestedUrl = String(url);
+    return {
+      ok: true,
+      async json() {
+        return {
+          routes: [
+            {
+              distance: 600,
+              duration: 120,
+              geometry: "gfo}EtohhUxD@bAxJmGF",
+              legs: [{ steps: [] }],
+            },
+          ],
+        };
+      },
+    };
+  };
+  try {
+    await computeRideRoute({
+      phase: "destination",
+      ride: {
+        lastDriverLocation: { lat: 36.4521, long: 10.7399 },
+        pickup: { lat: 36.4489, long: 10.7425 },
+        destination: { lat: 36.45, long: 10.75 },
+      },
+    });
+    assert.match(requestedUrl, /10\.7399,36\.4521;10\.75,36\.45/);
+    assert.doesNotMatch(requestedUrl, /10\.7425,36\.4489;10\.75,36\.45/);
+  } finally {
+    if (previousKey == null) {
+      delete process.env.GOOGLE_ROUTES_API_KEY;
+    } else {
+      process.env.GOOGLE_ROUTES_API_KEY = previousKey;
+    }
+    globalThis.fetch = previousFetch;
+  }
 });
 
 test("admin ride operations are authenticated and refunds are capped", () => {

@@ -28,6 +28,11 @@ class DriverOnlineService {
   static const String _sessionPreferenceKey = 'driverPresenceSessionId';
   static const String _sessionTaskKey = 'driver_presence_session_id';
   static const String _intervalTaskKey = 'driver_presence_interval_ms';
+  static const String _goOfflineButtonId = 'driver_presence_go_offline';
+  static const String _mainEventWentOffline = 'driver_presence_offline';
+  static const String _notificationTitle = 'Drewel - Online';
+  static const String _notificationText =
+      'Presence active.\nWaiting for ride requests.';
   static const int _defaultHeartbeatIntervalMs = 20000;
   static const int _minimumHeartbeatIntervalMs = 5000;
 
@@ -62,6 +67,28 @@ class DriverOnlineService {
     );
   }
 
+  static List<NotificationButton> get _notificationButtons =>
+      const <NotificationButton>[
+        NotificationButton(
+          id: _goOfflineButtonId,
+          text: 'Go Offline',
+          textColor: Color(0xFFBE1B2C),
+        ),
+      ];
+
+  static void initUiCallbacks(void Function(Object data) onData) {
+    if (!isAndroidPlatform) return;
+    FlutterForegroundTask.initCommunicationPort();
+    FlutterForegroundTask.addTaskDataCallback(onData);
+  }
+
+  static void removeUiCallback(void Function(Object data) onData) {
+    if (!isAndroidPlatform) return;
+    FlutterForegroundTask.removeTaskDataCallback(onData);
+  }
+
+  static bool isOfflineEvent(Object data) => data == _mainEventWentOffline;
+
   static Future<bool> start(DriverPresenceModel presence) async {
     final String sessionId = presence.sessionId?.trim() ?? '';
     if (sessionId.isEmpty) {
@@ -92,8 +119,9 @@ class DriverOnlineService {
       final ServiceRequestResult result =
           await FlutterForegroundTask.updateService(
         foregroundTaskOptions: _taskOptions(intervalMs),
-        notificationTitle: 'Drewel - Online',
-        notificationText: 'Presence active. Waiting for ride requests.',
+        notificationTitle: _notificationTitle,
+        notificationText: _notificationText,
+        notificationButtons: _notificationButtons,
         callback: startCallback,
       );
       return result is ServiceRequestSuccess;
@@ -102,8 +130,9 @@ class DriverOnlineService {
     final ServiceRequestResult result =
         await FlutterForegroundTask.startService(
       serviceId: 256,
-      notificationTitle: 'Drewel - Online',
-      notificationText: 'Presence active. Waiting for ride requests.',
+      notificationTitle: _notificationTitle,
+      notificationText: _notificationText,
+      notificationButtons: _notificationButtons,
       callback: startCallback,
     );
     return result is ServiceRequestSuccess;
@@ -155,6 +184,7 @@ void startCallback() {
 
 class _DriverPresenceTaskHandler extends TaskHandler {
   bool _requestInFlight = false;
+  bool _offlineRequestInFlight = false;
 
   @override
   Future<void> onStart(DateTime timestamp, TaskStarter starter) async {
@@ -187,9 +217,67 @@ class _DriverPresenceTaskHandler extends TaskHandler {
   }
 
   @override
+  void onNotificationButtonPressed(String id) {
+    if (id == DriverOnlineService._goOfflineButtonId) {
+      _goOfflineFromNotification();
+    }
+  }
+
+  Future<void> _goOfflineFromNotification() async {
+    if (_offlineRequestInFlight) return;
+    _offlineRequestInFlight = true;
+    try {
+      final String sessionId = await FlutterForegroundTask.getData<String>(
+            key: DriverOnlineService._sessionTaskKey,
+          ) ??
+          '';
+      final bool wentOffline = await _sendOfflineRequest(sessionId);
+      if (wentOffline) {
+        await DriverOnlineService.clearSession();
+        FlutterForegroundTask.sendDataToMain(
+          DriverOnlineService._mainEventWentOffline,
+        );
+        await FlutterForegroundTask.stopService();
+      }
+    } finally {
+      _offlineRequestInFlight = false;
+    }
+  }
+
+  @override
   Future<void> onDestroy(DateTime timestamp) async {
     // Deliberately do not send Offline. If Android actually kills the service,
     // the backend lease expires after its configured heartbeat timeout.
+  }
+}
+
+Future<bool> _sendOfflineRequest(String sessionId) async {
+  try {
+    final SharedPreferences prefs = await SharedPreferences.getInstance();
+    await prefs.reload();
+    final String token = prefs.getString(ApiKeyConstants.token) ?? '';
+    if (token.isEmpty) return false;
+
+    final Map<String, Object> body = <String, Object>{
+      'isOnline': false,
+      if (sessionId.isNotEmpty) 'sessionId': sessionId,
+    };
+    final http.Response response = await http
+        .post(
+          Uri.parse(ApiUrlConstants.endPointOfDriverUpdateOnlineStatus),
+          headers: <String, String>{
+            'Authorization': 'Bearer $token',
+            'Accept': 'application/json',
+            'Content-Type': 'application/json',
+          },
+          body: jsonEncode(body),
+        )
+        .timeout(const Duration(seconds: 10));
+
+    return (response.statusCode >= 200 && response.statusCode < 300) ||
+        response.statusCode == 409;
+  } catch (_) {
+    return false;
   }
 }
 

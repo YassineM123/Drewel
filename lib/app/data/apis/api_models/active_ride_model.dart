@@ -255,6 +255,26 @@ class RideParticipantModel {
   }
 }
 
+class RideReviewModel {
+  const RideReviewModel({
+    required this.rating,
+    this.comment = '',
+    this.submittedAt,
+  });
+
+  final int rating;
+  final String comment;
+  final DateTime? submittedAt;
+
+  factory RideReviewModel.fromJson(Map<String, dynamic> json) =>
+      RideReviewModel(
+        rating: (json['rating'] as num?)?.toInt() ?? 0,
+        comment: (json['comment'] ?? '').toString(),
+        submittedAt: DateTime.tryParse((json['submittedAt'] ?? '').toString())
+            ?.toLocal(),
+      );
+}
+
 class ActiveRideModel {
   const ActiveRideModel({
     required this.id,
@@ -272,6 +292,8 @@ class ActiveRideModel {
     this.pickupPin,
     this.agreedPrice,
     this.vehicleType,
+    this.passengerReview,
+    this.driverReview,
     this.updatedAt,
   });
 
@@ -290,6 +312,8 @@ class ActiveRideModel {
   final String? pickupPin;
   final double? agreedPrice;
   final String? vehicleType;
+  final RideReviewModel? passengerReview;
+  final RideReviewModel? driverReview;
   final DateTime? updatedAt;
 
   RideStatus get rideStatus => RideStatus.fromValue(status);
@@ -327,6 +351,8 @@ class ActiveRideModel {
         pickupPin: pickupPin,
         agreedPrice: agreedPrice,
         vehicleType: vehicleType,
+        passengerReview: passengerReview,
+        driverReview: driverReview,
         updatedAt: updatedAt,
       );
 
@@ -338,6 +364,11 @@ class ActiveRideModel {
     final Map<String, dynamic>? driverLocation =
         _map(json['lastDriverLocation'] ?? json['driverLocation']);
     final Map<String, dynamic>? route = _map(json['route']);
+    final Map<String, dynamic>? reviews = _map(json['reviews']);
+    final Map<String, dynamic>? passengerReview =
+        _map(reviews?['passenger'] ?? json['passengerReview']);
+    final Map<String, dynamic>? driverReview =
+        _map(reviews?['driver'] ?? json['driverReview']);
     return ActiveRideModel(
       id: (json['_id'] ?? json['id'] ?? json['rideId'] ?? '').toString(),
       status: (json['status'] ?? '').toString().toLowerCase(),
@@ -366,6 +397,11 @@ class ActiveRideModel {
       pickupPin: (json['pickupPin'] ?? json['pickupCode'])?.toString(),
       agreedPrice: (json['agreedPrice'] as num?)?.toDouble(),
       vehicleType: json['vehicleType']?.toString(),
+      passengerReview: passengerReview == null
+          ? null
+          : RideReviewModel.fromJson(passengerReview),
+      driverReview:
+          driverReview == null ? null : RideReviewModel.fromJson(driverReview),
       updatedAt:
           DateTime.tryParse((json['updatedAt'] ?? '').toString())?.toLocal(),
     );

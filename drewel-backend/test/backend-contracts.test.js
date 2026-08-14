@@ -363,15 +363,23 @@ test("startup creates and verifies required marketplace geospatial indexes", () 
   assert.match(driverSource, /indexes\(\)[\s\S]*?Required marketplace index is missing/);
 });
 
-test("driver action-time availability paths reuse fresh Dubai GPS eligibility", () => {
+test("driver action-time availability paths reuse fresh Dubai GPS eligibility except active ride calls", () => {
   for (const relativePath of [
     "../src/controllers/rideController.js",
     "../src/services/tripOfferService.js",
-    "../src/services/callSessionService.js",
   ]) {
     const source = readFileSync(new URL(relativePath, import.meta.url), "utf8");
     assert.match(source, /buildFreshDubaiMarketplaceAvailabilityFilter\(\)/);
   }
+  const callSource = readFileSync(
+    new URL("../src/services/callSessionService.js", import.meta.url),
+    "utf8"
+  );
+  const initiateStart = callSource.indexOf("export const initiateCall");
+  const initiateEnd = callSource.indexOf("export const getAuthorizedCall", initiateStart);
+  const initiateBlock = callSource.slice(initiateStart, initiateEnd);
+  assert.match(initiateBlock, /assertRideParticipant\(principal, rideId, \{ requireContact: true \}\)/);
+  assert.doesNotMatch(initiateBlock, /buildFreshDubaiMarketplaceAvailabilityFilter/);
   const driverSource = readFileSync(
     new URL("../src/controllers/driverController.js", import.meta.url),
     "utf8"
