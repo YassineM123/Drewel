@@ -15,6 +15,14 @@ void main() {
       expect(RideStatus.cancelledByDriver.isTerminal, isTrue);
     });
 
+    test('allows sending trip offers only before the ride is accepted', () {
+      expect(RideStatus.contacting.acceptsTripOfferFromRequest, isTrue);
+      expect(RideStatus.offerPending.acceptsTripOfferFromRequest, isFalse);
+      expect(RideStatus.confirmed.acceptsTripOfferFromRequest, isFalse);
+      expect(RideStatus.fromValue('accepted').acceptsTripOfferFromRequest,
+          isFalse);
+    });
+
     test('parses recovery, route, participant and private pickup PIN data', () {
       final ActiveRideModel ride = ActiveRideModel.fromJson(
         <String, dynamic>{

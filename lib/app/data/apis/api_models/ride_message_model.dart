@@ -30,6 +30,25 @@ class RideMessageModel {
   final Map<String, dynamic>? metadata;
   final DateTime? createdAt;
 
+  bool get isCancelledTripRequest {
+    final Object? status = metadata?['tripRequestStatus'];
+    return status?.toString().trim().toLowerCase() == 'cancelled';
+  }
+
+  RideMessageModel copyWith({
+    Map<String, dynamic>? metadata,
+  }) =>
+      RideMessageModel(
+        id: id,
+        rideId: rideId,
+        text: text,
+        senderId: senderId,
+        status: status,
+        messageType: messageType,
+        metadata: metadata ?? this.metadata,
+        createdAt: createdAt,
+      );
+
   bool get isTripRequest {
     final String normalizedType = messageType.trim().toLowerCase();
     if (normalizedType == 'trip_request') return true;

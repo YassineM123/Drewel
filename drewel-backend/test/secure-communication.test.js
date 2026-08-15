@@ -52,6 +52,20 @@ test("ride and message identifiers are validated before database lookups", () =>
   assert.ok(transitionBlock.indexOf("mongoose.isValidObjectId(req.params.rideId)") < transitionBlock.indexOf("Ride.findById(req.params.rideId)"));
 });
 
+test("new passenger trip requests supersede older request cards without changing idempotent retries", () => {
+  const controllerSource = fs.readFileSync(new URL("../src/controllers/rideController.js", import.meta.url), "utf8");
+  assert.match(controllerSource, /const cancelSupersededTripRequests/);
+  assert.match(controllerSource, /RideMessage\.updateMany/);
+  assert.match(controllerSource, /messageType: "trip_request"/);
+  assert.match(controllerSource, /tripRequestStatus: "cancelled"/);
+  assert.match(controllerSource, /supersededByMessageId/);
+
+  const sendStart = controllerSource.indexOf("export const sendRideMessage");
+  const sendBlock = controllerSource.slice(sendStart, controllerSource.indexOf("export const updateMessageReceipt", sendStart));
+  assert.match(sendBlock, /metadata = \{\s*\.\.\.parseTripRequestMetadata\(req\.body\?\.metadata \|\| \{\}\),\s*tripRequestStatus: "active",\s*\}/s);
+  assert.match(sendBlock, /if \(created && messageType === "trip_request"\)/);
+});
+
 test("call session has a database-enforced single active call per ride", () => {
   const indexes = CallSession.schema.indexes();
   const active = indexes.find(([, options]) => options.name === "one_active_call_per_ride");

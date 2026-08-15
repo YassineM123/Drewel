@@ -359,6 +359,36 @@ const parseTripRequestMetadata = (body = {}) => {
   return { pickup, destination, proposedPrice, currency, note };
 };
 
+const cancelSupersededTripRequests = async ({ rideId, latestMessage, now = new Date() }) => {
+  if (!latestMessage) return;
+  await RideMessage.updateMany(
+    {
+      rideId,
+      _id: { $ne: latestMessage._id },
+      messageType: "trip_request",
+      "metadata.tripRequestStatus": { $ne: "cancelled" },
+    },
+    [
+      {
+        $set: {
+          metadata: {
+            $mergeObjects: [
+              { $ifNull: ["$metadata", {}] },
+              {
+                tripRequestStatus: "cancelled",
+                cancellationReason: "superseded",
+                cancelledAt: now,
+                supersededByMessageId: String(latestMessage._id),
+                supersededByClientMessageId: latestMessage.clientMessageId,
+              },
+            ],
+          },
+        },
+      },
+    ]
+  );
+};
+
 export const confirmMission = async (req, res) => {
   try {
     const principal = await resolvePrincipal(req.user?._id);
@@ -804,6 +834,11 @@ export const sendRideMessage = async (req, res) => {
     if (!["text", "trip_request"].includes(messageType)) {
       throw new CommunicationPolicyError("Unsupported message type", 400, "INVALID_MESSAGE_TYPE");
     }
+    const text = String(req.body?.text || "").trim();
+    const clientMessageId = String(req.body?.clientMessageId || "").trim();
+    if (!text || text.length > 2000 || !clientMessageId || clientMessageId.length > 100) {
+      throw new CommunicationPolicyError("text and clientMessageId are required", 400, "INVALID_MESSAGE");
+    }
     let metadata = null;
     if (messageType === "trip_request") {
       if (participantRole !== "passenger") {
@@ -812,15 +847,13 @@ export const sendRideMessage = async (req, res) => {
       if (ride.status !== "contacting") {
         throw new CommunicationPolicyError("Trip requests are only available while contacting", 409, "TRIP_REQUEST_CLOSED");
       }
-      metadata = parseTripRequestMetadata(req.body?.metadata || {});
+      metadata = {
+        ...parseTripRequestMetadata(req.body?.metadata || {}),
+        tripRequestStatus: "active",
+      };
       ride.pickup = metadata.pickup;
       ride.destination = metadata.destination;
       await ride.save();
-    }
-    const text = String(req.body?.text || "").trim();
-    const clientMessageId = String(req.body?.clientMessageId || "").trim();
-    if (!text || text.length > 2000 || !clientMessageId || clientMessageId.length > 100) {
-      throw new CommunicationPolicyError("text and clientMessageId are required", 400, "INVALID_MESSAGE");
     }
     let message;
     let created = true;
@@ -830,6 +863,9 @@ export const sendRideMessage = async (req, res) => {
       if (error?.code !== 11000) throw error;
       created = false;
       message = await RideMessage.findOne({ rideId: ride._id, senderId: principal.id, clientMessageId });
+    }
+    if (created && messageType === "trip_request") {
+      await cancelSupersededTripRequests({ rideId: ride._id, latestMessage: message });
     }
     const messageEvent = {
       rideId: String(ride._id),

@@ -619,6 +619,7 @@ class _RideChatScreenState extends State<RideChatScreen> {
       );
       if (!mounted) return;
       setState(() {
+        _cancelOlderTripRequests(sent);
         _messages.add(sent);
       });
       try {
@@ -629,6 +630,24 @@ class _RideChatScreenState extends State<RideChatScreen> {
     } finally {
       _disposeControllers(<TextEditingController>[price, currency, note]);
       if (mounted) setState(() => _sending = false);
+    }
+  }
+
+  void _cancelOlderTripRequests(RideMessageModel latest) {
+    for (int index = 0; index < _messages.length; index += 1) {
+      final RideMessageModel message = _messages[index];
+      if (!message.isTripRequest ||
+          message.rideId != latest.rideId ||
+          message.id == latest.id ||
+          message.isCancelledTripRequest) {
+        continue;
+      }
+      final Map<String, dynamic> metadata = Map<String, dynamic>.from(
+          message.metadata ?? const <String, dynamic>{});
+      metadata['tripRequestStatus'] = 'cancelled';
+      metadata['cancellationReason'] = 'superseded';
+      metadata['supersededByMessageId'] = latest.id;
+      _messages[index] = message.copyWith(metadata: metadata);
     }
   }
 
@@ -1623,6 +1642,7 @@ class _MessageList extends StatelessWidget {
       itemBuilder: (BuildContext context, int index) {
         final RideMessageModel message = messages[index];
         final bool mine = message.senderId == selfId;
+        final bool requestCancelled = message.isCancelledTripRequest;
         final DateTime? previousTime =
             index > 0 ? messages[index - 1].createdAt : null;
         final DateTime? currentTime = message.createdAt;
@@ -1636,7 +1656,10 @@ class _MessageList extends StatelessWidget {
               _TripRequestMessageCard(
                 message: message,
                 mine: mine,
-                canSendOffer: role == ApiKeyConstants.driver && !mine,
+                canSendOffer: role == ApiKeyConstants.driver &&
+                    !mine &&
+                    !requestCancelled &&
+                    routeRide?.rideStatus.acceptsTripOfferFromRequest == true,
                 counterpartImageUrl:
                     mine ? null : conversation?.counterpart?.profileImageUrl,
                 routeRide: routeRide,
@@ -1821,6 +1844,7 @@ class _TripRequestMessageCard extends StatelessWidget {
           ? routeRide!.destination!.address
           : 'Destination',
     );
+    final bool cancelled = message.isCancelledTripRequest;
     final double cardWidth =
         (MediaQuery.sizeOf(context).width - 92).clamp(280.0, 560.0).toDouble();
     return Container(
@@ -1909,7 +1933,39 @@ class _TripRequestMessageCard extends StatelessWidget {
               ],
             ),
           ),
-          if (canSendOffer)
+          if (cancelled)
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.fromLTRB(20, 12, 20, 14),
+              decoration: BoxDecoration(
+                border: Border(
+                  top: BorderSide(
+                    color: primaryColor.withValues(alpha: 0.18),
+                  ),
+                ),
+              ),
+              child: Row(
+                children: <Widget>[
+                  Icon(
+                    Icons.block_rounded,
+                    size: 18,
+                    color: text2Color.withValues(alpha: 0.9),
+                  ),
+                  const SizedBox(width: 8),
+                  const Expanded(
+                    child: Text(
+                      'Cancelled by new request',
+                      style: TextStyle(
+                        color: text2Color,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            )
+          else if (canSendOffer)
             Container(
               padding: const EdgeInsets.fromLTRB(20, 16, 20, 18),
               decoration: BoxDecoration(

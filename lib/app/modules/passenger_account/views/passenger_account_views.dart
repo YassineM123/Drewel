@@ -390,24 +390,54 @@ class SavedPlacesView extends GetView<PassengerAccountController> {
                   keyboardType: TextInputType.number,
                 ),
                 const SizedBox(height: 12),
-                FilledButton(
-                  style: FilledButton.styleFrom(
-                    backgroundColor: primaryColor,
-                    minimumSize: const Size.fromHeight(50),
+                Obx(
+                  () => FilledButton(
+                    style: FilledButton.styleFrom(
+                      backgroundColor: primaryColor,
+                      minimumSize: const Size.fromHeight(50),
+                    ),
+                    onPressed: controller.saving.value
+                        ? null
+                        : () async {
+                            final bool saved = await controller.savePlace(
+                              id: place?.id,
+                              type: type,
+                              name: name.text,
+                              address: address.text,
+                              lat: double.tryParse(lat.text) ?? double.nan,
+                              long: double.tryParse(long.text) ?? double.nan,
+                            );
+                            if (saved) Get.back();
+                          },
+                    child: controller.saving.value
+                        ? const SizedBox(
+                            width: 22,
+                            height: 22,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Text('Save place'),
                   ),
-                  onPressed: () {
-                    controller.savePlace(
-                      id: place?.id,
-                      type: type,
-                      name: name.text,
-                      address: address.text,
-                      lat: double.tryParse(lat.text) ?? double.nan,
-                      long: double.tryParse(long.text) ?? double.nan,
-                    );
-                    Get.back();
-                  },
-                  child: const Text('Save place'),
                 ),
+                if (place != null) ...<Widget>[
+                  const SizedBox(height: 10),
+                  Obx(
+                    () => TextButton.icon(
+                      onPressed: controller.saving.value
+                          ? null
+                          : () async {
+                              final bool deleted =
+                                  await controller.deletePlace(place.id);
+                              if (deleted) Get.back();
+                            },
+                      icon: const Icon(Icons.delete_outline_rounded),
+                      label: const Text('Delete place'),
+                      style: TextButton.styleFrom(
+                        foregroundColor: Colors.red,
+                        minimumSize: const Size.fromHeight(48),
+                      ),
+                    ),
+                  ),
+                ],
               ],
             ),
           ),
@@ -663,7 +693,10 @@ class LegalView extends GetView<PassengerAccountController> {
   Widget build(BuildContext context) {
     final String type = Get.parameters['type'] ?? 'privacy';
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (controller.legalContent.value == null) controller.loadLegal(type);
+      if (controller.legalContent.value == null ||
+          controller.legalType.value != type) {
+        controller.loadLegal(type);
+      }
     });
     return Scaffold(
       appBar: DrewelAppBar(

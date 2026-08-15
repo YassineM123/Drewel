@@ -29,6 +29,7 @@ class PassengerAccountController extends GetxController {
   final calls = <PassengerCallModel>[].obs;
   final preferences = Rxn<PassengerPreferenceModel>();
   final legalContent = Rxn<LegalContentModel>();
+  final legalType = ''.obs;
   final appVersion = ''.obs;
   final loading = false.obs;
   final saving = false.obs;
@@ -96,12 +97,18 @@ class PassengerAccountController extends GetxController {
       CommonWidgets.snackBarView(title: 'Enter a valid phone number.');
       return;
     }
+    final String trimmedEmail = email.trim();
+    if (trimmedEmail.isNotEmpty &&
+        !RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(trimmedEmail)) {
+      CommonWidgets.snackBarView(title: 'Enter a valid email address.');
+      return;
+    }
     saving.value = true;
     try {
       final PassengerProfileModel updated = await _repository.updateProfile(
         fullName: fullName.trim(),
         phone: phone.trim(),
-        email: email.trim(),
+        email: trimmedEmail,
         countryCode: current?.countryCode,
       );
       profile.value = updated;
@@ -146,7 +153,7 @@ class PassengerAccountController extends GetxController {
     }
   }
 
-  Future<void> savePlace({
+  Future<bool> savePlace({
     String? id,
     required String type,
     required String name,
@@ -157,7 +164,15 @@ class PassengerAccountController extends GetxController {
   }) async {
     if (name.trim().isEmpty || address.trim().isEmpty) {
       CommonWidgets.snackBarView(title: 'Name and address are required.');
-      return;
+      return false;
+    }
+    if (!lat.isFinite || lat < -90 || lat > 90) {
+      CommonWidgets.snackBarView(title: 'Enter a valid latitude.');
+      return false;
+    }
+    if (!long.isFinite || long < -180 || long > 180) {
+      CommonWidgets.snackBarView(title: 'Enter a valid longitude.');
+      return false;
     }
     saving.value = true;
     try {
@@ -172,8 +187,29 @@ class PassengerAccountController extends GetxController {
       );
       savedPlaces.assignAll(await _repository.listSavedPlaces());
       CommonWidgets.snackBarView(title: 'Saved place updated', success: true);
+      return true;
     } on CommunicationApiException catch (catchError) {
       CommonWidgets.snackBarView(title: catchError.message);
+      return false;
+    } finally {
+      saving.value = false;
+    }
+  }
+
+  Future<bool> deletePlace(String id) async {
+    if (id.trim().isEmpty) {
+      CommonWidgets.snackBarView(title: 'Saved place not found.');
+      return false;
+    }
+    saving.value = true;
+    try {
+      await _repository.deletePlace(id.trim());
+      savedPlaces.removeWhere((SavedPlaceModel place) => place.id == id);
+      CommonWidgets.snackBarView(title: 'Saved place deleted', success: true);
+      return true;
+    } on CommunicationApiException catch (catchError) {
+      CommonWidgets.snackBarView(title: catchError.message);
+      return false;
     } finally {
       saving.value = false;
     }
@@ -205,6 +241,7 @@ class PassengerAccountController extends GetxController {
   }
 
   Future<void> loadLegal(String type) async {
+    legalType.value = type;
     legalContent.value = null;
     error.value = '';
     try {

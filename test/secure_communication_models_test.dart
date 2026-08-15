@@ -98,6 +98,32 @@ void main() {
       );
       expect(message.status, RideMessageStatus.sent);
     });
+
+    test('marks superseded trip requests as cancelled from metadata', () {
+      final RideMessageModel message = RideMessageModel.fromJson(
+        <String, dynamic>{
+          '_id': 'message-1',
+          'rideId': 'ride-1',
+          'senderId': 'user-1',
+          'text': 'Trip request: 45 AED',
+          'messageType': 'trip_request',
+          'status': 'sent',
+          'metadata': <String, dynamic>{
+            'tripRequestStatus': 'cancelled',
+            'cancellationReason': 'superseded',
+          },
+        },
+      );
+
+      expect(message.isTripRequest, isTrue);
+      expect(message.isCancelledTripRequest, isTrue);
+      expect(
+        message.copyWith(
+          metadata: <String, dynamic>{'tripRequestStatus': 'active'},
+        ).isCancelledTripRequest,
+        isFalse,
+      );
+    });
   });
 
   group('driver discovery privacy', () {

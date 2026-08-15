@@ -51,6 +51,7 @@ class DriverAccountController extends GetxController {
   final calls = <DriverCallHistoryItem>[].obs;
   final preferences = Rxn<PassengerPreferenceModel>();
   final legalContent = Rxn<LegalContentModel>();
+  final legalType = ''.obs;
   final appVersion = ''.obs;
   final loading = false.obs;
   final saving = false.obs;
@@ -155,6 +156,12 @@ class DriverAccountController extends GetxController {
       CommonWidgets.snackBarView(title: 'Enter a valid phone number.');
       return;
     }
+    final String trimmedEmail = email.trim();
+    if (trimmedEmail.isNotEmpty &&
+        !RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(trimmedEmail)) {
+      CommonWidgets.snackBarView(title: 'Enter a valid email address.');
+      return;
+    }
     saving.value = true;
     try {
       driver.value = await _repository.updateProfile(
@@ -162,7 +169,7 @@ class DriverAccountController extends GetxController {
         firstName: firstName.trim(),
         lastName: lastName.trim(),
         phone: phone.trim(),
-        email: email.trim(),
+        email: trimmedEmail,
         whatsappNumber: whatsappNumber.trim(),
       );
       await _persistDriver(driver.value);
@@ -232,6 +239,7 @@ class DriverAccountController extends GetxController {
   }
 
   Future<void> loadLegal(String type) async {
+    legalType.value = type;
     legalContent.value = null;
     error.value = '';
     try {

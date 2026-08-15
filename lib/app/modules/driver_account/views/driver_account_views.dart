@@ -698,7 +698,10 @@ class DriverLegalView extends GetView<DriverAccountController> {
   Widget build(BuildContext context) {
     final String type = Get.parameters['type'] ?? 'privacy';
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (controller.legalContent.value == null) controller.loadLegal(type);
+      if (controller.legalContent.value == null ||
+          controller.legalType.value != type) {
+        controller.loadLegal(type);
+      }
     });
     return Scaffold(
       appBar: DrewelAppBar(

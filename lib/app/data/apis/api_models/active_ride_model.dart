@@ -63,6 +63,8 @@ enum RideStatus {
         _ => false,
       };
 
+  bool get acceptsTripOfferFromRequest => this == RideStatus.contacting;
+
   bool get canNormallyCancel => switch (this) {
         RideStatus.offerPending ||
         RideStatus.confirmed ||
