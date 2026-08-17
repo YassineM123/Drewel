@@ -171,6 +171,16 @@ class CallStateController extends GetxService with WidgetsBindingObserver {
   Future<List<ActiveRideModel>> listRequestedRides() =>
       _activeRideRepository.listMine(status: 'requested');
 
+  Future<void> refreshActiveRide() async {
+    await configureSession();
+    try {
+      activeRide.value = await _activeRideRepository.getActiveRide();
+    } catch (error) {
+      debugPrint('Active ride refresh failed: ${error.runtimeType}');
+      activeRide.value = null;
+    }
+  }
+
   Future<void> transitionRide(String rideId, String status) async {
     await _activeRideRepository.transitionRide(rideId, status);
     await refreshActiveRide();

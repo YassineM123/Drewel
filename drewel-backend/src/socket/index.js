@@ -506,4 +506,4 @@ io.on("connection", async (socket) => {
 });
 configureDriverPresenceEmitter((eventName, payload) => io.emit(eventName, payload));
 
-export { app, server, io };
+export { app, server, io, ADMIN_TRACKING_ROOM };

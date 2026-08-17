@@ -30,6 +30,17 @@ class RideMessageModel {
   final Map<String, dynamic>? metadata;
   final DateTime? createdAt;
 
+  bool get isTripRequest =>
+      messageType.trim().toLowerCase() == 'trip_request' ||
+      metadata?['pickup'] is Map ||
+      metadata?['destination'] is Map ||
+      text.trim().toLowerCase().startsWith('trip request:');
+
+  bool get isCancelledTripRequest {
+    final Object? status = metadata?['tripRequestStatus'];
+    return status?.toString().trim().toLowerCase() == 'cancelled';
+  }
+
   factory RideMessageModel.fromJson(Map<String, dynamic> json) =>
       RideMessageModel(
         id: (json['_id'] ?? json['id'] ?? json['messageId'] ?? '').toString(),

@@ -2,18 +2,22 @@ import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { listAdminRides } from "../../utils/ridesAdminApi";
+import { getRides } from "../../api/domains/rides";
 import Rides from "./Rides";
 
-vi.mock("../../utils/ridesAdminApi", () => ({
-  listAdminRides: vi.fn(),
-  rideApiError: (error, fallback) => error?.message || fallback,
+vi.mock("../../api/domains/rides", () => ({
+  getRides: vi.fn(),
+  ridesErrorMessage: (error, fallback) => error?.message || fallback,
+}));
+
+vi.mock("../../context/SocketContext", () => ({
+  useSocket: () => ({ socket: null, isConnected: false }),
 }));
 
 describe("Admin ride list", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    listAdminRides.mockResolvedValue({
+    getRides.mockResolvedValue({
       rides: [{
         id: "ride-1",
         status: "in_progress",
@@ -22,6 +26,8 @@ describe("Admin ride list", () => {
         pickup: { address: "Pickup" },
         destination: { address: "Destination" },
         etaMinutes: 12,
+        distanceMeters: 2450,
+        lastGpsAt: "2026-07-29T10:00:00.000Z",
         updatedAt: "2026-07-29T10:00:00.000Z",
       }],
       pagination: { page: 1, limit: 20, total: 1, totalPages: 1 },
@@ -44,8 +50,8 @@ describe("Admin ride list", () => {
 
   it("defaults to the active operational filter", async () => {
     render(<MemoryRouter><Rides /></MemoryRouter>);
-    await waitFor(() => expect(listAdminRides).toHaveBeenCalled());
-    expect(listAdminRides.mock.calls[0][0]).toEqual(expect.objectContaining({
+    await waitFor(() => expect(getRides).toHaveBeenCalled());
+    expect(getRides.mock.calls[0][0]).toEqual(expect.objectContaining({
       status: "active",
       page: 1,
       limit: 20,
@@ -54,11 +60,21 @@ describe("Admin ride list", () => {
     }));
   });
 
+  it("sends city and participant filters", async () => {
+    render(<MemoryRouter><Rides /></MemoryRouter>);
+    await screen.findByText("Assigned User");
+    const cityInput = screen.getByPlaceholderText("Dubai, Abu Dhabi…");
+    await userEvent.type(cityInput, "Dubai");
+    await waitFor(() => expect(getRides.mock.calls.at(-1)[0].filters).toEqual(
+      expect.objectContaining({ city: "Dubai" }),
+    ));
+  });
+
   it("supports locked operational views without duplicating ride logic", async () => {
     render(<MemoryRouter><Rides initialFilter="stuck" lockedFilter /></MemoryRouter>);
     expect(await screen.findByText("Stuck Rides")).toBeInTheDocument();
-    await waitFor(() => expect(listAdminRides).toHaveBeenCalled());
-    expect(listAdminRides.mock.calls[0][0]).toEqual(expect.objectContaining({
+    await waitFor(() => expect(getRides).toHaveBeenCalled());
+    expect(getRides.mock.calls[0][0]).toEqual(expect.objectContaining({
       status: "stuck",
     }));
     expect(screen.queryByRole("button", { name: "Active" })).not.toBeInTheDocument();

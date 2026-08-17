@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import Swal from "sweetalert2";
 import send from "../assets/images/send.png";
+import { getAdminNotifications, sendAdminNotification } from "../api";
 
 const PushNotification = () => {
   const DEFAULT_ITEMS_PER_PAGE = 10;
@@ -11,6 +12,7 @@ const PushNotification = () => {
   const [pageName, setPageName] = useState("");
   const [errors, setErrors] = useState({ pageName: "" });
   const [notifications, setNotifications] = useState([]);
+  const [sending, setSending] = useState(false);
   const [recipients, setRecipients] = useState({
     subAdmin: false,
     user: false,
@@ -23,28 +25,26 @@ const PushNotification = () => {
     setCurrentPage(page);
   };
 
-  const fetchData = () => {
-    setTimeout(() => {
-      const users = [
-        {
-          srNum: 1,
-          createdDate: "3 Jan 2024",
-          message: "I am Anjali Verma",
-        },
-        {
-          srNum: 2,
-          createdDate: "3 Oct 2024",
-          message: "Hello, I'm Rahul Singh",
-        },
-      ];
-      setNotifications(users);
+  const fetchData = async () => {
+    setLoading(true);
+    try {
+      const { notifications: items } = await getAdminNotifications({
+        page: currentPage + 1,
+        limit: itemsPerPage,
+      });
+      setNotifications(items);
+    } catch (error) {
+      setNotifications([]);
+      Swal.fire("Error", error?.message || "Failed to load notifications", "error");
+    } finally {
       setLoading(false);
-    }, 1000);
+    }
   };
 
   useEffect(() => {
     fetchData();
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentPage, itemsPerPage]);
 
   const handleItemsPerPageChange = (e) => {
     setItemsPerPage(Number(e.target.value));
@@ -61,46 +61,54 @@ const PushNotification = () => {
 
     if (!pageName.trim()) {
       setErrors({ pageName: "Message cannot be empty." });
-    } else {
-      setErrors({ pageName: "" });
-
-      Swal.fire({
-        title: "Are you sure?",
-        text: "Do you want to add this notification?",
-        icon: "question",
-        showCancelButton: true,
-        confirmButtonColor: "#3085d6",
-        cancelButtonColor: "#d33",
-        confirmButtonText: "Yes, add it!",
-      }).then((result) => {
-        if (result.isConfirmed) {
-          const selectedRecipients = [];
-          if (recipients.subAdmin) selectedRecipients.push("Sub-Admin");
-          if (recipients.user) selectedRecipients.push("User");
-          if (recipients.both) selectedRecipients.push("Both");
-
-          const newNotification = {
-            srNum: notifications.length + 1,
-            createdDate: new Date().toLocaleDateString("en-US", {
-              day: "numeric",
-              month: "short",
-              year: "numeric",
-            }),
-            message: pageName,
-            recipients: selectedRecipients.join(", "),
-          };
-
-          setNotifications([...notifications, newNotification]);
-          setPageName("");
-          setRecipients({ subAdmin: false, user: false, both: false });
-          Swal.fire("Success!", "Notification added!", "success");
-        }
-      });
+      return;
     }
+    setErrors({ pageName: "" });
+
+    Swal.fire({
+      title: "Are you sure?",
+      text: "Do you want to send this notification?",
+      icon: "question",
+      showCancelButton: true,
+      confirmButtonColor: "#3085d6",
+      cancelButtonColor: "#d33",
+      confirmButtonText: "Yes, send it!",
+    }).then(async (result) => {
+      if (!result.isConfirmed) return;
+      const target =
+        recipients.both || (!recipients.user && !recipients.subAdmin)
+          ? "both"
+          : recipients.user
+            ? "user"
+            : "driver";      setSending(true);
+      try {
+        const outcome = await sendAdminNotification({
+          recipients: target,
+          title: "Drewel",
+          message: pageName.trim(),
+        });
+        setPageName("");
+        setRecipients({ subAdmin: false, user: false, both: false });
+        Swal.fire(
+          "Success!",
+          outcome?.message || "Notification sent!",
+          "success"
+        );
+        fetchData();
+      } catch (error) {
+        Swal.fire(
+          "Error",
+          error?.message || "Failed to send notification",
+          "error"
+        );
+      } finally {
+        setSending(false);
+      }
+    });
   };
 
-  const filteredData = notifications.filter((user) =>
-    user.message.toLowerCase().includes(searchTerm.toLowerCase())
+  const filteredData = notifications.filter((item) =>
+    (item.message || "").toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   const paginatedData = filteredData.slice(
@@ -184,12 +192,71 @@ const PushNotification = () => {
                       <div className="invalid-feedback">{errors.pageName}</div>
                     )}
                   </div>
+                  <div className="col-lg-12 mt-3">
+                    <label className="form-label d-block">Send to</label>
+                    <div className="form-check form-check-inline">
+                      <input
+                        className="form-check-input"
+                        type="checkbox"
+                        id="recipient-user"
+                        checked={recipients.user}
+                        onChange={(e) =>
+                          setRecipients((prev) => ({
+                            ...prev,
+                            user: e.target.checked,
+                            both: false,
+                          }))
+                        }
+                      />
+                      <label className="form-check-label" htmlFor="recipient-user">
+                        Users
+                      </label>
+                    </div>
+                    <div className="form-check form-check-inline">
+                      <input
+                        className="form-check-input"
+                        type="checkbox"
+                        id="recipient-driver"
+                        checked={recipients.subAdmin}
+                        onChange={(e) =>
+                          setRecipients((prev) => ({
+                            ...prev,
+                            subAdmin: e.target.checked,
+                            both: false,
+                          }))
+                        }
+                      />
+                      <label className="form-check-label" htmlFor="recipient-driver">
+                        Drivers
+                      </label>
+                    </div>
+                    <div className="form-check form-check-inline">
+                      <input
+                        className="form-check-input"
+                        type="checkbox"
+                        id="recipient-both"
+                        checked={recipients.both}
+                        onChange={(e) =>
+                          setRecipients((prev) => ({
+                            ...prev,
+                            both: e.target.checked,
+                            user: false,
+                            subAdmin: false,
+                          }))
+                        }
+                      />
+                      <label className="form-check-label" htmlFor="recipient-both">
+                        Both
+                      </label>
+                    </div>
+                  </div>
                   <div className="col-lg-12 text-center mt-2">
                     <button
                       className="btn custom-btn text-white mt-2 w-20pr"
                       type="submit"
+                      disabled={sending}
                     >
-                      Send
+                      {sending ? "Sending..." : "Send"}
                       <i
                         className="fa-regular fa-paper-plane"
                         style={{ marginLeft: "5px" }}
@@ -265,25 +332,43 @@ const PushNotification = () => {
                         <tr>
                           <th>Sr. num</th>
                           <th>Create Date</th>
+                          <th>Recipient</th>
                           <th>Message</th>
                         </tr>
                       </thead>
                       <tbody>
                         {paginatedData.length > 0 ? (
                           paginatedData.map((row, index) => (
-                            <tr key={index}>
+                            <tr key={row.id || index}>
                               <td>{index + 1 + currentPage * itemsPerPage}</td>
-                              <td>{row.createdDate}</td>
                               <td>
-                                {row.message.length > 10
-                                  ? row.message.substring(0, 100) + "..."
-                                  : row.message}
+                                {row.createdAt
+                                  ? new Date(row.createdAt).toLocaleDateString("en-US", {
+                                      day: "numeric",
+                                      month: "short",
+                                      year: "numeric",
+                                    })
+                                  : "-"}
+                              </td>
+                              <td>
+                                {row.recipientType === "driver"
+                                  ? "Driver"
+                                  : row.recipientType === "admin"
+                                    ? "Admin"
+                                    : "User"}
+                              </td>
+                              <td>
+                                {row.message
+                                  ? row.message.length > 100
+                                    ? row.message.substring(0, 100) + "..."
+                                    : row.message
+                                  : ""}
                               </td>
                             </tr>
                           ))
                         ) : (
                           <tr>
-                            <td colSpan="5">No Data Found...</td>
+                            <td colSpan="4">No Data Found...</td>
                           </tr>
                         )}
                       </tbody>

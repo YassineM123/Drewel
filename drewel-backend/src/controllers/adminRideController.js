@@ -4,6 +4,8 @@ import Ride, {
   TERMINAL_RIDE_STATUSES,
 } from "../models/Ride.js";
 import RideAudit from "../models/RideAudit.js";
+import RideInternalNote from "../models/RideInternalNote.js";
+import TripOffer from "../models/TripOffer.js";
 import PointTransaction from "../models/PointTransaction.js";
 import Driver from "../models/Driver.js";
 import User from "../models/User.js";
@@ -16,6 +18,8 @@ import {
   runPointsTransaction,
   toWalletDto,
 } from "../services/pointsWalletService.js";
+import { io, ADMIN_TRACKING_ROOM } from "../socket/index.js";
+import { toTripOfferDto } from "../services/tripOfferService.js";
 
 const cancelledStatuses = [
   "cancelled",
@@ -71,6 +75,16 @@ const principalFor = (req) => ({
   subject: req.admin,
 });
 
+const emitAdminRideUpdate = (ride, event, payload) => {
+  try {
+    io.to(`ride:${String(ride?._id)}`)
+      .to(ADMIN_TRACKING_ROOM)
+      .emit(event, { rideId: String(ride?._id), ...payload });
+  } catch (error) {
+    console.error("[socket] admin ride update emit failed", error.message);
+  }
+};
+
 const rideDto = (ride) => ({
   id: String(ride._id),
   reference: ride.reference,
@@ -114,6 +128,17 @@ const rideDto = (ride) => ({
   etaMinutes:
     ride.routeSnapshot?.durationSeconds != null
       ? Math.ceil(ride.routeSnapshot.durationSeconds / 60)
+      : null,
+  distanceMeters: ride.routeSnapshot?.distanceMeters ?? null,
+  routePhase: ride.routeSnapshot?.phase || null,
+  routePolyline: ride.routeSnapshot?.encodedPolyline || "",
+  lastGpsAt: ride.lastDriverLocation?.recordedAt || null,
+  lastGpsAgeSeconds:
+    ride.lastDriverLocation?.recordedAt != null
+      ? Math.max(
+          0,
+          Math.round((Date.now() - new Date(ride.lastDriverLocation.recordedAt).getTime()) / 1000)
+        )
       : null,
   requestedAt: ride.requestedAt,
   confirmedAt: ride.confirmedAt,
@@ -218,6 +243,16 @@ export const listAdminRides = async (req, res) => {
       filter.vehicleType = new RegExp(escaped, "i");
     }
 
+    const city = String(req.query.city || "").trim();
+    if (city) {
+      const escaped = city.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      filter.$or = [
+        ...(filter.$or || []),
+        { "pickup.address": new RegExp(escaped, "i") },
+        { "destination.address": new RegExp(escaped, "i") },
+      ];
+    }
+
     const addParticipantFilter = async (field, value, model, nameFields) => {
       const text = String(value || "").trim();
       if (!text) return;
@@ -320,16 +355,36 @@ export const getAdminRide = async (req, res) => {
     if (!ride) {
       throw new RideTransitionError("Ride not found", 404, "RIDE_NOT_FOUND");
     }
-    const [auditTrail, points] = await Promise.all([
+    const [auditTrail, points, tripOffer, internalNotes] = await Promise.all([
       RideAudit.find({ rideId }).sort({ occurredAt: -1, _id: -1 }).limit(250),
       PointTransaction.find({ rideId }).sort({ createdAt: -1, _id: -1 }),
+      TripOffer.findOne({
+        $or: [{ contactRideId: rideId }, { rideId }],
+      }).lean(),
+      RideInternalNote.find({ rideId }).sort({ createdAt: -1, _id: -1 }).lean(),
     ]);
+    const pointsCharged = points.reduce(
+      (sum, transaction) =>
+        transaction.type === "debit" && transaction.status === "completed"
+          ? sum + Number(transaction.points || 0)
+          : sum,
+      0
+    );
     return res.json({
       success: true,
       ride: {
         ...rideDto(ride),
-        auditTrail,
+        tripOffer: tripOffer ? toTripOfferDto(tripOffer) : null,
+        internalNotes: internalNotes.map((note) => ({
+          id: String(note._id),
+          adminId: String(note.adminId),
+          adminName: note.adminName,
+          text: note.text,
+          createdAt: note.createdAt,
+        })),
+        pointsCharged,
         pointsTransaction: points,
+        auditTrail,
       },
     });
   } catch (error) {
@@ -347,6 +402,56 @@ export const cancelAdminRide = async (req, res) => {
       reason: requireReason(req.body?.reason),
       note: String(req.body?.note || "").trim().slice(0, 1000),
       overrideReason: requireReason(req.body?.reason),
+    });
+    emitAdminRideUpdate(ride, "ride:status_changed", {
+      status: ride.status,
+      action: "cancelled_by_admin",
+      updatedAt: ride.endedAt || ride.updatedAt,
+    });
+    return res.json({ success: true, ride: rideDto(ride) });
+  } catch (error) {
+    return fail(res, error);
+  }
+};
+
+export const openAdminDispute = async (req, res) => {
+  try {
+    const ride = await transitionRideState({
+      rideId: requireRideId(req.params.rideId),
+      principal: principalFor(req),
+      nextStatus: "disputed",
+      idempotencyKey: requireKey(req),
+      reason: requireReason(req.body?.reason),
+      note: String(req.body?.note || "").trim().slice(0, 1000),
+      metadata: { openedBy: "admin", disputeOpened: true },
+    });
+    emitAdminRideUpdate(ride, "ride:status_changed", {
+      status: ride.status,
+      action: "dispute_opened",
+      updatedAt: ride.updatedAt,
+    });
+    return res.json({ success: true, ride: rideDto(ride) });
+  } catch (error) {
+    return fail(res, error);
+  }
+};
+
+export const markRideTechnicalFailure = async (req, res) => {
+  try {
+    const ride = await transitionRideState({
+      rideId: requireRideId(req.params.rideId),
+      principal: principalFor(req),
+      nextStatus: "cancelled_by_admin",
+      idempotencyKey: requireKey(req),
+      reason: requireReason(req.body?.reason),
+      note: String(req.body?.note || "").trim().slice(0, 1000),
+      overrideReason: requireReason(req.body?.reason),
+      metadata: { failureType: "technical", pointsDecision: "admin_refund_pending" },
+    });
+    emitAdminRideUpdate(ride, "ride:status_changed", {
+      status: ride.status,
+      action: "technical_failure",
+      updatedAt: ride.endedAt || ride.updatedAt,
     });
     return res.json({ success: true, ride: rideDto(ride) });
   } catch (error) {
@@ -374,6 +479,11 @@ export const resolveRideDispute = async (req, res) => {
       reason,
       note: String(req.body?.note || "").trim().slice(0, 1000),
       overrideReason: reason,
+    });
+    emitAdminRideUpdate(ride, "ride:status_changed", {
+      status: ride.status,
+      action: "dispute_resolved",
+      updatedAt: ride.endedAt || ride.updatedAt,
     });
     return res.json({ success: true, ride: rideDto(ride) });
   } catch (error) {
@@ -453,6 +563,11 @@ export const unlockRideParticipants = async (req, res) => {
         ),
       ]);
     });
+    emitAdminRideUpdate(ride, "ride:participants_unlocked", {
+      action: "participants_unlocked",
+      idempotent,
+      updatedAt: new Date(),
+    });
     return res.json({ success: true, ride: rideDto(ride), idempotent });
   } catch (error) {
     return fail(res, error);
@@ -468,11 +583,13 @@ export const refundRidePoints = async (req, res) => {
       req.body?.points === undefined || req.body?.points === null
         ? null
         : Number(req.body.points);
+    let rideRef = null;
     const result = await runPointsTransaction(async (session) => {
       const ride = await Ride.findById(rideId).session(session);
       if (!ride) {
         throw new RideTransitionError("Ride not found", 404, "RIDE_NOT_FOUND");
       }
+      rideRef = ride;
       const refund = await refundRidePointsInSession({
         driverId: ride.driverId,
         rideId,
@@ -506,11 +623,110 @@ export const refundRidePoints = async (req, res) => {
       }
       return refund;
     });
+    emitAdminRideUpdate(rideRef, "ride:points_refunded", {
+      action: "points_refunded",
+      points: result.transaction?.points ?? null,
+      transactionId: result.transaction ? String(result.transaction._id) : null,
+      idempotent: result.idempotent,
+      updatedAt: new Date(),
+    });
     return res.status(result.idempotent ? 200 : 201).json({
       success: true,
       wallet: toWalletDto(result.wallet),
       transaction: result.transaction,
       idempotent: result.idempotent,
+    });
+  } catch (error) {
+    return fail(res, error);
+  }
+};
+
+export const addRideInternalNote = async (req, res) => {
+  try {
+    const rideId = requireRideId(req.params.rideId);
+    const key = requireKey(req);
+    const text = String(req.body?.text || "").trim();
+    if (text.length < 3 || text.length > 2000) {
+      throw new RideTransitionError(
+        "Internal note must be between 3 and 2000 characters",
+        400,
+        "ADMIN_RIDE_NOTE_REQUIRED"
+      );
+    }
+    let note;
+    let idempotent = false;
+    await mongoose.connection.transaction(async (session) => {
+      const ride = await Ride.findById(rideId).session(session);
+      if (!ride) {
+        throw new RideTransitionError("Ride not found", 404, "RIDE_NOT_FOUND");
+      }
+      const existing = await RideInternalNote.findOne({
+        rideId,
+        adminId: req.admin._id,
+        idempotencyKey: key,
+      }).session(session);
+      if (existing) {
+        idempotent = true;
+        note = existing;
+        return;
+      }
+      const admin = await mongoose
+        .model("Admin")
+        .findById(req.admin._id)
+        .select("name fullName firstName lastName email")
+        .session(session);
+      const adminName =
+        admin?.fullName ||
+        [admin?.firstName, admin?.lastName].filter(Boolean).join(" ").trim() ||
+        admin?.name ||
+        admin?.email ||
+        "";
+      [note] = await RideInternalNote.create(
+        [
+          {
+            rideId,
+            adminId: req.admin._id,
+            adminName,
+            text,
+            idempotencyKey: key,
+          },
+        ],
+        { session }
+      );
+      await RideAudit.create(
+        [
+          {
+            rideId,
+            action: "ride_internal_note_added",
+            fromStatus: ride.status,
+            toStatus: ride.status,
+            actorId: req.admin._id,
+            actorRole: "admin",
+            reasonCode: "",
+            metadata: { noteId: String(note._id) },
+            idempotencyKey: key,
+          },
+        ],
+        { session }
+      );
+    });
+    emitAdminRideUpdate(
+      { _id: rideId },
+      "ride:internal_note_added",
+      { noteId: note ? String(note._id) : null, idempotent }
+    );
+    return res.status(idempotent ? 200 : 201).json({
+      success: true,
+      note: note
+        ? {
+            id: String(note._id),
+            adminId: String(note.adminId),
+            adminName: note.adminName,
+            text: note.text,
+            createdAt: note.createdAt,
+          }
+        : null,
+      idempotent,
     });
   } catch (error) {
     return fail(res, error);

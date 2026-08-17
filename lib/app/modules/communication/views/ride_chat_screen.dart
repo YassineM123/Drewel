@@ -1,8 +1,9 @@
 import 'dart:async';
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:get/get.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -22,6 +23,7 @@ import '../../active_ride/controllers/active_ride_controller.dart';
 import '../../points/bindings/driver_points_binding.dart';
 import '../../points/controllers/driver_points_controller.dart';
 import '../../points/widgets/trip_offer_points.dart';
+import '../../user_home/widgets/trip_request_map_sheet.dart';
 import '../controllers/call_state_controller.dart';
 
 class RideChatScreen extends StatefulWidget {
@@ -75,20 +77,26 @@ class _RideChatScreenState extends State<RideChatScreen> {
   // intentionally supports the server-defined post-completion grace period.
   bool get _canChat => _routeRide?.canCommunicate == true;
 
-  bool get _isDesktopPlatform =>
-      !kIsWeb &&
-      <TargetPlatform>{
-        TargetPlatform.windows,
-        TargetPlatform.macOS,
-        TargetPlatform.linux,
-      }.contains(defaultTargetPlatform);
-
   String get _chatTitle {
     final RideConversationModel? conversation = _conversation;
     final String name = conversation?.counterpart?.displayName.trim() ?? '';
     if (name.isNotEmpty) return name;
     final String fallback = _communication.counterpart?.firstName.trim() ?? '';
     return fallback.isNotEmpty ? fallback : 'Drewel secure chat';
+  }
+
+  void _openCounterpartProfile(BuildContext context) {
+    final ConversationCounterpartModel? counterpart =
+        _conversation?.counterpart;
+    if (counterpart == null) return;
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      useSafeArea: true,
+      builder: (BuildContext sheetContext) =>
+          _CounterpartProfileSheet(counterpart: counterpart),
+    );
   }
 
   @override
@@ -154,7 +162,9 @@ class _RideChatScreenState extends State<RideChatScreen> {
         _conversation = conversation;
         _routeRide = routeRide;
         _messages.clear();
-        _messages.addAll(messages);
+        _messages.addAll(messages.where(
+          (RideMessageModel message) => !message.isCancelledTripRequest,
+        ));
         _incomingOffers
           ..clear()
           ..addAll(incoming);
@@ -258,26 +268,43 @@ class _RideChatScreenState extends State<RideChatScreen> {
             onPressed: Get.back,
             icon: const Icon(Icons.arrow_back_rounded, color: primaryColor),
           ),
-          title: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: <Widget>[
-              Text(
-                _chatTitle,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                textAlign: TextAlign.center,
-                style: const TextStyle(
-                  color: textColor,
-                  fontSize: 18,
-                  fontWeight: FontWeight.w800,
-                ),
+          title: InkWell(
+            borderRadius: BorderRadius.circular(20),
+            onTap: () => _openCounterpartProfile(context),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 4),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: <Widget>[
+                  _CounterpartAvatar(
+                    imageUrl: _conversation?.counterpart?.profileImageUrl,
+                    radius: 18,
+                  ),
+                  const SizedBox(width: 10),
+                  Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: <Widget>[
+                      Text(
+                        _chatTitle,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: textColor,
+                          fontSize: 18,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                      const SizedBox(height: 3),
+                      _CounterpartSubtitle(
+                        conversation: _conversation,
+                        contactAllowed: _canChat,
+                      ),
+                    ],
+                  ),
+                ],
               ),
-              const SizedBox(height: 3),
-              _CounterpartSubtitle(
-                conversation: _conversation,
-                contactAllowed: _canChat,
-              ),
-            ],
+            ),
           ),
           actions: <Widget>[
             IconButton(
@@ -333,8 +360,11 @@ class _RideChatScreenState extends State<RideChatScreen> {
                     : _MessageList(
                         messages: _messages,
                         selfId: _selfId,
+                        role: _role,
                         conversation: _conversation,
                         onRefresh: () => _load(showLoader: false),
+                        onDetails: _showTripRequestDetails,
+                        onConfirm: _confirmTripRequest,
                       ),
               ),
               _canChat
@@ -349,7 +379,10 @@ class _RideChatScreenState extends State<RideChatScreen> {
                       textController: _textController,
                       hintText: 'Message $_chatTitle...',
                       sending: _sending,
+                      canSendTripRequest: _role != ApiKeyConstants.driver &&
+                          _routeRide?.status == 'contacting',
                       onSend: _send,
+                      onTripRequest: _showPassengerTripRequest,
                     )
                   : const SizedBox.shrink(),
             ],
@@ -488,6 +521,202 @@ class _RideChatScreenState extends State<RideChatScreen> {
     );
   }
 
+  Future<void> _showTripRequestDetails(RideMessageModel message) async {
+    final Map<String, dynamic>? pickup = _messagePoint(message, 'pickup');
+    final Map<String, dynamic>? destination =
+        _messagePoint(message, 'destination');
+    final Object? price = message.metadata?['proposedPrice'];
+    final String currency =
+        (message.metadata?['currency'] ?? '').toString().trim();
+    await showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      backgroundColor: const Color(0xFFFFFBFC),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+      ),
+      builder: (BuildContext sheetContext) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 4, 20, 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Text(
+                'Trip request',
+                style: Theme.of(sheetContext).textTheme.titleLarge?.copyWith(
+                      fontWeight: FontWeight.w800,
+                    ),
+              ),
+              const SizedBox(height: 16),
+              _OfferLocationRow(
+                icon: Icons.my_location_rounded,
+                label: 'PICKUP',
+                value: _pointAddress(pickup, 'Pickup location'),
+              ),
+              _OfferLocationRow(
+                icon: Icons.location_on_rounded,
+                label: 'DESTINATION',
+                value: _pointAddress(destination, 'Destination'),
+              ),
+              if (price != null) ...<Widget>[
+                const Divider(height: 24),
+                Text(
+                  '$price $currency'.trim(),
+                  style:
+                      Theme.of(sheetContext).textTheme.headlineSmall?.copyWith(
+                            color: primaryColor,
+                            fontWeight: FontWeight.w800,
+                          ),
+                ),
+              ],
+              if ((message.metadata?['note'] ?? '')
+                  .toString()
+                  .trim()
+                  .isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(top: 12),
+                  child: Text(message.metadata!['note'].toString()),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _confirmTripRequest(RideMessageModel message) async {
+    if (_role != ApiKeyConstants.driver) return;
+    final Map<String, dynamic>? pickup = _messagePoint(message, 'pickup');
+    final Map<String, dynamic>? destination =
+        _messagePoint(message, 'destination');
+    if (pickup == null || destination == null) {
+      setState(() => _error = 'Trip request route is missing.');
+      return;
+    }
+    final double price =
+        double.tryParse('${message.metadata?['proposedPrice'] ?? ''}') ?? 0;
+    final String currency = (message.metadata?['currency'] ?? 'AED')
+        .toString()
+        .trim()
+        .toUpperCase();
+    if (_points == null) {
+      DriverPointsBinding().dependencies();
+      _points = Get.find<DriverPointsController>();
+    }
+    final bool confirmed = await showOfferReservationConfirmation(
+      context,
+      _points!,
+    );
+    if (!confirmed || !mounted) return;
+    final SendOfferResult result = await _points!.sendOffer(
+      TripOfferDraft(
+        contactRideId: message.rideId,
+        pickup: pickup,
+        destination: destination,
+        offeredPrice: price,
+        currency: currency.isEmpty ? 'AED' : currency,
+        vehicleType: _routeRide?.vehicleType ?? '',
+        note: (message.metadata?['note'] ?? '').toString(),
+      ),
+    );
+    if (!mounted) return;
+    if (result == SendOfferResult.sent) {
+      setState(() {
+        _messages.removeWhere((RideMessageModel item) =>
+            item.isTripRequest && item.rideId == message.rideId);
+      });
+      unawaited(_load(showLoader: false));
+    }
+    final String feedback = switch (result) {
+      SendOfferResult.sent => 'Trip offer sent.',
+      SendOfferResult.insufficientPoints => 'points.insufficient'.tr,
+      SendOfferResult.failed =>
+        _points!.lastSendOfferError ?? 'Unable to send the offer.',
+    };
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(feedback)),
+    );
+  }
+
+  Map<String, dynamic>? _messagePoint(RideMessageModel message, String key) {
+    final Object? raw = message.metadata?[key];
+    return raw is Map ? Map<String, dynamic>.from(raw) : null;
+  }
+
+  String _pointAddress(Map<String, dynamic>? point, String fallback) {
+    final String address = (point?['address'] ?? '').toString().trim();
+    return address.isEmpty ? fallback : address;
+  }
+
+  Future<void> _showPassengerTripRequest() async {
+    if (_role == ApiKeyConstants.driver) return;
+    final String? rideId = _rideId;
+    if (rideId == null || _sending) return;
+
+    final RideCoordinateModel? existingPickup = _routeRide?.pickup;
+    LatLng pickup;
+    String pickupAddress;
+    if (existingPickup?.isValid == true) {
+      pickup = LatLng(existingPickup!.latitude, existingPickup.longitude);
+      pickupAddress = existingPickup.address;
+    } else {
+      try {
+        final Position position = await Geolocator.getCurrentPosition(
+          locationSettings: const LocationSettings(
+            accuracy: LocationAccuracy.high,
+            timeLimit: Duration(seconds: 12),
+          ),
+        );
+        pickup = LatLng(position.latitude, position.longitude);
+        pickupAddress = 'Current location';
+      } catch (_) {
+        if (!mounted) return;
+        setState(() => _error = 'Unable to read your location.');
+        return;
+      }
+    }
+
+    if (!mounted) return;
+    final TripRouteRequest? route = await showTripRequestMapSheet(
+      context,
+      pickup: pickup,
+      pickupAddress: pickupAddress,
+    );
+    if (route == null || !mounted) return;
+
+    final _TripRequestDetails? details = await showDialog<_TripRequestDetails>(
+      context: context,
+      builder: (BuildContext dialogContext) =>
+          const _TripRequestDetailsDialog(),
+    );
+    if (details == null || !mounted) return;
+
+    setState(() {
+      _sending = true;
+      _error = null;
+    });
+    try {
+      final RideMessageModel sent =
+          await _communication.messageRepository.sendTripRequest(
+        rideId,
+        pickup: route.pickup,
+        destination: route.destination,
+        proposedPrice: details.price,
+        currency: details.currency,
+        note: details.note,
+      );
+      if (!mounted) return;
+      setState(() => _messages.add(sent));
+    } on CommunicationApiException catch (error) {
+      if (mounted) setState(() => _error = error.message);
+    } catch (_) {
+      if (mounted) setState(() => _error = 'Trip request not sent.');
+    } finally {
+      if (mounted) setState(() => _sending = false);
+    }
+  }
+
   Future<void> _showSafetyActions() async {
     final String? rideId = _rideId;
     if (rideId == null || rideId.isEmpty) {
@@ -617,11 +846,197 @@ class _RideChatScreenState extends State<RideChatScreen> {
       ),
     );
   }
+}
 
-  void _disposeControllers(List<TextEditingController> controllers) {
-    for (final TextEditingController controller in controllers) {
-      controller.dispose();
-    }
+class _CounterpartAvatar extends StatelessWidget {
+  const _CounterpartAvatar({required this.imageUrl, required this.radius});
+
+  final String? imageUrl;
+  final double radius;
+
+  @override
+  Widget build(BuildContext context) {
+    final bool hasImage = imageUrl != null && imageUrl!.isNotEmpty;
+    return CircleAvatar(
+      radius: radius,
+      backgroundColor: primaryColor.withValues(alpha: 0.12),
+      backgroundImage: hasImage ? NetworkImage(imageUrl!) : null,
+      child: hasImage
+          ? null
+          : Icon(Icons.person_rounded, size: radius, color: primaryColor),
+    );
+  }
+}
+
+class _CounterpartProfileSheet extends StatelessWidget {
+  const _CounterpartProfileSheet({required this.counterpart});
+
+  final ConversationCounterpartModel counterpart;
+
+  @override
+  Widget build(BuildContext context) {
+    final bool isDriver = counterpart.role == 'driver';
+    final String vehicle = <String?>[
+      counterpart.vehicleType,
+      counterpart.vehicleModel,
+    ].where((String? value) => value != null && value.isNotEmpty).join(' - ');
+    return SafeArea(
+      top: false,
+      child: Container(
+        margin: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+        padding: const EdgeInsets.fromLTRB(24, 14, 24, 24),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(28),
+          boxShadow: <BoxShadow>[
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.08),
+              blurRadius: 24,
+              offset: const Offset(0, -4),
+            ),
+          ],
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            Container(
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: editTextButton,
+                borderRadius: BorderRadius.circular(4),
+              ),
+            ),
+            const SizedBox(height: 22),
+            _CounterpartAvatar(imageUrl: counterpart.profileImageUrl, radius: 44),
+            const SizedBox(height: 14),
+            Text(
+              counterpart.displayName.isNotEmpty
+                  ? counterpart.displayName
+                  : (isDriver ? 'Driver' : 'Passenger'),
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                color: textColor,
+                fontSize: 21,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+            const SizedBox(height: 6),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              decoration: BoxDecoration(
+                color: primaryColor.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Text(
+                isDriver ? 'Driver' : 'Passenger',
+                style: const TextStyle(
+                  color: primaryColor,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+            if (isDriver && counterpart.rating != null) ...<Widget>[
+              const SizedBox(height: 14),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: <Widget>[
+                  const Icon(Icons.star_rounded, color: amberColor, size: 22),
+                  const SizedBox(width: 4),
+                  Text(
+                    counterpart.rating!.toStringAsFixed(1),
+                    style: const TextStyle(
+                      color: textColor,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  const Text(
+                    'rating',
+                    style: TextStyle(color: text2Color, fontSize: 14),
+                  ),
+                ],
+              ),
+            ],
+            if (isDriver && (vehicle.isNotEmpty || (counterpart.registration ?? '').isNotEmpty)) ...<Widget>[
+              const SizedBox(height: 20),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                decoration: BoxDecoration(
+                  color: cartColor,
+                  borderRadius: BorderRadius.circular(18),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    if (vehicle.isNotEmpty)
+                      Row(
+                        children: <Widget>[
+                          const Icon(Icons.directions_car_rounded,
+                              color: primaryColor, size: 20),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              vehicle,
+                              style: const TextStyle(
+                                color: textColor,
+                                fontSize: 15,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    if (vehicle.isNotEmpty &&
+                        (counterpart.registration ?? '').isNotEmpty)
+                      const SizedBox(height: 10),
+                    if ((counterpart.registration ?? '').isNotEmpty)
+                      Row(
+                        children: <Widget>[
+                          const Icon(Icons.pin_rounded,
+                              color: primaryColor, size: 20),
+                          const SizedBox(width: 10),
+                          Text(
+                            counterpart.registration!,
+                            style: const TextStyle(
+                              color: textColor,
+                              fontSize: 15,
+                              fontWeight: FontWeight.w600,
+                              letterSpacing: 0.5,
+                            ),
+                          ),
+                        ],
+                      ),
+                  ],
+                ),
+              ),
+            ],
+            const SizedBox(height: 22),
+            SizedBox(
+              width: double.infinity,
+              height: 48,
+              child: OutlinedButton(
+                onPressed: () => Navigator.of(context).pop(),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: primaryColor,
+                  side: const BorderSide(color: primaryColor),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                ),
+                child: const Text(
+                  'Close',
+                  style: TextStyle(fontWeight: FontWeight.w700),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
 
@@ -731,18 +1146,116 @@ class _QuickReplyBar extends StatelessWidget {
       );
 }
 
+class _TripRequestDetails {
+  const _TripRequestDetails({
+    required this.price,
+    required this.currency,
+    required this.note,
+  });
+
+  final double price;
+  final String currency;
+  final String note;
+}
+
+class _TripRequestDetailsDialog extends StatefulWidget {
+  const _TripRequestDetailsDialog();
+
+  @override
+  State<_TripRequestDetailsDialog> createState() =>
+      _TripRequestDetailsDialogState();
+}
+
+class _TripRequestDetailsDialogState extends State<_TripRequestDetailsDialog> {
+  final TextEditingController _price = TextEditingController();
+  final TextEditingController _currency = TextEditingController(text: 'AED');
+  final TextEditingController _note = TextEditingController();
+
+  @override
+  void dispose() {
+    _price.dispose();
+    _currency.dispose();
+    _note.dispose();
+    super.dispose();
+  }
+
+  void _submit() {
+    final double? parsed = double.tryParse(_price.text.trim());
+    final String currency = _currency.text.trim().toUpperCase();
+    if (parsed == null || parsed < 0 || currency.length != 3) return;
+    FocusScope.of(context).unfocus();
+    Navigator.pop(
+      context,
+      _TripRequestDetails(
+        price: parsed,
+        currency: currency,
+        note: _note.text.trim(),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+        icon: const CircleAvatar(
+          backgroundColor: Color(0x1FBE1B2C),
+          child: Icon(Icons.add_road_rounded, color: primaryColor),
+        ),
+        title: const Text('Send trip request'),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        scrollable: true,
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            TextField(
+              controller: _price,
+              autofocus: true,
+              keyboardType:
+                  const TextInputType.numberWithOptions(decimal: true),
+              decoration: const InputDecoration(labelText: 'Proposed price'),
+            ),
+            TextField(
+              controller: _currency,
+              textCapitalization: TextCapitalization.characters,
+              maxLength: 3,
+              decoration: const InputDecoration(labelText: 'Currency'),
+            ),
+            TextField(
+              controller: _note,
+              maxLength: 240,
+              maxLines: 2,
+              decoration: const InputDecoration(
+                labelText: 'Note for the driver (optional)',
+                counterText: '',
+              ),
+            ),
+          ],
+        ),
+        actions: <Widget>[
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(onPressed: _submit, child: const Text('Send')),
+        ],
+      );
+}
+
 class _ChatComposer extends StatelessWidget {
   const _ChatComposer({
     required this.textController,
     required this.hintText,
     required this.sending,
+    required this.canSendTripRequest,
     required this.onSend,
+    required this.onTripRequest,
   });
 
   final TextEditingController textController;
   final String hintText;
   final bool sending;
+  final bool canSendTripRequest;
   final VoidCallback onSend;
+  final VoidCallback onTripRequest;
 
   @override
   Widget build(BuildContext context) => Container(
@@ -751,6 +1264,19 @@ class _ChatComposer extends StatelessWidget {
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.end,
           children: <Widget>[
+            if (canSendTripRequest)
+              SizedBox(
+                width: 54,
+                height: 58,
+                child: IconButton(
+                  tooltip: 'Trip request',
+                  onPressed: sending ? null : onTripRequest,
+                  iconSize: 36,
+                  color: primaryColor,
+                  disabledColor: primaryColor.withValues(alpha: 0.35),
+                  icon: const Icon(Icons.playlist_add_rounded),
+                ),
+              ),
             Expanded(
               child: DecoratedBox(
                 decoration: BoxDecoration(
@@ -825,13 +1351,19 @@ class _MessageList extends StatelessWidget {
   const _MessageList({
     required this.messages,
     required this.selfId,
+    required this.role,
     required this.onRefresh,
+    required this.onDetails,
+    required this.onConfirm,
     this.conversation,
   });
 
   final List<RideMessageModel> messages;
   final String selfId;
+  final String role;
   final VoidCallback onRefresh;
+  final void Function(RideMessageModel message) onDetails;
+  final void Function(RideMessageModel message) onConfirm;
   final RideConversationModel? conversation;
 
   @override
@@ -869,12 +1401,22 @@ class _MessageList extends StatelessWidget {
         final DateTime? currentTime = message.createdAt;
         final bool showDayHeader =
             index == 0 || !_sameDay(previousTime, currentTime);
-        final Widget bubble = _MessageBubble(
-          message: message,
-          mine: mine,
-          counterpartImageUrl:
-              mine ? null : conversation?.counterpart?.profileImageUrl,
-        );
+        final Widget bubble = message.isTripRequest
+            ? _TripRequestCard(
+                message: message,
+                mine: mine,
+                canConfirm: role == ApiKeyConstants.driver,
+                counterpartImageUrl:
+                    mine ? null : conversation?.counterpart?.profileImageUrl,
+                onDetails: () => onDetails(message),
+                onConfirm: () => onConfirm(message),
+              )
+            : _MessageBubble(
+                message: message,
+                mine: mine,
+                counterpartImageUrl:
+                    mine ? null : conversation?.counterpart?.profileImageUrl,
+              );
         final bool isNewest = index == messages.length - 1;
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -931,6 +1473,220 @@ class _DayHeader extends StatelessWidget {
       ),
     );
   }
+}
+
+class _TripRequestCard extends StatelessWidget {
+  const _TripRequestCard({
+    required this.message,
+    required this.mine,
+    required this.canConfirm,
+    required this.onDetails,
+    required this.onConfirm,
+    this.counterpartImageUrl,
+  });
+
+  final RideMessageModel message;
+  final bool mine;
+  final bool canConfirm;
+  final VoidCallback onDetails;
+  final VoidCallback onConfirm;
+  final String? counterpartImageUrl;
+
+  @override
+  Widget build(BuildContext context) {
+    final Map<String, dynamic>? pickup = _point('pickup');
+    final Map<String, dynamic>? destination = _point('destination');
+    final Widget card = Container(
+      constraints: BoxConstraints(
+        maxWidth: (MediaQuery.sizeOf(context).width * 0.78)
+            .clamp(280.0, 520.0)
+            .toDouble(),
+      ),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFFDFD),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: primaryColor.withValues(alpha: 0.28)),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: <Widget>[
+          const Padding(
+            padding: EdgeInsets.fromLTRB(18, 14, 18, 12),
+            child: Row(
+              children: <Widget>[
+                Expanded(
+                  child: Text(
+                    'Trip Update',
+                    style: TextStyle(
+                      color: primaryColor,
+                      fontSize: 18,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+                Icon(Icons.local_taxi_rounded,
+                    color: Color(0xFF5E3D40), size: 24),
+              ],
+            ),
+          ),
+          Divider(height: 1, color: primaryColor.withValues(alpha: 0.20)),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 18, 20, 18),
+            child: Column(
+              children: <Widget>[
+                _TripRequestLocationLine(
+                  icon: Icons.my_location_rounded,
+                  title: 'Pickup',
+                  address: _address(pickup, 'Pickup location'),
+                ),
+                const SizedBox(height: 16),
+                _TripRequestLocationLine(
+                  icon: Icons.location_on_rounded,
+                  title: 'Destination',
+                  address: _address(destination, 'Destination'),
+                ),
+              ],
+            ),
+          ),
+          Divider(height: 1, color: primaryColor.withValues(alpha: 0.20)),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(18, 12, 18, 14),
+            child: Row(
+              children: <Widget>[
+                Expanded(
+                  child: OutlinedButton(
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: textColor,
+                      side: BorderSide(
+                        color: const Color(0xFF5E3D40).withValues(alpha: 0.65),
+                      ),
+                      minimumSize: const Size.fromHeight(46),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(28),
+                      ),
+                    ),
+                    onPressed: onDetails,
+                    child: const Text('Details'),
+                  ),
+                ),
+                if (canConfirm) ...<Widget>[
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: FilledButton(
+                      style: FilledButton.styleFrom(
+                        backgroundColor: primaryColor,
+                        foregroundColor: Colors.white,
+                        minimumSize: const Size.fromHeight(46),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(28),
+                        ),
+                      ),
+                      onPressed: onConfirm,
+                      child: const Text('Confirm'),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+    final Widget? timeLabel = message.createdAt == null
+        ? null
+        : Text(
+            DateFormat.Hm().format(message.createdAt!.toLocal()),
+            style: const TextStyle(color: text2Color, fontSize: 11),
+          );
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 8),
+      child: Row(
+        mainAxisAlignment:
+            mine ? MainAxisAlignment.end : MainAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: <Widget>[
+          if (!mine) ...<Widget>[
+            CircleAvatar(
+              radius: 16,
+              backgroundColor: primaryColor.withValues(alpha: 0.12),
+              backgroundImage:
+                  counterpartImageUrl != null && counterpartImageUrl!.isNotEmpty
+                      ? NetworkImage(counterpartImageUrl!)
+                      : null,
+              child: counterpartImageUrl == null || counterpartImageUrl!.isEmpty
+                  ? const Icon(Icons.person_rounded,
+                      size: 16, color: primaryColor)
+                  : null,
+            ),
+            const SizedBox(width: 8),
+          ],
+          Flexible(child: card),
+          if (timeLabel != null) ...<Widget>[
+            const SizedBox(width: 6),
+            timeLabel,
+          ],
+        ],
+      ),
+    );
+  }
+
+  Map<String, dynamic>? _point(String key) {
+    final Object? raw = message.metadata?[key];
+    return raw is Map ? Map<String, dynamic>.from(raw) : null;
+  }
+
+  String _address(Map<String, dynamic>? point, String fallback) {
+    final String address = (point?['address'] ?? '').toString().trim();
+    return address.isEmpty ? fallback : address;
+  }
+}
+
+class _TripRequestLocationLine extends StatelessWidget {
+  const _TripRequestLocationLine({
+    required this.icon,
+    required this.title,
+    required this.address,
+  });
+
+  final IconData icon;
+  final String title;
+  final String address;
+
+  @override
+  Widget build(BuildContext context) => Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Icon(icon, color: primaryColor, size: 28),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Text(
+                  title,
+                  style: const TextStyle(
+                    color: textColor,
+                    fontSize: 18,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  address,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: Color(0xFF5E3D40),
+                    fontSize: 15,
+                    height: 1.25,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      );
 }
 
 class _MessageBubble extends StatelessWidget {

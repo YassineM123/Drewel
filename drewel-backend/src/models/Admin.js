@@ -1,5 +1,14 @@
 import mongoose from "mongoose";
 
+export const ADMIN_ROLES = Object.freeze([
+  "owner",
+  "finance_admin",
+  "admin",
+  "support",
+  "analyst",
+  "user",
+]);
+
 const adminSchema = new mongoose.Schema(
   {
     fullName: { type: String, trim: true, default: "" },
@@ -16,7 +25,7 @@ const adminSchema = new mongoose.Schema(
     },
     role: {
       type: String,
-      enum: ["owner", "finance_admin", "admin", "user"],
+      enum: ADMIN_ROLES,
       default: "user",
     },
     permissions: {
@@ -28,6 +37,14 @@ const adminSchema = new mongoose.Schema(
       type: Boolean,
       default: true,
       index: true,
+    },
+    lastLoginAt: {
+      type: Date,
+      default: null,
+    },
+    passwordChangedAt: {
+      type: Date,
+      default: null,
     },
     profilePicture: {
       type: String,

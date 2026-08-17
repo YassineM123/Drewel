@@ -43,6 +43,50 @@ class RideMessageRepository {
     return RideMessageModel.fromJson(Map<String, dynamic>.from(raw as Map));
   }
 
+  Future<RideMessageModel> sendTripRequest(
+    String rideId, {
+    required Map<String, dynamic> pickup,
+    required Map<String, dynamic> destination,
+    required double proposedPrice,
+    required String currency,
+    String note = '',
+    String? clientMessageId,
+  }) async {
+    final String idempotencyKey = clientMessageId ?? newClientMessageId();
+    final String normalizedCurrency = currency.trim().toUpperCase();
+    final String text = <String>[
+      'Trip request: ${proposedPrice.toStringAsFixed(2)} $normalizedCurrency',
+      _routePointText('Pickup', pickup),
+      _routePointText('Destination', destination),
+      if (note.trim().isNotEmpty) 'Note: ${note.trim()}',
+    ].join('\n');
+    final Map<String, dynamic> response = await _api.post(
+      ApiUrlConstants.rideMessages(rideId),
+      <String, dynamic>{
+        'text': text,
+        'clientMessageId': idempotencyKey,
+        'messageType': 'trip_request',
+        'metadata': <String, dynamic>{
+          'pickup': pickup,
+          'destination': destination,
+          'proposedPrice': proposedPrice,
+          'currency': normalizedCurrency.isEmpty ? 'AED' : normalizedCurrency,
+          if (note.trim().isNotEmpty) 'note': note.trim(),
+        },
+      },
+    );
+    final dynamic raw = response['message'] ?? response['data'];
+    return RideMessageModel.fromJson(Map<String, dynamic>.from(raw as Map));
+  }
+
+  static String _routePointText(String label, Map<String, dynamic> point) {
+    final String address = (point['address'] ?? '').toString().trim();
+    final Object? lat = point['lat'];
+    final Object? long = point['long'];
+    final String name = address.isEmpty ? 'Pinned location' : address;
+    return '$label: $name ($lat, $long)';
+  }
+
   Future<RideMessageModel> markReceipt(
     String rideId,
     String messageId,

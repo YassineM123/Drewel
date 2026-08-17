@@ -220,6 +220,7 @@ export const transitionRideState = async ({
   note = "",
   overrideReason = "",
   pickupPinVerified = false,
+  metadata = {},
 }) => {
   if (!mongoose.isValidObjectId(rideId)) {
     throw new RideTransitionError("Invalid ride id", 400, "INVALID_RIDE_ID");
@@ -248,7 +249,12 @@ export const transitionRideState = async ({
     if (!(ROLE_ACTIONS[nextStatus] || []).includes(principal.role)) {
       throw new RideTransitionError("Actor cannot perform this ride action", 403, "RIDE_ACTION_FORBIDDEN");
     }
-    if (!(TRANSITIONS[ride.status] || []).includes(nextStatus)) {
+    const transitionAllowed = (TRANSITIONS[ride.status] || []).includes(nextStatus);
+    const adminOpensDispute =
+      principal.role === "admin" &&
+      nextStatus === "disputed" &&
+      ACTIVE_RIDE_STATUSES.includes(ride.status);
+    if (!transitionAllowed && !adminOpensDispute) {
       throw new RideTransitionError(
         `Cannot transition ride from ${ride.status} to ${nextStatus}`,
         409,
@@ -317,6 +323,7 @@ export const transitionRideState = async ({
           metadata: {
             ...(overrideReason ? { overrideReason: String(overrideReason).trim().slice(0, 500) } : {}),
             ...(validPoint(location) ? { location } : {}),
+            ...metadata,
           },
           idempotencyKey: key,
         },

@@ -339,6 +339,54 @@ const parseMissionPoint = (value, field) => {
   return { lat, long, address };
 };
 
+const parseTripRequestMetadata = (body = {}) => {
+  const pickup = parseMissionPoint(body.pickup, "pickup");
+  const destination = parseMissionPoint(body.destination, "destination");
+  const proposedPrice =
+    body.proposedPrice === undefined || body.proposedPrice === null || body.proposedPrice === ""
+      ? null
+      : Number(body.proposedPrice);
+  if (proposedPrice !== null && (!Number.isFinite(proposedPrice) || proposedPrice < 0 || proposedPrice > 1_000_000_000)) {
+    throw new CommunicationPolicyError("proposedPrice is invalid", 400, "INVALID_TRIP_REQUEST");
+  }
+  const currency = String(body.currency || "AED").trim().toUpperCase();
+  if (!/^[A-Z]{3}$/.test(currency)) {
+    throw new CommunicationPolicyError("currency is invalid", 400, "INVALID_TRIP_REQUEST");
+  }
+  const note = String(body.note || "").trim().slice(0, 500);
+  return { pickup, destination, proposedPrice, currency, note };
+};
+
+const cancelSupersededTripRequests = async ({ rideId, latestMessage, now = new Date() }) => {
+  if (!latestMessage) return;
+  await RideMessage.updateMany(
+    {
+      rideId,
+      _id: { $ne: latestMessage._id },
+      messageType: "trip_request",
+      "metadata.tripRequestStatus": { $ne: "cancelled" },
+    },
+    [
+      {
+        $set: {
+          metadata: {
+            $mergeObjects: [
+              { $ifNull: ["$metadata", {}] },
+              {
+                tripRequestStatus: "cancelled",
+                cancellationReason: "superseded",
+                cancelledAt: now,
+                supersededByMessageId: String(latestMessage._id),
+                supersededByClientMessageId: latestMessage.clientMessageId,
+              },
+            ],
+          },
+        },
+      },
+    ]
+  );
+};
+
 export const confirmMission = async (req, res) => {
   try {
     const principal = await resolvePrincipal(req.user?._id);
@@ -688,6 +736,19 @@ export const getRideRoute = async (req, res) => {
       throw new RideTransitionError("phase must be pickup or destination", 400, "INVALID_ROUTE_PHASE");
     }
     const route = await computeRideRoute({ ride, phase });
+    await Ride.updateOne(
+      { _id: ride._id, status: { $in: ACTIVE_RIDE_STATUSES } },
+      {
+        $set: {
+          "routeSnapshot.phase": phase,
+          "routeSnapshot.distanceMeters": route.distanceMeters,
+          "routeSnapshot.durationSeconds": route.durationSeconds,
+          "routeSnapshot.encodedPolyline": route.encodedPolyline || "",
+          "routeSnapshot.updatedAt": route.calculatedAt || new Date(),
+          routeUpdatedAt: route.calculatedAt || new Date(),
+        },
+      }
+    );
     io.to(`ride:${ride._id}`)
       .to(String(ride.passengerId))
       .to(String(ride.driverId))
@@ -755,7 +816,7 @@ export const sendRideMessage = async (req, res) => {
     // location here made valid chats fail whenever the driver was stationary,
     // backgrounded, or temporarily offline.
     const messageType = String(req.body?.messageType || "text").trim().toLowerCase();
-    if (messageType !== "text") {
+    if (!["text", "trip_request"].includes(messageType)) {
       throw new CommunicationPolicyError("Unsupported message type", 400, "INVALID_MESSAGE_TYPE");
     }
     const text = String(req.body?.text || "").trim();
@@ -763,7 +824,16 @@ export const sendRideMessage = async (req, res) => {
     if (!text || text.length > 2000 || !clientMessageId || clientMessageId.length > 100) {
       throw new CommunicationPolicyError("text and clientMessageId are required", 400, "INVALID_MESSAGE");
     }
-    const metadata = null;
+    let metadata = null;
+    if (messageType === "trip_request") {
+      if (participantRole !== "passenger") {
+        throw new CommunicationPolicyError("Only passengers can send trip requests", 403, "PASSENGER_REQUIRED");
+      }
+      metadata = {
+        ...parseTripRequestMetadata(req.body?.metadata || {}),
+        tripRequestStatus: "active",
+      };
+    }
     let message;
     let created = true;
     try {
@@ -772,6 +842,9 @@ export const sendRideMessage = async (req, res) => {
       if (error?.code !== 11000) throw error;
       created = false;
       message = await RideMessage.findOne({ rideId: ride._id, senderId: principal.id, clientMessageId });
+    }
+    if (created && messageType === "trip_request") {
+      await cancelSupersededTripRequests({ rideId: ride._id, latestMessage: message });
     }
     const messageEvent = {
       rideId: String(ride._id),

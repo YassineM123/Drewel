@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import PropTypes from "prop-types";
-import { listAdminRides, rideApiError } from "../../utils/ridesAdminApi";
+import { getRides, ridesErrorMessage } from "../../api/domains/rides";
+import { useSocket } from "../../context/SocketContext";
 import "../../assets/css/admin-rides.css";
 
 const FILTERS = [
@@ -28,6 +29,8 @@ const ACTIVE = new Set([
   "disputed",
 ]);
 
+const STALE_LOCATION_SECONDS = 120;
+
 const date = (value) => {
   const parsed = new Date(value);
   return value && !Number.isNaN(parsed.getTime()) ? parsed.toLocaleString() : "-";
@@ -46,11 +49,24 @@ const badge = (status) => {
   return "";
 };
 
+const distance = (meters) => {
+  if (!Number.isFinite(meters) || meters < 0) return "-";
+  if (meters < 1000) return `${Math.round(meters)} m`;
+  return `${(meters / 1000).toFixed(1)} km`;
+};
+
+const locationWarning = (ride) => {
+  if (ride.lastGpsAgeSeconds == null) {
+    return ride.status === "disputed" ? null : "no GPS signal";
+  }
+  return ride.lastGpsAgeSeconds > STALE_LOCATION_SECONDS ? `stale ${Math.floor(ride.lastGpsAgeSeconds / 60)} min` : null;
+};
+
 const viewCopy = {
   live: {
     eyebrow: "Operations",
     title: "Live Reservations",
-    description: "Monitor active ride states, stale records, exceptions and route evidence.",
+    description: "Monitor active ride states, routes, remaining distance, GPS freshness and exceptions in real time.",
   },
   all: {
     eyebrow: "Operations",
@@ -84,6 +100,7 @@ const Rides = ({ initialFilter = "active", lockedFilter = false }) => {
   const [search, setSearch] = useState("");
   const [driver, setDriver] = useState("");
   const [customer, setCustomer] = useState("");
+  const [city, setCity] = useState("");
   const [vehicleType, setVehicleType] = useState("");
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
@@ -93,6 +110,9 @@ const Rides = ({ initialFilter = "active", lockedFilter = false }) => {
   const [sort, setSort] = useState("updatedAt");
   const [dir, setDir] = useState("desc");
   const [state, setState] = useState({ loading: true, error: "", rides: [], pagination: {} });
+  const [live, setLive] = useState(false);
+  const { socket, isConnected } = useSocket();
+  const loadRef = useRef(null);
 
   useEffect(() => {
     const timer = window.setTimeout(() => setDebouncedSearch(search.trim()), 300);
@@ -102,15 +122,17 @@ const Rides = ({ initialFilter = "active", lockedFilter = false }) => {
   const load = useCallback(async (signal) => {
     setState((current) => ({ ...current, loading: true, error: "" }));
     try {
-      const payload = await listAdminRides(
+      const payload = await getRides(
         {
           status: filter,
           search: debouncedSearch,
-          driver: driver.trim() || undefined,
-          customer: customer.trim() || undefined,
-          vehicleType: vehicleType.trim() || undefined,
-          from: from || undefined,
-          to: to || undefined,
+          filters: {
+            driver: driver.trim() || undefined,
+            customer: customer.trim() || undefined,
+            city: city.trim() || undefined,
+            vehicleType: vehicleType.trim() || undefined,
+          },
+          range: from || to ? { from: from || undefined, to: to || undefined } : undefined,
           sort,
           dir,
           page,
@@ -135,17 +157,45 @@ const Rides = ({ initialFilter = "active", lockedFilter = false }) => {
         setState((current) => ({
           ...current,
           loading: false,
-          error: rideApiError(error, "Unable to load reservations."),
+          error: ridesErrorMessage(error, "Unable to load reservations."),
         }));
       }
     }
-  }, [customer, debouncedSearch, dir, driver, filter, from, limit, page, sort, to, vehicleType]);
+  }, [customer, debouncedSearch, dir, driver, filter, from, limit, page, sort, to, vehicleType, city]);
+
+  useEffect(() => {
+    loadRef.current = load;
+  }, [load]);
 
   useEffect(() => {
     const controller = new AbortController();
     load(controller.signal);
     return () => controller.abort();
   }, [load]);
+
+  useEffect(() => {
+    setLive(initialFilter === "live" || (typeof isConnected === "boolean" && filter === "live"));
+  }, [initialFilter, filter, isConnected]);
+
+  useEffect(() => {
+    if (!live || !socket || !isConnected) return undefined;
+    const refresh = () => loadRef.current?.();
+    const refreshSoon = () => window.setTimeout(refresh, 250);
+    const events = [
+      "ride:status_changed",
+      "ride:participants_unlocked",
+      "ride:points_refunded",
+      "ride:internal_note_added",
+      "ride:eta_updated",
+      "driver:location",
+    ];
+    socket.emit("driver-map:track", { on: true });
+    for (const event of events) socket.on(event, refreshSoon);
+    return () => {
+      socket.emit("driver-map:track", { on: false });
+      for (const event of events) socket.off(event, refreshSoon);
+    };
+  }, [live, socket, isConnected]);
 
   const selectFilter = (value) => {
     setFilter(value);
@@ -176,6 +226,8 @@ const Rides = ({ initialFilter = "active", lockedFilter = false }) => {
         "Destination",
         "Updated",
         "ETA Minutes",
+        "Remaining Distance",
+        "Last GPS",
       ],
       ...state.rides.map((ride) => [
         ride.reference || ride.id || ride._id,
@@ -187,6 +239,8 @@ const Rides = ({ initialFilter = "active", lockedFilter = false }) => {
         place(ride.destination),
         date(ride.updatedAt),
         ride.etaMinutes ?? "",
+        distance(ride.distanceMeters),
+        date(ride.lastGpsAt),
       ]),
     ];
     const blob = new Blob(
@@ -220,6 +274,11 @@ const Rides = ({ initialFilter = "active", lockedFilter = false }) => {
           <p>{copy.description}</p>
         </div>
         <div className="ride-heading__actions">
+          {live && (
+            <span className={`ride-live-indicator${isConnected ? " ride-live-indicator--on" : ""}`}>
+              {isConnected ? "Live updates connected" : "Live updates reconnecting…"}
+            </span>
+          )}
           <button type="button" className="btn btn-light" onClick={() => load()} disabled={state.loading}>
             Refresh
           </button>
@@ -280,6 +339,18 @@ const Rides = ({ initialFilter = "active", lockedFilter = false }) => {
               setPage(1);
             }}
             placeholder="Name or ID"
+          />
+        </label>
+        <label>
+          City
+          <input
+            type="search"
+            value={city}
+            onChange={(event) => {
+              setCity(event.target.value);
+              setPage(1);
+            }}
+            placeholder="Dubai, Abu Dhabi…"
           />
         </label>
         <label>
@@ -349,12 +420,6 @@ const Rides = ({ initialFilter = "active", lockedFilter = false }) => {
             <option value="vehicleType:asc">Vehicle A-Z</option>
           </select>
         </label>
-        <label>
-          Data access
-          <select disabled aria-label="Data access">
-            <option>Authorized ride records only</option>
-          </select>
-        </label>
       </section>
 
       <section className="tile" aria-live="polite">
@@ -390,35 +455,45 @@ const Rides = ({ initialFilter = "active", lockedFilter = false }) => {
                   <th>Destination</th>
                   <th><button type="button" className="ride-sort-button" onClick={() => sortBy("updatedAt")}>Updated</button></th>
                   <th>Route / ETA</th>
+                  <th>Remaining</th>
+                  <th>GPS</th>
                   <th>Action</th>
                 </tr>
               </thead>
               <tbody>
-                {state.rides.map((ride) => (
-                  <tr key={ride.id || ride._id}>
-                    <td>
-                      <strong>{ride.reference || ride.id || ride._id}</strong>
-                    </td>
-                    <td>
-                      <span className={`ride-status ${badge(ride.status)}`}>{label(ride.status)}</span>
-                    </td>
-                    <td>{person(ride.user || ride.passenger)}</td>
-                    <td>{person(ride.driver)}</td>
-                    <td>{place(ride.pickup)}</td>
-                    <td>{place(ride.destination)}</td>
-                    <td>{date(ride.updatedAt)}</td>
-                    <td>
-                      {ride.etaMinutes != null ? `${ride.etaMinutes} min` : "-"}
-                      <br />
-                      <small>{ride.routeUpdatedAt ? `as of ${date(ride.routeUpdatedAt)}` : "No fresh route"}</small>
-                    </td>
-                    <td>
-                      <Link className="btn btn-sm btn-outline-primary" to={`/reservations/${ride.id || ride._id}`}>
-                        View details
-                      </Link>
-                    </td>
-                  </tr>
-                ))}
+                {state.rides.map((ride) => {
+                  const warning = live ? locationWarning(ride) : null;
+                  return (
+                    <tr key={ride.id || ride._id}>
+                      <td>
+                        <strong>{ride.reference || ride.id || ride._id}</strong>
+                      </td>
+                      <td>
+                        <span className={`ride-status ${badge(ride.status)}`}>{label(ride.status)}</span>
+                      </td>
+                      <td>{person(ride.user || ride.passenger)}</td>
+                      <td>{person(ride.driver)}</td>
+                      <td>{place(ride.pickup)}</td>
+                      <td>{place(ride.destination)}</td>
+                      <td>{date(ride.updatedAt)}</td>
+                      <td>
+                        {ride.etaMinutes != null ? `${ride.etaMinutes} min` : "-"}
+                        <br />
+                        <small>{ride.routeUpdatedAt ? `as of ${date(ride.routeUpdatedAt)}` : "No fresh route"}</small>
+                      </td>
+                      <td>{distance(ride.distanceMeters)}</td>
+                      <td>
+                        {ride.lastGpsAt ? date(ride.lastGpsAt) : "-"}
+                        {warning && <span className="ride-stale-location">{label(warning)}</span>}
+                      </td>
+                      <td>
+                        <Link className="btn btn-sm btn-outline-primary" to={`/reservations/${ride.id || ride._id}`}>
+                          View details
+                        </Link>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>

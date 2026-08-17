@@ -95,9 +95,15 @@ class CommunicationApiClient {
           .replaceAll(RegExp(r'<[^>]*>'), ' ')
           .replaceAll(RegExp(r'\s+'), ' ')
           .trim();
+      // Bare server/framework text (e.g. Express's "Cannot POST /x") is not
+      // meant for end users, so it is never surfaced even when short.
+      final bool looksLikeFrameworkError =
+          RegExp(r'^Cannot (GET|POST|PUT|PATCH|DELETE)\b').hasMatch(rawMessage);
       throw CommunicationApiException(
         (payload['message'] ??
-                (rawMessage.isNotEmpty && rawMessage.length <= 240
+                (rawMessage.isNotEmpty &&
+                        rawMessage.length <= 240 &&
+                        !looksLikeFrameworkError
                     ? rawMessage
                     : 'Unable to complete this action.'))
             .toString(),

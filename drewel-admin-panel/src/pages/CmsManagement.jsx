@@ -6,7 +6,7 @@ import { LEGACY_API_URL } from "../utils/api";
 
 const CmsManagement = () => {
   const editorRef = useRef(null);
-  const api_key = "3e4i7xmjvw1ebtnzlwcfxtlk0tuwjfui4s1w0l2pibtj6egn";
+  const api_key = import.meta.env.VITE_TINYMCE_API_KEY || "";
 
   const DEFAULT_ITEMS_PER_PAGE = 10;
   const [itemsPerPage, setItemsPerPage] = useState(DEFAULT_ITEMS_PER_PAGE);

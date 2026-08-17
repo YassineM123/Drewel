@@ -92,6 +92,14 @@ const rideSchema = new mongoose.Schema(
       speed: { type: Number, min: 0, max: 150, default: null },
       recordedAt: { type: Date, default: null },
     },
+    routeSnapshot: {
+      phase: { type: String, enum: ["pickup", "destination", null], default: null },
+      distanceMeters: { type: Number, min: 0, default: null },
+      durationSeconds: { type: Number, min: 0, default: null },
+      encodedPolyline: { type: String, default: "", maxlength: 12000 },
+      updatedAt: { type: Date, default: null },
+    },
+    routeUpdatedAt: { type: Date, default: null },
     cancellation: {
       cancelledBy: { type: mongoose.Schema.Types.ObjectId, default: null },
       actorRole: {

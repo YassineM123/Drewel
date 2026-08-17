@@ -392,3 +392,33 @@ test("driver action-time availability paths reuse fresh Dubai GPS eligibility", 
     /getDriverAvailability[\s\S]*?buildFreshMarketplaceAvailabilityFilter\([\s\S]*?DUBAI_SERVICE_AREA/
   );
 });
+
+test("ride messages allow only passengers to send trip requests", () => {
+  const rideController = readFileSync(
+    new URL("../src/controllers/rideController.js", import.meta.url),
+    "utf8"
+  );
+  const sendStart = rideController.indexOf("export const sendRideMessage");
+  const sendEnd = rideController.indexOf("const messageEvent", sendStart);
+  const sendBlock = rideController.slice(sendStart, sendEnd);
+  assert.match(sendBlock, /\["text", "trip_request"\]\.includes\(messageType\)/);
+  assert.match(sendBlock, /messageType === "trip_request"[\s\S]*?participantRole !== "passenger"/);
+  assert.match(sendBlock, /PASSENGER_REQUIRED/);
+});
+
+test("trip requests are cancelled after supersede or driver offer", () => {
+  const rideController = readFileSync(
+    new URL("../src/controllers/rideController.js", import.meta.url),
+    "utf8"
+  );
+  assert.match(rideController, /cancelSupersededTripRequests/);
+  assert.match(rideController, /cancellationReason:\s*"superseded"/);
+
+  const offerService = readFileSync(
+    new URL("../src/services/tripOfferService.js", import.meta.url),
+    "utf8"
+  );
+  assert.match(offerService, /RideMessage\.updateMany/);
+  assert.match(offerService, /messageType:\s*"trip_request"/);
+  assert.match(offerService, /cancellationReason:\s*"offer_sent"/);
+});

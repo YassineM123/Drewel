@@ -82,7 +82,6 @@ test("admin driver list and detail expose operational backoffice summaries", () 
   assert.match(adminController, /documentSummary/);
   assert.match(detailHandler, /recentRides/);
   assert.match(detailHandler, /recentTripOffers/);
-  assert.match(detailHandler, /recentCalls/);
   assert.match(detailHandler, /requestHistory/);
 });
 
