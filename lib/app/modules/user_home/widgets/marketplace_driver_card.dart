@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:get/get.dart';
 
 import '../../../../common/colors.dart';
 import '../../../../common/common_widgets.dart';
@@ -6,6 +7,7 @@ import '../../../../common/motion.dart';
 import '../../../../common/text_styles.dart';
 import '../../../data/apis/api_models/get_all_driver_model.dart';
 import '../../../data/constants/string_constants.dart';
+import '../../../routes/app_pages.dart';
 
 class MarketplaceDriverCard extends StatelessWidget {
   const MarketplaceDriverCard({
@@ -168,6 +170,11 @@ class MarketplaceDriverCard extends StatelessWidget {
                                 ),
                               ),
                             ),
+                            _ViewProfileButton(
+                              driverId: driver.sId ?? '',
+                              enabled: !actionsLoading,
+                            ),
+                            const SizedBox(width: 6),
                             _ContactIconButton(
                               icon: Icons.message_rounded,
                               tooltip: _chatLabel(context),
@@ -269,4 +276,61 @@ class _ContactIconButton extends StatelessWidget {
           ),
         ),
       );
+}
+
+class _ViewProfileButton extends StatelessWidget {
+  const _ViewProfileButton({
+    required this.driverId,
+    required this.enabled,
+  });
+
+  final String driverId;
+  final bool enabled;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      button: true,
+      enabled: enabled,
+      label: 'View profile',
+      child: Tooltip(
+        message: 'View profile',
+        child: GestureDetector(
+          onTap: enabled
+              ? () => Get.toNamed(
+                    Routes.PUBLIC_DRIVER_PROFILE,
+                    arguments: driverId,
+                  )
+              : null,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            decoration: BoxDecoration(
+              color: enabled
+                  ? primaryColor.withValues(alpha: 0.1)
+                  : Colors.grey.withValues(alpha: 0.08),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  Icons.person_outline_rounded,
+                  size: 14,
+                  color: enabled ? primaryColor : Colors.grey,
+                ),
+                const SizedBox(width: 4),
+                Text(
+                  'Profile',
+                  style: MyTextStyle.titleStyle11b.copyWith(
+                    color: enabled ? primaryColor : Colors.grey,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }

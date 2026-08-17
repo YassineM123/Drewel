@@ -46,6 +46,19 @@ export const updateDriverStatus = async (driverId, payload, signal) => {
   return data.driver || data;
 };
 
+/**
+ * Suspend / restore — POST /api/admin/driver/:id/suspend | :id/restore
+ * Owner/Finance-Admin only, confirmed by the caller, written to RequestAudit.
+ */
+export const updateDriverRestriction = async (driverId, action, payload, signal) => {
+  const data = await apiClient.post(
+    `/admin/driver/${encodeURIComponent(driverId)}/${action}`,
+    { ...payload, confirmation: true },
+    { signal },
+  );
+  return data.driver || data;
+};
+
 /** Driver add (admin-created fully-approved driver) — POST /api/driver/addDriver */
 export const addDriver = async (formData, signal) => {
   const data = await apiClient.post("/driver/addDriver", formData, {

@@ -1,26 +1,16 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Search, Star, Eye, EyeOff, CheckCircle, XCircle,
   ShieldOff, Shield, MessageSquare, Plus, AlertTriangle,
-  Navigation, ExternalLink, FileText, Clock, Filter,
+  Navigation, ExternalLink, FileText, Clock,
 } from "lucide-react";
 import { getDriverList, updateDriverReviewStatus } from "../utils/api";
-import { getDriverDetail } from "../api/domains/drivers";
-import { useSocket } from "../context/SocketContext";
+import { getDriverDetail, updateDriverRestriction } from "../api/domains/drivers";
+import { getPointsAccess } from "../utils/pointsPermissions";
 
 function maskPhone(p) { return p && p.length > 7 ? p.slice(0, 4) + "***" + p.slice(-3) : p || "N/A"; }
 function maskEmail(e) { if (!e) return "N/A"; const [u, d] = e.split("@"); return (u?.slice(0, 2) || "") + "***@" + (d || ""); }
-function fmtRelative(iso) {
-  if (!iso) return "N/A";
-  const diff = Date.now() - new Date(iso).getTime();
-  const m = Math.floor(diff / 60000);
-  if (m < 1) return "just now";
-  if (m < 60) return `${m}m ago`;
-  const h = Math.floor(m / 60);
-  if (h < 24) return `${h}h ago`;
-  return `${Math.floor(h / 24)}d ago`;
-}
 function fmtDate(iso) {
   if (!iso) return "N/A";
   return new Date(iso).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
@@ -168,6 +158,18 @@ function Drawer({ open, onClose, width = "w-[640px]", children }) {
   );
 }
 
+function MarketplaceBadge({ discoverable }) {
+  return discoverable ? (
+    <span className="inline-flex items-center gap-1 text-[10px] font-bold text-green-700 bg-green-50 border border-green-200 px-1.5 py-0.5 rounded-full">
+      DISCOVERABLE
+    </span>
+  ) : (
+    <span className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded-full">
+      BLOCKED
+    </span>
+  );
+}
+
 function StatRow({ label, value }) {
   return (
     <div className="flex items-center justify-between py-2 border-b border-slate-50 last:border-0">
@@ -211,29 +213,38 @@ function DriverCard({ driver, onClick }) {
         <OnlineBadge status={status} />
         <Badge variant={vStatus} />
         {restricted && <Badge variant="restricted" />}
+        <MarketplaceBadge discoverable={driver.isDiscoverable === true} />
         {hasLowBalance && (
           <span className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded-full">
-            <AlertTriangle size={9} /> {pts}pts
+            <AlertTriangle size={9} /> Low balance
           </span>
         )}
       </div>
       <div className="mt-3 pt-3 border-t border-slate-100 grid grid-cols-2 gap-2 text-xs">
         <div><p className="text-slate-400">Vehicle</p><p className="text-slate-600 font-medium truncate">{vehicleType}</p></div>
-        <div><p className="text-slate-400">Area</p><p className="text-slate-600 font-medium">{driver.area || "N/A"}</p></div>
-        <div><p className="text-slate-400">Rides</p><p className="text-slate-600 font-medium">{Number(driver.rideSummary?.completed || 0).toLocaleString()}</p></div>
-        <div><p className="text-slate-400">Last seen</p><p className="text-slate-600 font-medium">{gpsLabel(driver)}</p></div>
+        <div><p className="text-slate-400">Documents</p><p className="text-slate-600 font-medium">{driver.documentSummary?.available || 0}/{driver.documentSummary?.total || 0}</p></div>
+        <div><p className="text-slate-400">Points</p><p className="text-slate-600 font-medium">{pts}</p></div>
+        <div className="flex items-center justify-between"><p className="text-slate-400">Rides</p><p className="text-slate-600 font-medium">{Number(driver.rideSummary?.completed || 0).toLocaleString()} completed</p></div>
+        <div><p className="text-slate-400">Cancel rate</p><p className={`text-slate-600 font-medium ${Number(driver.cancellationRate || 0) > 5 ? "text-red-600" : ""}`}>{Number(driver.cancellationRate || 0).toFixed(1)}%</p></div>
+        <div><p className="text-slate-400">Last GPS</p><p className="text-slate-600 font-medium">{gpsLabel(driver)}</p></div>
+      </div>
+      <div className="mt-2 pt-2 border-t border-slate-100 flex items-center justify-between text-xs">
+        <span className="text-slate-400">Marketplace</span>
+        <MarketplaceBadge discoverable={driver.isDiscoverable === true} />
       </div>
     </div>
   );
 }
 
-function DriverDetailDrawer({ driver, onClose, onToast }) {
+function DriverDetailDrawer({ driver, onToast, onChanged }) {
   const navigate = useNavigate();
   const [tab, setTab] = useState("overview");
   const [revealed, setRevealed] = useState(false);
   const [modal, setModal] = useState(null);
   const [detail, setDetail] = useState(null);
   const [detailLoading, setDetailLoading] = useState(true);
+  const [actionError, setActionError] = useState("");
+  const access = getPointsAccess();
 
   useEffect(() => {
     if (!driver?._id) return;
@@ -260,15 +271,27 @@ function DriverDetailDrawer({ driver, onClose, onToast }) {
     { id: "points", label: "Points" },
   ];
 
-  const handleAction = (action, _reason) => {
+  const handleAction = async (action, reason) => {
     setModal(null);
-    const msgs = {
-      approve: "Driver approved. They have been notified and can now accept rides.",
-      reject: "Driver application rejected. Reason sent to driver.",
-      suspend: "Driver account suspended. They cannot accept new rides.",
-      restore: "Driver account restored. They can now accept rides again.",
-    };
-    onToast(msgs[action] || "Action completed.");
+    setActionError("");
+    try {
+      if (action === "approve") {
+        await updateDriverReviewStatus(d._id, { status: "approved", reason: reason || "" });
+        onToast("Driver approved. They have been notified and can now accept rides.");
+      } else if (action === "reject") {
+        await updateDriverReviewStatus(d._id, { status: "rejected", rejection_reason: reason || "" });
+        onToast("Driver application rejected. Reason sent to driver.");
+      } else if (action === "suspend") {
+        await updateDriverRestriction(d._id, "suspend", { reason: reason || "" });
+        onToast("Driver account suspended. They cannot accept new rides.");
+      } else if (action === "restore") {
+        await updateDriverRestriction(d._id, "restore", { reason: reason || "" });
+        onToast("Driver account restored. They can now accept rides again.");
+      }
+      onChanged?.();
+    } catch (error) {
+      setActionError(error?.response?.data?.message || "The action could not be completed. Please retry.");
+    }
   };
 
   return (
@@ -387,8 +410,9 @@ function DriverDetailDrawer({ driver, onClose, onToast }) {
 
             <div>
               <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">Admin Actions</h4>
+              {actionError && <div className="bg-red-50 border border-red-200 rounded-[10px] px-3 py-2 text-xs text-red-700 mb-3" role="alert">{actionError}</div>}
               <div className="grid grid-cols-2 gap-2">
-                {vStatus === "pending" && (
+                {access.canAdjust && vStatus === "pending" && (
                   <>
                     <button type="button" onClick={() => setModal("approve")}
                       className="h-9 inline-flex items-center gap-2 px-3.5 rounded-[10px] bg-[#BE1B2C] text-xs font-semibold text-white hover:bg-[#A31725] transition-all">
@@ -400,16 +424,28 @@ function DriverDetailDrawer({ driver, onClose, onToast }) {
                     </button>
                   </>
                 )}
-                {vStatus === "approved" && !restricted && (
+                {access.canAdjust && vStatus === "approved" && !restricted && (
                   <button type="button" onClick={() => setModal("suspend")}
                     className="h-9 inline-flex items-center gap-2 px-3.5 rounded-[10px] bg-red-600 text-xs font-semibold text-white hover:bg-red-700 transition-all">
                     <ShieldOff size={13} /> Suspend Account
                   </button>
                 )}
-                {restricted && (
+                {access.canAdjust && restricted && (
                   <button type="button" onClick={() => setModal("restore")}
                     className="h-9 inline-flex items-center gap-2 px-3.5 rounded-[10px] border border-slate-200 bg-white text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-all">
                     <Shield size={13} /> Restore Account
+                  </button>
+                )}
+                {rideSummary.activeRide && (
+                  <button type="button" onClick={() => navigate(`/rides/${rideSummary.activeRide.id}`)}
+                    className="h-9 inline-flex items-center gap-2 px-3.5 rounded-[10px] border border-slate-200 bg-white text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-all">
+                    <Navigation size={13} /> View Active Ride
+                  </button>
+                )}
+                {access.canAddPurchasedPoints && (
+                  <button type="button" onClick={() => navigate(`/driver-points/wallets/${d._id}`)}
+                    className="h-9 inline-flex items-center gap-2 px-3.5 rounded-[10px] bg-green-600 text-xs font-semibold text-white hover:bg-green-700 transition-all">
+                    <Plus size={13} /> Add Points
                   </button>
                 )}
                 <button type="button" onClick={() => navigate(`/chat?driver=${d._id}`)}
@@ -500,12 +536,12 @@ function DriverDetailDrawer({ driver, onClose, onToast }) {
 }
 
 export default function Drivers() {
-  const navigate = useNavigate();
   const [drivers, setDrivers] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [tab, setTab] = useState("all");
   const [search, setSearch] = useState("");
+  const [availabilityFilter, setAvailabilityFilter] = useState("all");
   const [page, setPage] = useState(1);
   const [pagination, setPagination] = useState({ page: 1, limit: 20, total: 0, totalPages: 1 });
   const [selectedDriver, setSelectedDriver] = useState(null);
@@ -517,6 +553,7 @@ export default function Drivers() {
       setError("");
       const result = await getDriverList({
         status: tab === "verification" ? "pending" : tab === "restricted" ? "rejected" : "all",
+        availability: availabilityFilter,
         search,
         page,
         limit: 20,
@@ -534,10 +571,10 @@ export default function Drivers() {
     } finally {
       setLoading(false);
     }
-  }, [tab, search, page]);
+  }, [tab, search, availabilityFilter, page]);
 
   useEffect(() => { fetchDrivers(); }, [fetchDrivers]);
-  useEffect(() => { setPage(1); }, [tab, search]);
+  useEffect(() => { setPage(1); }, [tab, search, availabilityFilter]);
 
   const tabs = [
     { id: "all", label: "All Drivers" },
@@ -565,11 +602,23 @@ export default function Drivers() {
         ))}
       </div>
 
-      <div className="relative max-w-sm">
-        <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-        <input value={search} onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search by name or WhatsApp..."
-          className="w-full h-10 bg-white border border-slate-200 rounded-[10px] pl-9 pr-4 text-sm text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-red-700/20 focus:border-red-400 transition-all" />
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="relative max-w-sm flex-1 min-w-52">
+          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+          <input value={search} onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search by name or WhatsApp..."
+            className="w-full h-10 bg-white border border-slate-200 rounded-[10px] pl-9 pr-4 text-sm text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-red-700/20 focus:border-red-400 transition-all" />
+        </div>
+        <div className="flex flex-col gap-1">
+          <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Availability filter</span>
+          <select aria-label="Availability filter" value={availabilityFilter} onChange={(e) => setAvailabilityFilter(e.target.value)}
+            className="h-10 bg-white border border-slate-200 rounded-[10px] px-3 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-red-700/20 focus:border-red-400 transition-all">
+            <option value="all">All availability</option>
+            <option value="Online">Online</option>
+            <option value="Busy">Busy</option>
+            <option value="Offline">Offline</option>
+          </select>
+        </div>
       </div>
 
       {error && (
@@ -622,10 +671,10 @@ export default function Drivers() {
       )}
 
       <Drawer open={!!selectedDriver} onClose={() => setSelectedDriver(null)} width="w-[640px]">
-        {selectedDriver && <DriverDetailDrawer key={selectedDriver._id} driver={selectedDriver} onClose={() => setSelectedDriver(null)} onToast={(msg) => { setToast(msg); setSelectedDriver(null); }} />}
+        {selectedDriver && <DriverDetailDrawer key={selectedDriver._id} driver={selectedDriver} onClose={() => setSelectedDriver(null)} onToast={(msg, type = "success") => { setToast({ message: msg, type }); if (type === "error") return; setSelectedDriver(null); fetchDrivers(); }} />}
       </Drawer>
 
-      {toast && <Toast message={toast} type="success" onClose={() => setToast(null)} />}
+      {toast && <Toast message={toast?.message || toast} type={toast?.type || "success"} onClose={() => setToast(null)} />}
     </div>
   );
 }

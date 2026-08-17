@@ -38,6 +38,10 @@ import '../modules/active_ride/bindings/active_ride_binding.dart';
 import '../modules/active_ride/views/active_ride_view.dart';
 import '../modules/passenger_account/bindings/passenger_account_binding.dart';
 import '../modules/passenger_account/views/passenger_account_views.dart';
+import '../modules/driver_profile/bindings/driver_profile_binding.dart';
+import '../modules/driver_profile/views/driver_public_profile_view.dart';
+import '../modules/driver_rankings/bindings/driver_rankings_binding.dart';
+import '../modules/driver_rankings/views/driver_rankings_view.dart';
 
 part 'app_routes.dart';
 
@@ -266,6 +270,16 @@ class AppPages {
       name: _Paths.ABOUT_DREWEL,
       page: () => const AboutDrewelView(),
       binding: PassengerAccountBinding(),
+    ),
+    GetPage(
+      name: _Paths.PUBLIC_DRIVER_PROFILE,
+      page: () => const DriverPublicProfileView(),
+      binding: DriverProfileBinding(),
+    ),
+    GetPage(
+      name: _Paths.DRIVER_RANKINGS,
+      page: () => const DriverRankingsView(),
+      binding: DriverRankingsBinding(),
     ),
   ];
 }

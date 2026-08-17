@@ -1,8 +1,8 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Search, Shield, ShieldOff, AlertTriangle, Eye, EyeOff,
-  MessageSquare, Clock, CheckCircle, ExternalLink, FileText,
+  MessageSquare, Clock, ExternalLink, FileText,
 } from "lucide-react";
 import { getUserList } from "../utils/api";
 import { toggleUserRestriction } from "../api/domains/users";
@@ -133,7 +133,7 @@ function StatRow({ label, value }) {
   );
 }
 
-function UserDetailDrawer({ user, onClose, onToast }) {
+function UserDetailDrawer({ user, onToast }) {
   const navigate = useNavigate();
   const [tab, setTab] = useState("overview");
   const [revealed, setRevealed] = useState(false);
@@ -292,14 +292,13 @@ function UserDetailDrawer({ user, onClose, onToast }) {
 }
 
 export default function Users() {
-  const navigate = useNavigate();
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [page, setPage] = useState(0);
-  const [itemsPerPage, setItemsPerPage] = useState(10);
+  const itemsPerPage = 10;
   const [pagination, setPagination] = useState({ page: 1, limit: 10, total: 0, totalPages: 1 });
   const [selectedUser, setSelectedUser] = useState(null);
   const [toast, setToast] = useState(null);
@@ -324,10 +323,10 @@ export default function Users() {
     } finally {
       setLoading(false);
     }
-  }, [search, statusFilter, page, itemsPerPage]);
+  }, [search, statusFilter, page]);
 
   useEffect(() => { fetchUsers(); }, [fetchUsers]);
-  useEffect(() => { setPage(0); }, [search, statusFilter, itemsPerPage]);
+  useEffect(() => { setPage(0); }, [search, statusFilter]);
 
   const totalPages = pagination.totalPages;
   const activeCount = users.filter((u) => u.isActive !== false).length;
@@ -352,14 +351,14 @@ export default function Users() {
           <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search by name, phone or user ID\u2026"
             className="w-full h-10 bg-white border border-slate-200 rounded-[10px] pl-9 pr-4 text-sm text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-red-700/20 focus:border-red-400 transition-all" />
         </div>
-        <div className="flex items-center gap-1 bg-slate-100 rounded-[10px] p-1">
-          {["all", "active", "restricted"].map((s) => (
-            <button key={s} type="button" onClick={() => setStatusFilter(s)}
-              className={`px-3 py-1.5 rounded-[8px] text-xs font-medium transition-all capitalize
-                ${statusFilter === s ? "bg-white text-slate-800 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}>
-              {s}
-            </button>
-          ))}
+        <div className="flex flex-col gap-1">
+          <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Status filter</span>
+          <select aria-label="User status filter" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}
+            className="h-10 bg-white border border-slate-200 rounded-[10px] px-3 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-red-700/20 focus:border-red-400 transition-all">
+            <option value="all">All statuses</option>
+            <option value="active">Active</option>
+            <option value="restricted">Restricted</option>
+          </select>
         </div>
       </div>
 
@@ -383,19 +382,20 @@ export default function Users() {
                 <th className="text-left text-[11px] font-semibold text-slate-400 uppercase tracking-wider px-5 py-3">Status</th>
                 <th className="text-left text-[11px] font-semibold text-slate-400 uppercase tracking-wider px-5 py-3">Rides</th>
                 <th className="text-left text-[11px] font-semibold text-slate-400 uppercase tracking-wider px-5 py-3">Active Ride</th>
+                <th className="text-left text-[11px] font-semibold text-slate-400 uppercase tracking-wider px-5 py-3">Support</th>
                 <th className="text-left text-[11px] font-semibold text-slate-400 uppercase tracking-wider px-5 py-3">Last Activity</th>
                 <th className="text-left text-[11px] font-semibold text-slate-400 uppercase tracking-wider px-5 py-3">Actions</th>
               </tr>
             </thead>
             <tbody>
               {loading ? (
-                <tr><td colSpan={7}>
+                <tr><td colSpan={8}>
                   <div className="flex items-center justify-center py-16">
                     <div className="w-6 h-6 border-2 border-[#BE1B2C]/30 border-t-[#BE1B2C] rounded-full animate-spin" />
                   </div>
                 </td></tr>
               ) : users.length === 0 ? (
-                <tr><td colSpan={7}><EmptyState title="No users match your filters" description="Try adjusting the search or status filter." /></td></tr>
+                <tr><td colSpan={8}><EmptyState title="No users match your filters" description="Try adjusting the search or status filter." /></td></tr>
               ) : users.map((user) => (
                 <tr key={user._id} className="border-b border-slate-50 hover:bg-slate-50/50 cursor-pointer transition-colors"
                   onClick={() => setSelectedUser(user)}>
@@ -415,13 +415,22 @@ export default function Users() {
                     <Badge variant={user.isActive === false ? "restricted" : "active"} dot />
                   </td>
                   <td className="px-5 py-3">
-                    <span className="text-sm tabular-nums">{user.rideSummary?.completed || 0}</span>
-                    <span className="text-xs text-slate-400 ml-1">completed</span>
+                    <span className="text-sm tabular-nums text-slate-700">{Number(user.rideSummary?.completed || 0).toLocaleString()} completed</span>
+                    <span className="text-xs text-slate-400 ml-1.5">{Number(user.rideSummary?.cancelled || 0)} cancelled</span>
                   </td>
                   <td className="px-5 py-3">
                     {user.rideSummary?.activeRide ? (
                       <span className="inline-flex items-center text-[10px] font-semibold text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full">
                         {user.rideSummary.activeRide.reference || "Active"}
+                      </span>
+                    ) : (
+                      <span className="text-xs text-slate-400">None</span>
+                    )}
+                  </td>
+                  <td className="px-5 py-3">
+                    {Number(user.supportSummary?.messagesSent || 0) > 0 ? (
+                      <span className="inline-flex items-center text-[10px] font-semibold text-slate-600 bg-slate-50 border border-slate-200 px-2 py-0.5 rounded-full">
+                        {user.supportSummary.messagesSent} {user.supportSummary.messagesSent === 1 ? "message" : "messages"}
                       </span>
                     ) : (
                       <span className="text-xs text-slate-400">None</span>

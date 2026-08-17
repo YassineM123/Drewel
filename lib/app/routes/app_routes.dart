@@ -48,6 +48,8 @@ abstract class Routes {
   static const HELP_SUPPORT = _Paths.HELP_SUPPORT;
   static const REPORT_PROBLEM = _Paths.REPORT_PROBLEM;
   static const ABOUT_DREWEL = _Paths.ABOUT_DREWEL;
+  static const PUBLIC_DRIVER_PROFILE = _Paths.PUBLIC_DRIVER_PROFILE;
+  static const DRIVER_RANKINGS = _Paths.DRIVER_RANKINGS;
 }
 
 abstract class _Paths {
@@ -97,4 +99,6 @@ abstract class _Paths {
   static const HELP_SUPPORT = '/passenger/help';
   static const REPORT_PROBLEM = '/passenger/report-problem';
   static const ABOUT_DREWEL = '/passenger/about';
+  static const PUBLIC_DRIVER_PROFILE = '/driver/public-profile';
+  static const DRIVER_RANKINGS = '/driver/rankings';
 }

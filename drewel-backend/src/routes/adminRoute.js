@@ -6,6 +6,8 @@ import {
   getDriverReviewDetails,
   getOnlineDrivers,
   getDriversWithLocation,
+  restoreDriverAccess,
+  suspendDriverAccess,
 } from '../controllers/adminController.js';
 import {
   approveAdminRequest,
@@ -91,6 +93,8 @@ router.post('/reservations/:rideId/note', requireSignIn, isAdmin, addRideInterna
 // Compatibility contract for the current admin build. All status writes now
 // pass through the same validated, auditable transition service.
 router.put('/driver/:id/status', requireSignIn, isAdmin, updateAdminRequestStatus);
+router.post('/driver/:id/suspend', requireSignIn, isAdmin, suspendDriverAccess);
+router.post('/driver/:id/restore', requireSignIn, isAdmin, restoreDriverAccess);
 router.get('/health', requireSignIn, isAdmin, getSystemHealth);
 router.get('/alerts', requireSignIn, isAdmin, listAdminAlerts);
 router.get('/audit-logs', requireSignIn, isAdmin, listAdminAuditLogs);

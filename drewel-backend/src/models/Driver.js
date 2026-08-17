@@ -264,9 +264,23 @@ const driverSchema = new mongoose.Schema(
       default: "",
       maxlength: 1000,
     },
-    isRestricted: {
+isRestricted: {
       type: Boolean,
       default: false,
+    },
+    restrictedReason: {
+      type: String,
+      default: "",
+      maxlength: 1000,
+    },
+    restrictedAt: {
+      type: Date,
+      default: null,
+    },
+    restrictedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Admin",
+      default: null,
     },
     isDeleted: {
       type: Boolean,
@@ -297,7 +311,31 @@ const driverSchema = new mongoose.Schema(
     isUpdate: {
       type: Boolean,
       default: false,
-    }
+    },
+    bio: {
+      type: String,
+      default: "",
+      maxlength: 500,
+    },
+    experienceYears: {
+      type: Number,
+      default: null,
+      min: 0,
+      max: 50,
+    },
+    languages: {
+      type: [String],
+      default: [],
+    },
+    publicProfileEnabled: {
+      type: Boolean,
+      default: true,
+    },
+    favoriteDrivers: {
+      type: [mongoose.Schema.Types.ObjectId],
+      ref: "Driver",
+      default: [],
+    },
   },
   { timestamps: true }
 );

@@ -20,6 +20,7 @@ import driverPointsRoutes from "./src/routes/driverPointsRoutes.js";
 import adminPointsRoutes from "./src/routes/adminPointsRoutes.js";
 import tripOfferRoutes from "./src/routes/tripOfferRoutes.js";
 import accountRoutes from "./src/routes/accountRoutes.js";
+import driverProfileRoutes from "./src/routes/driverProfileRoutes.js";
 import { app, server } from "./src/socket/index.js";
 import { isOriginAllowed } from "./src/utils/allowedOrigins.js";
 import {
@@ -28,6 +29,7 @@ import {
 } from "./src/utils/publicAssets.js";
 import { startPointsJobs } from "./src/jobs/pointsJobs.js";
 import { startDriverPresenceWatchdog } from "./src/jobs/driverPresenceJob.js";
+import { startRankingJob } from "./src/jobs/rankingJob.js";
 
 loadEnv();
 validatePublicAssetConfig();
@@ -111,6 +113,7 @@ app.use("/api/rides", rideRoutes);
 app.use("/api/conversations", conversationRoutes);
 app.use("/api/trip-offers", tripOfferRoutes);
 app.use("/api/account", accountRoutes);
+app.use("/api/driver-profile", driverProfileRoutes);
 
 app.get("/api/health", async (req, res) => {
   return res.status(200).json({ success: true, message: "Backend API is running" });
@@ -153,6 +156,7 @@ connectDB()
     server.listen(PORT, HOST, () => {
       startPointsJobs();
       startDriverPresenceWatchdog();
+      startRankingJob();
       console.log("server running at " + HOST + ":" + PORT);
     });
   })

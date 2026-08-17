@@ -1,9 +1,14 @@
+import mongoose from "mongoose";
 import Admin from "../models/Admin.js";
 import Driver from "../models/Driver.js";
 import DriverLogs from "../models/Driverlogs.js";
 import bcrypt from "bcryptjs";
 import jwt from 'jsonwebtoken';
-import { buildActiveDriverPresenceFilter } from "../services/driverPresenceService.js";
+import {
+  applyForcedOfflinePresence,
+  buildActiveDriverPresenceFilter,
+  emitDriverPresenceTransition,
+} from "../services/driverPresenceService.js";
 import { dispatchNotification } from "../services/notificationService.js";
 import { buildFreshAdminMarketplaceAvailabilityFilter } from "../utils/availableDrivers.js";
 import {
@@ -627,7 +632,7 @@ export const updateDriverReviewStatus = async (req, res) => {
       driver.rejectionReason = "";
     }
 
-    driver.fullName = [driver.firstName, driver.lastName].filter(Boolean).join(" ").trim();
+driver.fullName = [driver.firstName, driver.lastName].filter(Boolean).join(" ").trim();
     await driver.save();
 
     const driverNotification =
@@ -669,5 +674,153 @@ export const updateDriverReviewStatus = async (req, res) => {
       message: "Failed to update driver status",
       error: error.message,
     });
+  }
+};
+
+const isPersonnelController = (req) =>
+  ["owner", "finance_admin"].includes(String(req.admin?.role || "").toLowerCase());
+
+const personnelControlError = () => ({
+  success: false,
+  code: "PERSONNEL_CONTROL_REQUIRED",
+  message: "Only the Drewel Owner or a Finance Admin may suspend or restore driver accounts",
+});
+
+const writeRestrictionAudit = async (driver, { action, actor, reason, oldStatus, session }) => {
+  await RequestAudit.create(
+    [{
+      requestId: driver._id,
+      requestStage: "basic",
+      action,
+      oldStatus,
+      newStatus: action === "suspended" ? "restricted" : "approved",
+      actorId: actor._id,
+      actorType: actor.actorType || "admin",
+      actorName: actor.fullName || actor.name || "",
+      actorEmail: actor.email || "",
+      reason: String(reason || "").trim(),
+      occurredAt: driver.restrictedAt || new Date(),
+    }],
+    { session }
+  );
+};
+
+const restrictDriverLoader = async (req, res) => {
+  const { id } = req.params;
+  if (!mongoose.isValidObjectId(id)) {
+    res.status(400).json({ success: false, code: "INVALID_DRIVER_ID", message: "Invalid driver id" });
+    return null;
+  }
+  if (!isPersonnelController(req)) {
+    res.status(403).json(personnelControlError());
+    return null;
+  }
+  if (req.body?.confirmed !== true) {
+    res.status(400).json({ success: false, code: "CONFIRMATION_REQUIRED", message: "Account changes must be explicitly confirmed" });
+    return null;
+  }
+  const reason = String(req.body?.reason || "").trim();
+  if (!reason) {
+    res.status(400).json({ success: false, code: "REASON_REQUIRED", message: "A reason is required for this account change" });
+    return null;
+  }
+  if (reason.length > 1000) {
+    res.status(400).json({ success: false, code: "INVALID_REASON", message: "reason must not exceed 1000 characters" });
+    return null;
+  }
+  const driver = await Driver.findById(id);
+  if (!driver) {
+    res.status(404).json({ success: false, code: "DIVER_NOT_FOUND", message: "Driver not found" });
+    return null;
+  }
+  return driver;
+};
+
+export const suspendDriverAccess = async (req, res) => {
+  const driver = await restrictDriverLoader(req, res);
+  if (!driver) return;
+  const session = await mongoose.startSession();
+  let saved = null;
+  let forcedPresenceTransition = false;
+  try {
+    await session.withTransaction(async () => {
+      const locked = await Driver.findById(req.params.id).session(session);
+      if (locked.isRestricted) {
+        throw Object.assign(new Error("This driver account is already suspended"), { statusCode: 409, code: "ALREADY_RESTRICTED" });
+      }
+      const wasOnline = locked.presenceStatus === "Online" || locked.isOnline === true;
+      locked.isRestricted = true;
+      locked.restrictedReason = String(req.body?.reason || "").trim();
+      locked.restrictedAt = new Date();
+      locked.restrictedBy = req.admin._id;
+      applyForcedOfflinePresence(locked, locked.restrictedAt);
+      forcedPresenceTransition = wasOnline && locked.presenceStatus === "Offline" && locked.isOnline === false;
+      await locked.save({ session });
+      await writeRestrictionAudit(locked, {
+        action: "suspended",
+        actor: { _id: req.admin._id, fullName: req.admin.fullName, email: req.admin.email, actorType: "admin" },
+        reason: locked.restrictedReason,
+        oldStatus: locked.status || "approved",
+        session,
+      });
+      saved = locked;
+    });
+    if (forcedPresenceTransition) emitDriverPresenceTransition(saved, "DRIVER_ELIGIBILITY_REVOKED");
+    return res.status(200).json({
+      success: true,
+      message: "Driver account suspended",
+      driver: saved,
+    });
+  } catch (error) {
+    const statusCode = error.statusCode || 500;
+    return res.status(statusCode).json({
+      success: false,
+      ...(error.code ? { code: error.code } : {}),
+      message: statusCode === 500 ? "Failed to suspend driver account" : error.message,
+    });
+  } finally {
+    await session.endSession();
+  }
+};
+
+export const restoreDriverAccess = async (req, res) => {
+  const driver = await restrictDriverLoader(req, res);
+  if (!driver) return;
+  const session = await mongoose.startSession();
+  let saved = null;
+  try {
+    await session.withTransaction(async () => {
+      const locked = await Driver.findById(req.params.id).session(session);
+      if (!locked.isRestricted) {
+        throw Object.assign(new Error("This driver account is not currently suspended"), { statusCode: 409, code: "NOT_RESTRICTED" });
+      }
+      locked.isRestricted = false;
+      locked.restrictedReason = "";
+      locked.restrictedAt = null;
+      locked.restrictedBy = null;
+      await locked.save({ session });
+      await writeRestrictionAudit(locked, {
+        action: "restored",
+        actor: { _id: req.admin._id, fullName: req.admin.fullName, email: req.admin.email, actorType: "admin" },
+        reason: String(req.body?.reason || "").trim(),
+        oldStatus: "restricted",
+        session,
+      });
+      saved = locked;
+    });
+    return res.status(200).json({
+      success: true,
+      message: "Driver account restored",
+      driver: saved,
+    });
+  } catch (error) {
+    const statusCode = error.statusCode || 500;
+    return res.status(statusCode).json({
+      success: false,
+      ...(error.code ? { code: error.code } : {}),
+      message: statusCode === 500 ? "Failed to restore driver account" : error.message,
+    });
+  } finally {
+    await session.endSession();
   }
 };

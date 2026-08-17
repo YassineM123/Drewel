@@ -94,4 +94,16 @@ class ApiUrlConstants {
   // Delete account endpoints
   static String get endPointOfDeleteUser => '${baseUrl}users';
   static String get endPointOfDeleteDriver => '${baseUrl}driver';
+
+  static String get endPointOfDriverProfileBase => '${baseUrl}driver-profile';
+  static String publicDriverProfile(String driverId) =>
+      '${baseUrl}driver-profile/public/$driverId';
+  static String publicDriverReviews(String driverId) =>
+      '${baseUrl}driver-profile/public/$driverId/reviews';
+  static String get endPointOfDriverRankings => '${baseUrl}driver-profile/rankings';
+  static String get endPointOfMyRanking => '${baseUrl}driver-profile/rankings/my';
+  static String get endPointOfUpdateProfileFields =>
+      '${baseUrl}driver-profile/profile-fields';
+  static String get endPointOfFavoriteDriver =>
+      '${baseUrl}driver-profile/favorite';
 }
