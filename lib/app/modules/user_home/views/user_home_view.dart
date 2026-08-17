@@ -105,12 +105,12 @@ class _UserHomeViewState extends State<UserHomeView> {
 
   @override
   Widget build(BuildContext context) {
-    return Obx(() {
-      controller.count.value;
-      controller.sheetSize.value;
-      final screenHeight = MediaQuery.of(context).size.height - 120.px;
-      final mapHeight = screenHeight * (1 - controller.sheetSize.value);
-      return DrewelPopScope(
+    final double screenHeight = MediaQuery.of(context).size.height - 120.px;
+    // Only the map/search/sheet region needs to react to controller state;
+    // keeping the Scaffold's AppBar/Drawer construction outside any Obx means
+    // frequent map-only updates (driver marker animation, socket pings, place
+    // search keystrokes) no longer force the whole screen chrome to rebuild.
+    return DrewelPopScope(
         fallbackRoute: Routes.USER_REGISTER,
         onBack: _handleBack,
         child: Scaffold(
@@ -194,60 +194,82 @@ class _UserHomeViewState extends State<UserHomeView> {
                     clipBehavior: Clip.hardEdge,
                     child: Stack(
                       children: [
-                        Container(
-                          width: MediaQuery.of(context).size.width,
-                          height: mapHeight,
-                          padding: EdgeInsets.only(top: 0.px),
-                          child: DrewelWebMapFallback(
-                            openStreetMap: DrewelOsmMap(
-                              center: controller.mapPosition,
-                              markers: _openStreetMapMarkers(),
-                              polylines: controller.polylines
-                                  .map((Polyline line) => line.points)
-                                  .toList(growable: false),
-                              onTap: controller.setSelectedLocation,
-                              onCenterChanged: controller.onAlternativeMapMove,
-                            ),
-                            googleMap: GoogleMap(
-                              mapType: MapType.normal,
-                              zoomGesturesEnabled: true,
-                              tiltGesturesEnabled: true,
-                              myLocationButtonEnabled: false,
-                              markers: controller.markers,
-                              // Track camera movement for updating driver list
-                              onCameraMove: (CameraPosition cameraPosition) {
-                                controller.onCameraMove(cameraPosition);
-                              },
-                              // When camera stops moving, filter drivers by visible bounds
-                              onCameraIdle: () {
-                                controller.onCameraIdle();
-                              },
-                              // Tap on map to set location
-                              onTap: (LatLng position) {
-                                controller.setSelectedLocation(position);
-                              },
-                              minMaxZoomPreference:
-                                  MinMaxZoomPreference.unbounded,
-                              initialCameraPosition: CameraPosition(
-                                target: controller.mapPosition,
-                                zoom: 12,
+                        // Watches count + mapRevision only: marker-animation
+                        // ticks (mapRevision) rebuild just this map region,
+                        // never the search bar or the driver sheet below.
+                        Obx(() {
+                          controller.count.value;
+                          controller.mapRevision.value;
+                          final double mapHeight =
+                              screenHeight * (1 - controller.sheetSize.value);
+                          return Container(
+                            width: MediaQuery.of(context).size.width,
+                            height: mapHeight,
+                            padding: EdgeInsets.only(top: 0.px),
+                            child: DrewelWebMapFallback(
+                              openStreetMap: DrewelOsmMap(
+                                center: controller.mapPosition,
+                                markers: _openStreetMapMarkers(),
+                                polylines: controller.polylines
+                                    .map((Polyline line) => line.points)
+                                    .toList(growable: false),
+                                onTap: controller.setSelectedLocation,
+                                onCenterChanged:
+                                    controller.onAlternativeMapMove,
                               ),
-                              onMapCreated:
-                                  (GoogleMapController googlecontroller) async {
-                                await controller.onMapCreated(googlecontroller);
-                              },
+                              googleMap: GoogleMap(
+                                mapType: MapType.normal,
+                                zoomGesturesEnabled: true,
+                                tiltGesturesEnabled: true,
+                                myLocationButtonEnabled: false,
+                                markers: controller.markers,
+                                // A finger drag/zoom starts here; a
+                                // programmatic animateCamera call also
+                                // triggers this, so the controller tells
+                                // the two apart via its own guard.
+                                onCameraMoveStarted:
+                                    controller.onCameraMoveStarted,
+                                // Track camera movement for updating driver list
+                                onCameraMove: (CameraPosition cameraPosition) {
+                                  controller.onCameraMove(cameraPosition);
+                                },
+                                // When camera stops moving, filter drivers by visible bounds
+                                onCameraIdle: () {
+                                  controller.onCameraIdle();
+                                },
+                                // Tap on map to set location
+                                onTap: (LatLng position) {
+                                  controller.setSelectedLocation(position);
+                                },
+                                minMaxZoomPreference:
+                                    MinMaxZoomPreference.unbounded,
+                                initialCameraPosition: CameraPosition(
+                                  target: controller.mapPosition,
+                                  zoom: 12,
+                                ),
+                                onMapCreated: (GoogleMapController
+                                    googlecontroller) async {
+                                  await controller
+                                      .onMapCreated(googlecontroller);
+                                },
+                              ),
                             ),
-                          ),
-                        ),
+                          );
+                        }),
                         // Distance Card - Shows when driver is selected
-                        if (controller.selectIndex >= 0 &&
-                            controller.hasReferenceLocation &&
-                            controller.selectedDriverDistance.value > 0)
-                          Positioned(
-                            top: 80.px,
-                            left: 20.px,
-                            child: _buildDistancePopup(context),
-                          ),
+                        Obx(() {
+                          controller.count.value;
+                          if (controller.selectIndex >= 0 &&
+                              controller.hasReferenceLocation &&
+                              controller.selectedDriverDistance.value > 0) {
+                            return Positioned(
+                              top: 80.px,
+                              left: 20.px,
+                              child: _buildDistancePopup(context),
+                            );
+                          }
+                          return const SizedBox.shrink();
+                        }),
                         Positioned(
                           top: 20.px,
                           left: 16,
@@ -274,7 +296,14 @@ class _UserHomeViewState extends State<UserHomeView> {
                             ),
                           ),
                         ),
-                        showDriverList()
+                        // Driver list only needs `count` (never mapRevision):
+                        // live marker-position animation must not re-render
+                        // the sheet/list of driver cards.
+                        Obx(() {
+                          controller.count.value;
+                          controller.sheetSize.value;
+                          return showDriverList();
+                        }),
                       ],
                     ),
                   ),
@@ -282,7 +311,6 @@ class _UserHomeViewState extends State<UserHomeView> {
               ],
             )),
       );
-    });
   }
 
   Widget showDriverList() {

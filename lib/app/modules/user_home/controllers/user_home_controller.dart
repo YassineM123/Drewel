@@ -54,6 +54,27 @@ class UserHomeController extends GetxController
   final placesSearchError = ''.obs;
   final isFetchingUserLocation = false.obs;
   static const int _placeSearchDebounceMs = 400;
+
+  // Reverse geocoding (map tap / marker drag) is user-gesture-driven and can
+  // fire many times in quick succession, so it needs the same debounce +
+  // stale-response guard as forward search to avoid hammering the Geocoding API.
+  Timer? _reverseGeocodeDebounce;
+  int _reverseGeocodeRequestId = 0;
+  static const int _reverseGeocodeDebounceMs = 500;
+  static const Duration _placesHttpTimeout = Duration(seconds: 10);
+
+  // Bumped on high-frequency, map-only changes (live driver marker
+  // animation) so the search bar / bottom sheet don't rebuild on every
+  // animation tick; `count` still covers everything else.
+  final RxInt mapRevision = 0.obs;
+
+  // Gesture-vs-programmatic camera tracking: `onCameraMoveStarted` fires for
+  // both a finger drag and a code-driven `animateCamera`, so a call made
+  // through `_animateCamera` marks itself programmatic first to avoid being
+  // misread as the user grabbing the map.
+  bool isUserGestureActive = false;
+  int _programmaticCameraMoveDepth = 0;
+
   Timer? _driverPollingTimer;
   StreamSubscription<Position>? _userPositionSubscription;
   Timer? _userLocationFreshnessTimer;
@@ -347,8 +368,6 @@ class UserHomeController extends GetxController
       allDriversList[index].lat = latValue;
       allDriversList[index].long = longValue;
       if (headingValue.isFinite) allDriversList[index].heading = headingValue;
-      updateDriverMarkers();
-      increment();
 
       if (step >= steps) {
         timer.cancel();
@@ -358,9 +377,22 @@ class UserHomeController extends GetxController
         if (toHeading != null && toHeading.isFinite) {
           allDriversList[index].heading = toHeading;
         }
+        // Final settle also re-sorts/re-filters the list, so it needs the
+        // full `count` rebuild (search bar / bottom sheet included).
         filterDriversByVisibleBounds();
+      } else {
+        // Mid-animation ticks only move a marker; bump the map-scoped
+        // revision instead of `count` so the search bar and driver list
+        // don't rebuild ~18 times per moving driver.
+        updateDriverMarkers();
+        _bumpMapRevision();
       }
     });
+  }
+
+  void _bumpMapRevision() {
+    if (!_canUpdateView) return;
+    mapRevision.value++;
   }
 
   void _clearVehicleMarkerAnimations() {
@@ -470,13 +502,27 @@ class UserHomeController extends GetxController
     final GoogleMapController? mapController = xController;
     if (!_isMapReady || !_canUpdateView || mapController == null) return;
 
+    // Mark this move as programmatic so the resulting onCameraMoveStarted
+    // callback isn't mistaken for the user grabbing the map.
+    _programmaticCameraMoveDepth++;
     try {
       await mapController.animateCamera(update);
     } catch (error) {
       // The web platform view may have been removed while an async action was
       // queued. A future onMapCreated callback will register the new map.
       debugPrint('Skipped camera update for an unavailable map: $error');
+    } finally {
+      _programmaticCameraMoveDepth =
+          math.max(0, _programmaticCameraMoveDepth - 1);
     }
+  }
+
+  /// Called when the map reports the camera starting to move, from either a
+  /// user gesture or a programmatic `animateCamera` call. Only a real user
+  /// drag/zoom should suppress auto-recentering — a programmatic move must
+  /// not be misread as the user taking over the map.
+  void onCameraMoveStarted() {
+    isUserGestureActive = _programmaticCameraMoveDepth == 0;
   }
 
   /// Set selected location (from search or marker drag)
@@ -492,10 +538,25 @@ class UserHomeController extends GetxController
     filterDriversByVisibleBounds();
     unawaited(_refreshDiscoveryForReferenceLocation(showLoader: true));
 
-    // Get address for the location
-    getAddressFromCoordinates(location);
+    // Get address for the location (debounced: map taps/drags can repeat fast)
+    _scheduleReverseGeocode(location);
 
     increment();
+  }
+
+  /// Debounce reverse geocoding so rapid map taps/drags (e.g. dragging the
+  /// selected-location marker) don't fire a Geocoding request per frame.
+  void _scheduleReverseGeocode(LatLng location) {
+    _reverseGeocodeDebounce?.cancel();
+    _reverseGeocodeRequestId++;
+    final int requestId = _reverseGeocodeRequestId;
+    _reverseGeocodeDebounce = Timer(
+      const Duration(milliseconds: _reverseGeocodeDebounceMs),
+      () {
+        if (!_canUpdateView || requestId != _reverseGeocodeRequestId) return;
+        getAddressFromCoordinates(location, requestId: requestId);
+      },
+    );
   }
 
   /// Clear selected location and use GPS location
@@ -509,32 +570,60 @@ class UserHomeController extends GetxController
   }
 
   /// Get address from coordinates using Google Geocoding API (reverse geocoding)
-  Future<void> getAddressFromCoordinates(LatLng location) async {
-    try {
-      final String url = 'https://maps.googleapis.com/maps/api/geocode/json?'
-          'latlng=${location.latitude},${location.longitude}'
-          '&key=${ApiKeyConstants.googleMapKey}';
+  Future<void> getAddressFromCoordinates(
+    LatLng location, {
+    int? requestId,
+  }) async {
+    final int activeRequestId = requestId ?? _reverseGeocodeRequestId;
+    final Uri uri = Uri.parse(
+      'https://maps.googleapis.com/maps/api/geocode/json?'
+      'latlng=${location.latitude},${location.longitude}'
+      '&key=${ApiKeyConstants.googleMapKey}',
+    );
 
-      final response = await http.get(Uri.parse(url));
-      if (!_canUpdateView) return;
+    final http.Response? response = await _getWithTimeout(uri);
+    if (!_canUpdateView || activeRequestId != _reverseGeocodeRequestId) return;
 
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-
-        if (data['status'] == 'OK' && data['results'].isNotEmpty) {
-          String address = data['results'][0]['formatted_address'];
-          selectedLocationAddress.value = address;
-          locationController.text = address;
-        } else {
-          print('Geocoding error: ${data['status']}');
-          selectedLocationAddress.value = 'Location selected';
-        }
+    if (response == null) {
+      selectedLocationAddress.value = 'Location selected';
+    } else if (response.statusCode == 200) {
+      final data = json.decode(response.body);
+      if (data['status'] == 'OK' && data['results'].isNotEmpty) {
+        String address = data['results'][0]['formatted_address'];
+        selectedLocationAddress.value = address;
+        locationController.text = address;
+      } else {
+        debugPrint('Geocoding error: ${data['status']}');
+        selectedLocationAddress.value = 'Location selected';
       }
-    } catch (e) {
-      print('Error getting address: $e');
+    } else {
+      debugPrint('Geocoding HTTP error: ${response.statusCode}');
       selectedLocationAddress.value = 'Location selected';
     }
     increment();
+  }
+
+  /// Shared GET helper for Places/Geocoding HTTP calls: applies a timeout so
+  /// a slow/unreachable Google endpoint can't hang search or reverse-geocode
+  /// indefinitely, and reports a user-facing message distinguishing timeout
+  /// vs network vs generic failure instead of one generic error for everything.
+  Future<http.Response?> _getWithTimeout(
+    Uri uri, {
+    void Function(String message)? onError,
+  }) async {
+    try {
+      return await http.get(uri).timeout(_placesHttpTimeout);
+    } on TimeoutException {
+      debugPrint('Places/Geocoding request timed out: $uri');
+      onError?.call('Search timed out. Check your connection and try again.');
+    } on SocketException catch (error) {
+      debugPrint('Places/Geocoding network error: $error');
+      onError?.call('No internet connection. Check your network and try again.');
+    } catch (error) {
+      debugPrint('Places/Geocoding request failed: $error');
+      onError?.call('Unable to find locations. Try again.');
+    }
+    return null;
   }
 
   /// Handle marker drag end
@@ -853,6 +942,7 @@ class UserHomeController extends GetxController
 
   /// Called when camera movement is idle (stopped moving)
   Future<void> onCameraIdle() async {
+    isUserGestureActive = false;
     final GoogleMapController? mapController = xController;
     if (!_isMapReady || !_canUpdateView || mapController == null) return;
 
@@ -952,6 +1042,7 @@ class UserHomeController extends GetxController
     currentVisibleBounds = null;
     WidgetsBinding.instance.removeObserver(this);
     _placesDebounce?.cancel();
+    _reverseGeocodeDebounce?.cancel();
     if (!_areViewResourcesDisposed) {
       animationController.stop();
     }
@@ -1458,41 +1549,43 @@ class UserHomeController extends GetxController
   /// Fetch autocomplete suggestions from Google Places HTTP API
   Future<void> _fetchPlaceSuggestions(String input) async {
     final int requestId = _placeSearchRequestId;
-    try {
-      final uri = Uri.parse(
-          'https://maps.googleapis.com/maps/api/place/autocomplete/json'
-          '?input=$input'
-          '&key=${ApiKeyConstants.googleMapKey}'
-          '&language=en'
-          '&components=country:${AppConfig.marketplaceCountryCode}');
+    final uri = Uri.parse(
+        'https://maps.googleapis.com/maps/api/place/autocomplete/json'
+        '?input=$input'
+        '&key=${ApiKeyConstants.googleMapKey}'
+        '&language=en'
+        '&components=country:${AppConfig.marketplaceCountryCode}');
 
-      final response = await http.get(uri);
-      if (!_canUpdateView || requestId != _placeSearchRequestId) return;
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        final String status = data['status'] ?? '';
-        if (status == 'OK') {
-          final List preds = data['predictions'] ?? [];
-          placeSuggestions.value =
-              preds.map((e) => Prediction.fromJson(e)).toList();
-        } else if (status == 'ZERO_RESULTS') {
-          placeSuggestions.clear();
-        } else {
-          placeSuggestions.clear();
-          placesSearchError.value = status == 'REQUEST_DENIED'
-              ? 'Location search is temporarily unavailable.'
-              : 'Unable to find locations. Try again.';
-        }
+    String? failureMessage;
+    final http.Response? response = await _getWithTimeout(
+      uri,
+      onError: (String message) => failureMessage = message,
+    );
+    if (!_canUpdateView || requestId != _placeSearchRequestId) return;
+
+    if (response == null) {
+      placeSuggestions.clear();
+      placesSearchError.value =
+          failureMessage ?? 'Unable to find locations. Try again.';
+    } else if (response.statusCode == 200) {
+      final data = json.decode(response.body);
+      final String status = data['status'] ?? '';
+      if (status == 'OK') {
+        final List preds = data['predictions'] ?? [];
+        placeSuggestions.value =
+            preds.map((e) => Prediction.fromJson(e)).toList();
+      } else if (status == 'ZERO_RESULTS') {
+        placeSuggestions.clear();
       } else {
         placeSuggestions.clear();
-        placesSearchError.value = 'Unable to find locations. Try again.';
+        placesSearchError.value = status == 'REQUEST_DENIED'
+            ? 'Location search is temporarily unavailable.'
+            : 'Unable to find locations. Try again.';
       }
-    } catch (_) {
-      if (!_canUpdateView || requestId != _placeSearchRequestId) return;
+    } else {
       placeSuggestions.clear();
       placesSearchError.value = 'Unable to find locations. Try again.';
     }
-    if (!_canUpdateView || requestId != _placeSearchRequestId) return;
     isPlacesLoading.value = false;
     increment();
   }
@@ -1983,13 +2076,18 @@ class UserHomeController extends GetxController
 
     if (prediction.placeId != null) {
       final placeId = prediction.placeId!;
-      final url =
-          "https://maps.googleapis.com/maps/api/place/details/json?place_id=$placeId&key=${ApiKeyConstants.googleMapKey}";
+      final uri = Uri.parse(
+          "https://maps.googleapis.com/maps/api/place/details/json?place_id=$placeId&key=${ApiKeyConstants.googleMapKey}");
 
-      final response = await http.get(Uri.parse(url));
+      final http.Response? response = await _getWithTimeout(uri);
       if (!_canUpdateView) return;
 
-      if (response.statusCode == 200) {
+      if (response == null) {
+        CommonWidgets.snackBarView(
+          title: 'Unable to open this location. Try again.',
+          success: false,
+        );
+      } else if (response.statusCode == 200) {
         final data = json.decode(response.body);
 
         if (data["status"] == "OK") {

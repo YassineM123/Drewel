@@ -61,6 +61,12 @@ const driverData = (suffix, overrides = {}) => ({
   completedAt: new Date(),
   isOnline: true,
   availabilityStatus: "Online",
+  isRestricted: false,
+  activeRideId: null,
+  currentServiceArea: "uae",
+  currentLocation: { type: "Point", coordinates: [55.2708, 25.2048] },
+  locationAccuracyM: 0,
+  locationUpdatedAt: new Date(),
   ...overrides,
 });
 
@@ -82,10 +88,24 @@ before(async () => {
   if (!integrationEnabled) return;
   loadEnv();
   const uri = process.env.MONGO_URI || process.env.MONGODB_URI;
-  await mongoose.connect(uri, {
-    dbName: testDbName,
-    serverSelectionTimeoutMS: 30_000,
-  });
+  let lastError;
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    try {
+      await mongoose.connect(uri, {
+        dbName: testDbName,
+        serverSelectionTimeoutMS: 30_000,
+      });
+      await mongoose.connection.db.command({ ping: 1 });
+      lastError = null;
+      break;
+    } catch (error) {
+      lastError = error;
+      if (attempt < 4) {
+        await new Promise((resolve) => setTimeout(resolve, 3_000));
+      }
+    }
+  }
+  if (lastError) throw lastError;
   await Promise.all(
     [
       Driver,
@@ -785,53 +805,202 @@ test(
 );
 
 test(
-  "generic administrator credit endpoint cannot credit purchased points",
+  "purchased point credits are owner-only and record payment details",
   { skip: !integrationEnabled },
   async () => {
-    const [driver, owner] = await Promise.all([
-      Driver.create(driverData(86)),
+    const [driver, finance, owner] = await Promise.all([
+      Driver.create(driverData(92)),
       Admin.create({
-        fullName: "Generic Credit Owner",
-        email: "generic-credit-owner@points.test",
+        fullName: "Finance Admin",
+        email: "finance-admin-92@points.test",
+        password: "not-used-in-test",
+        role: "finance_admin",
+      }),
+      Admin.create({
+        fullName: "Purchase Owner",
+        email: "purchase-owner-92@points.test",
         password: "not-used-in-test",
         role: "owner",
       }),
     ]);
-    const response = responseRecorder();
-    await creditDriverPoints(
-      {
-        body: {
-          driverId: String(driver._id),
-          points: 60,
-          source: "purchase",
-          purchaseRequestId: String(new mongoose.Types.ObjectId()),
-          paymentReference: "PAY-BYPASS-86",
-          paymentAmount: 30,
-          currency: "TND",
-          paymentMethod: "cash",
-          reason: "Attempted generic purchase credit",
-          confirmation: true,
+    const payload = {
+      driverId: String(driver._id),
+      points: 40,
+      source: "purchase",
+      paymentReference: "PAY-OWNER-92",
+      paymentMethod: "bank transfer",
+      reason: "Owner recorded a direct purchase",
+      confirmation: true,
+    };
+    const invoke = async (pointsAdmin, idempotencyKey) => {
+      const response = responseRecorder();
+      const headers = { "idempotency-key": idempotencyKey, "user-agent": "node-test" };
+      await creditDriverPoints(
+        {
+          body: payload,
+          headers,
+          get(name) {
+            return this.headers[String(name).toLowerCase()];
+          },
+          ip: "127.0.0.1",
+          user: { iat: Math.floor(Date.now() / 1000) },
+          pointsAdmin,
         },
-        headers: { "idempotency-key": "generic-purchase-bypass-00000086" },
-        get(name) {
-          return this.headers[String(name).toLowerCase()];
-        },
-        user: { iat: Math.floor(Date.now() / 1000) },
-        pointsAdmin: { id: owner._id, role: "owner", isOwner: true },
-      },
-      response
-    );
+        response
+      );
+      return response.result;
+    };
 
-    assert.equal(response.result.statusCode, 400);
-    assert.equal(response.result.body.code, "POINTS_VALIDATION_ERROR");
+    const denied = await invoke(
+      { id: finance._id, role: "finance_admin", isOwner: false, isFinanceAdmin: true },
+      "finance-purchase-attempt-00000092"
+    );
+    assert.equal(denied.statusCode, 403);
+    assert.equal(denied.body.code, "POINTS_OWNER_REQUIRED");
     assert.equal(
       await PointTransaction.countDocuments({ driverId: driver._id }),
       0
     );
-    assert.equal(
-      await PointsAdminAudit.countDocuments({ driverId: driver._id }),
-      0
+
+    const credited = await invoke(
+      { id: owner._id, role: "owner", isOwner: true },
+      "direct-purchase-00000092"
     );
+    assert.equal(credited.statusCode, 201);
+    const wallet = await DriverPointsWallet.findOne({ driverId: driver._id });
+    assert.equal(wallet.availablePurchasedPoints, 40);
+    const transaction = await PointTransaction.findOne({
+      driverId: driver._id,
+      type: "POINTS_PURCHASE",
+    }).select("+paymentReference");
+    assert.equal(transaction.paymentReference, "PAY-OWNER-92");
+    assert.equal(transaction.purchasedPoints, 40);
+    assert.equal(transaction.adminId.toString(), String(owner._id));
+    const audit = await PointsAdminAudit.findOne({
+      driverId: driver._id,
+      action: "POINTS_CREDIT",
+    });
+    assert.ok(audit);
+    assert.equal(audit.pointsChange, 40);
+    assert.equal(
+      await PointsOutboxEvent.countDocuments({
+        eventKey: `admin-credit:${transaction._id}:wallet`,
+      }),
+      1
+    );
+  }
+);
+
+test(
+  "direct purchase credit replays idempotently and refuses a reused payment reference",
+  { skip: !integrationEnabled },
+  async () => {
+    const [driver, owner] = await Promise.all([
+      Driver.create(driverData(93)),
+      Admin.create({
+        fullName: "Replay Owner",
+        email: "replay-owner-93@points.test",
+        password: "not-used-in-test",
+        role: "owner",
+      }),
+    ]);
+    const invoke = async (idempotencyKey, paymentReference) => {
+      const response = responseRecorder();
+      const headers = { "idempotency-key": idempotencyKey, "user-agent": "node-test" };
+      await creditDriverPoints(
+        {
+          body: {
+            driverId: String(driver._id),
+            points: 20,
+            source: "purchase",
+            paymentReference,
+            paymentMethod: "cash",
+            reason: "Direct purchase replay check",
+            confirmation: true,
+          },
+          headers,
+          get(name) {
+            return this.headers[String(name).toLowerCase()];
+          },
+          ip: "127.0.0.1",
+          user: { iat: Math.floor(Date.now() / 1000) },
+          pointsAdmin: { id: owner._id, role: "owner", isOwner: true },
+        },
+        response
+      );
+      return response.result;
+    };
+
+    const first = await invoke("direct-purchase-replay-93", "PAY-REPLAY-93");
+    assert.equal(first.statusCode, 201);
+    const replay = await invoke("direct-purchase-replay-93", "PAY-REPLAY-93");
+    assert.equal(replay.statusCode, 200);
+    assert.equal(replay.body.idempotent, true);
+    const duplicate = await invoke("direct-purchase-dup-93", "PAY-REPLAY-93");
+    assert.equal(duplicate.statusCode, 409);
+    assert.equal(duplicate.body.code, "DUPLICATE_PAYMENT_REFERENCE");
+    const wallet = await DriverPointsWallet.findOne({ driverId: driver._id });
+    assert.equal(wallet.availablePurchasedPoints, 20);
+    assert.equal(
+      await PointTransaction.countDocuments({
+        driverId: driver._id,
+        type: "POINTS_PURCHASE",
+      }),
+      1
+    );
+  }
+);
+
+test(
+  "finance admins can still add free bonus points while purchases remain owner-only",
+  { skip: !integrationEnabled },
+  async () => {
+    const [driver, finance] = await Promise.all([
+      Driver.create(driverData(94)),
+      Admin.create({
+        fullName: "Finance Bonus Admin",
+        email: "finance-bonus-94@points.test",
+        password: "not-used-in-test",
+        role: "finance_admin",
+      }),
+    ]);
+    const response = responseRecorder();
+    const headers = {
+      "idempotency-key": "finance-free-credit-00000094",
+      "user-agent": "node-test",
+    };
+    await creditDriverPoints(
+      {
+        body: {
+          driverId: String(driver._id),
+          points: 25,
+          source: "bonus",
+          reason: "Seasonal bonus from finance",
+          confirmation: true,
+        },
+        headers,
+        get(name) {
+          return this.headers[String(name).toLowerCase()];
+        },
+        ip: "127.0.0.1",
+        user: { iat: Math.floor(Date.now() / 1000) },
+        pointsAdmin: {
+          id: finance._id,
+          role: "finance_admin",
+          isOwner: false,
+          isFinanceAdmin: true,
+        },
+      },
+      response
+    );
+    assert.equal(response.result.statusCode, 201);
+    const wallet = await DriverPointsWallet.findOne({ driverId: driver._id });
+    assert.equal(wallet.availableBonusPoints, 25);
+    const transaction = await PointTransaction.findOne({
+      driverId: driver._id,
+      type: "ADMIN_CREDIT",
+    }).select("+paymentReference");
+    assert.equal(transaction.paymentReference, "");
   }
 );
 
@@ -893,7 +1062,11 @@ test(
         ),
         Driver.updateOne(
           { _id: driver._id },
-          { $set: { availabilityStatus: "Online", isOnline: true } }
+          { $set: { availabilityStatus: "Online", isOnline: true, activeRideId: null } }
+        ),
+        User.updateOne(
+          { _id: passenger._id },
+          { $set: { activeRideId: null, activeRideStartedAt: null } }
         ),
       ]);
     }

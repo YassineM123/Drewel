@@ -134,7 +134,11 @@ export const createTripOffer = async ({
         pickup = requestedPickup;
         destination = requestedDestination;
       }
-      if (pickup && destination) {
+      if (pickup && destination &&
+        Number.isFinite(Number(pickup?.lat)) &&
+        Number.isFinite(Number(pickup?.long)) &&
+        Number.isFinite(Number(destination?.lat)) &&
+        Number.isFinite(Number(destination?.long))) {
         contact.pickup = pickup;
         contact.destination = destination;
         await contact.save({ session });

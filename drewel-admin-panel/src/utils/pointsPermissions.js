@@ -18,6 +18,7 @@ export const getPointsAccess = (admin = getStoredAdmin()) => {
     isFinanceAdmin,
     canRead: isOwner || isFinanceAdmin,
     canAdjust: isOwner || isFinanceAdmin,
+    canAddPurchasedPoints: isOwner,
     canManageRequests: isOwner || isFinanceAdmin,
     canManagePacks: isOwner,
     canManageSettings: isOwner,

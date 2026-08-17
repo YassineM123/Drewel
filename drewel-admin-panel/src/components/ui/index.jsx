@@ -220,7 +220,7 @@ export function Toast({ message, type = "success", onClose }) {
     <div
       role="status"
       aria-live="polite"
-      className="ui-toast-enter fixed bottom-6 right-6 z-[60] flex items-start gap-3 px-4 py-3.5 rounded-[12px] shadow-xl border border-slate-200 bg-white min-w-72 max-w-sm"
+      className="toast-enter fixed bottom-6 right-6 z-[60] flex items-start gap-3 px-4 py-3.5 rounded-[12px] shadow-xl border border-slate-200 bg-white min-w-72 max-w-sm"
     >
       <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold shrink-0 mt-0.5 ${config.iconCls}`} aria-hidden="true">
         {config.icon}
@@ -266,7 +266,7 @@ export function Modal({ open, onClose, title, children, width = "max-w-lg" }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-label={title}>
       <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={onClose} aria-hidden="true" />
-      <div className={`ui-modal-enter relative bg-white rounded-[14px] shadow-2xl w-full ${width} max-h-[90vh] overflow-auto`}>
+      <div className={`relative bg-white rounded-[14px] shadow-2xl w-full ${width} max-h-[90vh] overflow-auto`}>
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 sticky top-0 bg-white z-10">
           <h2 className="text-base font-semibold text-slate-800">{title}</h2>
           <button
@@ -315,7 +315,7 @@ export function ConfirmDialog({ open, onClose, onConfirm, title, message, confir
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4" role="alertdialog" aria-modal="true" aria-label={title}>
       <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={!loading ? onClose : undefined} aria-hidden="true" />
-      <div className="ui-modal-enter relative bg-white rounded-[14px] shadow-2xl w-full max-w-md">
+      <div className="relative bg-white rounded-[14px] shadow-2xl w-full max-w-md">
         <div className="p-6">
           <h2 className="text-base font-semibold text-slate-800 mb-2">{title}</h2>
           <div className="text-sm text-slate-600 mb-6">{message}</div>
@@ -370,7 +370,7 @@ export function Drawer({ open, onClose, title, children, width = "w-[480px]" }) 
   return (
     <div className="fixed inset-0 z-40 flex justify-end" role="dialog" aria-modal="true" aria-label={title}>
       <div className="absolute inset-0 bg-black/20" onClick={onClose} aria-hidden="true" />
-      <div className={`ui-drawer-enter relative bg-white ${width} max-w-[calc(100vw-2rem)] h-full shadow-2xl flex flex-col`}>
+      <div className={`drawer-enter relative bg-white ${width} max-w-[calc(100vw-2rem)] h-full shadow-2xl flex flex-col`}>
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 shrink-0 sticky top-0 bg-white z-10">
           <h2 className="text-base font-semibold text-slate-800">{title}</h2>
           <button

@@ -898,13 +898,14 @@ const parseAdjustment = async (req, kind) => {
   }).toLowerCase();
   const allowedSources =
     kind === "credit"
-      ? ["admin", "bonus", "correction"]
+      ? ["admin", "bonus", "correction", "purchase"]
       : ["admin", "penalty", "correction"];
   if (!allowedSources.includes(source)) {
     throw new PointsValidationError("source is invalid");
   }
   if (
     kind === "credit" &&
+    source !== "purchase" &&
     [
       req.body?.purchaseRequestId,
       req.body?.paymentAmount,
@@ -914,8 +915,8 @@ const parseAdjustment = async (req, kind) => {
     ].some((value) => value !== undefined && value !== null && value !== "")
   ) {
     throw new PointsValidationError(
-      "Purchased points must use the verified purchase request credit endpoint",
-      { code: "PURCHASE_CREDIT_ENDPOINT_REQUIRED", status: 409 }
+      "Payment details require the purchase credit source",
+      { code: "PAYMENT_DETAILS_REQUIRE_PURCHASE_SOURCE", status: 409 }
     );
   }
   const metadata = sanitizePointsMetadata(req.body?.metadata);
@@ -944,32 +945,42 @@ export const creditDriverPoints = async (req, res) => {
   try {
     input = await parseAdjustment(req, "credit");
     const purchased = input.source === "purchase";
+    if (purchased && !req.pointsAdmin?.isOwner) {
+      throw new PointsValidationError(
+        "Only a Drewel owner may add purchased points",
+        { code: "POINTS_OWNER_REQUIRED", status: 403 }
+      );
+    }
     let purchaseRequestId = null;
     let paymentReference = "";
     let paymentAmount = null;
     let currency = "";
     let paymentMethod = "";
     if (purchased) {
-      purchaseRequestId = requireObjectId(
-        input.purchaseRequestId,
-        "purchaseRequestId"
-      );
-      paymentReference = requirePaymentReference(input.paymentReference);
-      paymentAmount = optionalMoneyAmount(input.paymentAmount);
-      if (paymentAmount === null) {
-        throw new PointsValidationError(
-          "paymentAmount is required for purchased points"
+      if (input.purchaseRequestId) {
+        purchaseRequestId = requireObjectId(
+          input.purchaseRequestId,
+          "purchaseRequestId"
         );
       }
-      currency = requireBoundedString(input.currency, "currency", {
-        min: 3,
-        max: 3,
-        pattern: /^[A-Za-z]{3}$/,
-      }).toUpperCase();
+      paymentReference = requirePaymentReference(input.paymentReference);
       paymentMethod = requireBoundedString(input.paymentMethod, "paymentMethod", {
         min: 2,
         max: 100,
       });
+      paymentAmount = optionalMoneyAmount(input.paymentAmount);
+      if (input.currency) {
+        currency = requireBoundedString(input.currency, "currency", {
+          min: 3,
+          max: 3,
+          pattern: /^[A-Za-z]{3}$/,
+        }).toUpperCase();
+      }
+      if (purchaseRequestId && (paymentAmount === null || !currency)) {
+        throw new PointsValidationError(
+          "paymentAmount and currency are required for a linked purchase request"
+        );
+      }
     }
 
     const result = await runPointsTransaction(async (session) => {
@@ -1008,7 +1019,7 @@ export const creditDriverPoints = async (req, res) => {
       if (!driver) throw new PointsValidationError("Driver not found", { status: 404 });
 
       let purchaseRequest = null;
-      if (purchased) {
+      if (purchased && purchaseRequestId) {
         purchaseRequest = await PointPurchaseRequest.findOne({
           _id: purchaseRequestId,
           driverId: input.driverId,

@@ -18,7 +18,7 @@ const DriverWalletDetail = () => {
     catch (error) { setState({ loading: false, error: pointsErrorMessage(error, "Wallet could not be loaded.") }); }
   }, [driverId]);
   useEffect(() => { load(); }, [load]);
-  const actions = <div className="points-actions"><Link className="btn btn-light" to="/driver-points/wallets">Back</Link>{access.canAdjust && data?.driver && <><button className="btn btn-success" type="button" onClick={() => setMode("credit")}>Add points</button><button className="btn btn-outline-danger" type="button" onClick={() => setMode("debit")}>Debit/correct</button></>}</div>;
+  const actions = <div className="points-actions"><Link className="btn btn-light" to="/driver-points/wallets">Back</Link>{access.isOwner && data?.driver && <button className="btn btn-success" type="button" onClick={() => setMode("credit-purchase")}>Add points</button>}{access.canAdjust && data?.driver && <><button className="btn btn-outline-success" type="button" onClick={() => setMode("credit-free")}>Free credit</button><button className="btn btn-outline-danger" type="button" onClick={() => setMode("debit")}>Debit/correct</button></>}</div>;
   return (
     <PointsPageShell title={data?.driver?.fullName || "Wallet details"} description="Balances and immutable transaction history for one driver." isOwner={access.isOwner} actions={actions}>
       {state.loading ? <div className="tile"><PointsLoading /></div> : state.error ? <div className="tile"><PointsError message={state.error} onRetry={load} /></div> : <>

@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io' show SocketException;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -61,6 +62,7 @@ class _TripRequestMapSheet extends StatefulWidget {
 class _TripRequestMapSheetState extends State<_TripRequestMapSheet> {
   static const int _searchDebounceMs = 350;
   static const double _mapZoom = 15;
+  static const Duration _placesHttpTimeout = Duration(seconds: 10);
 
   final TextEditingController _searchController = TextEditingController();
   final FocusNode _searchFocusNode = FocusNode();
@@ -435,55 +437,75 @@ class _TripRequestMapSheetState extends State<_TripRequestMapSheet> {
     );
   }
 
-  Future<void> _fetchSuggestions(String query, int requestId) async {
+  Future<http.Response?> _getWithTimeout(
+    Uri uri, {
+    void Function(String message)? onError,
+  }) async {
     try {
-      final Uri uri = Uri.https(
-        'maps.googleapis.com',
-        '/maps/api/place/autocomplete/json',
-        <String, String>{
-          'input': query,
-          'key': ApiKeyConstants.googleMapKey,
-          'language': 'en',
-          'components': 'country:${AppConfig.marketplaceCountryCode}',
-        },
-      );
-
-      final http.Response response = await http.get(uri);
-      if (!mounted || requestId != _searchRequestId) return;
-
-      if (response.statusCode != 200) {
-        _setSearchFailure('Unable to find locations. Try again.');
-        return;
-      }
-
-      final Map<String, dynamic> data =
-          json.decode(response.body) as Map<String, dynamic>;
-      final String status = data['status']?.toString() ?? '';
-      if (status == 'OK') {
-        final List<dynamic> predictions = data['predictions'] as List<dynamic>;
-        setState(() {
-          _suggestions = predictions
-              .map((dynamic value) => Prediction.fromJson(value))
-              .toList(growable: false);
-          _searchError = '';
-          _isSearching = false;
-        });
-      } else if (status == 'ZERO_RESULTS') {
-        setState(() {
-          _suggestions = <Prediction>[];
-          _searchError = '';
-          _isSearching = false;
-        });
-      } else {
-        _setSearchFailure(
-          status == 'REQUEST_DENIED'
-              ? 'Location search is temporarily unavailable.'
-              : 'Unable to find locations. Try again.',
-        );
-      }
+      return await http.get(uri).timeout(_placesHttpTimeout);
+    } on TimeoutException {
+      onError?.call('Search timed out. Check your connection and try again.');
+    } on SocketException {
+      onError?.call('No internet connection. Check your network and try again.');
     } catch (_) {
-      if (!mounted || requestId != _searchRequestId) return;
+      onError?.call('Unable to find locations. Try again.');
+    }
+    return null;
+  }
+
+  Future<void> _fetchSuggestions(String query, int requestId) async {
+    final Uri uri = Uri.https(
+      'maps.googleapis.com',
+      '/maps/api/place/autocomplete/json',
+      <String, String>{
+        'input': query,
+        'key': ApiKeyConstants.googleMapKey,
+        'language': 'en',
+        'components': 'country:${AppConfig.marketplaceCountryCode}',
+      },
+    );
+
+    String? failureMessage;
+    final http.Response? response = await _getWithTimeout(
+      uri,
+      onError: (String message) => failureMessage = message,
+    );
+    if (!mounted || requestId != _searchRequestId) return;
+
+    if (response == null) {
+      _setSearchFailure(failureMessage ?? 'Unable to find locations. Try again.');
+      return;
+    }
+
+    if (response.statusCode != 200) {
       _setSearchFailure('Unable to find locations. Try again.');
+      return;
+    }
+
+    final Map<String, dynamic> data =
+        json.decode(response.body) as Map<String, dynamic>;
+    final String status = data['status']?.toString() ?? '';
+    if (status == 'OK') {
+      final List<dynamic> predictions = data['predictions'] as List<dynamic>;
+      setState(() {
+        _suggestions = predictions
+            .map((dynamic value) => Prediction.fromJson(value))
+            .toList(growable: false);
+        _searchError = '';
+        _isSearching = false;
+      });
+    } else if (status == 'ZERO_RESULTS') {
+      setState(() {
+        _suggestions = <Prediction>[];
+        _searchError = '';
+        _isSearching = false;
+      });
+    } else {
+      _setSearchFailure(
+        status == 'REQUEST_DENIED'
+            ? 'Location search is temporarily unavailable.'
+            : 'Unable to find locations. Try again.',
+      );
     }
   }
 
@@ -507,8 +529,17 @@ class _TripRequestMapSheetState extends State<_TripRequestMapSheet> {
           'language': 'en',
         },
       );
-      final http.Response response = await http.get(uri);
+      String? failureMessage;
+      final http.Response? response = await _getWithTimeout(
+        uri,
+        onError: (String message) => failureMessage = message,
+      );
       if (!mounted) return;
+
+      if (response == null) {
+        _setSearchFailure(failureMessage ?? 'Unable to open this location.');
+        return;
+      }
 
       if (response.statusCode != 200) {
         _setSearchFailure('Unable to open this location.');

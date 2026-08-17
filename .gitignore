@@ -61,6 +61,7 @@ drewel-backend/.env
 **/build/
 android/key.properties
 ios/Flutter/Maps.xcconfig
+dart_defines.local.json
 
 # JavaScript dependencies
 **/node_modules/

@@ -526,30 +526,43 @@ class DriverHomeController extends GetxController with WidgetsBindingObserver {
     });
   }
 
+  static const Duration _placesHttpTimeout = Duration(seconds: 10);
+
+  /// Shared GET helper for Places/Geocoding HTTP calls: a timeout keeps a
+  /// slow/unreachable Google endpoint from hanging search indefinitely.
+  Future<http.Response?> _getWithTimeout(Uri uri) async {
+    try {
+      return await http.get(uri).timeout(_placesHttpTimeout);
+    } on TimeoutException {
+      debugPrint('Places request timed out: $uri');
+    } catch (error) {
+      debugPrint('Places request failed: $error');
+    }
+    return null;
+  }
+
   /// Fetch autocomplete suggestions from Google Places HTTP API
   Future<void> _fetchPlaceSuggestions(String input) async {
-    try {
-      final uri = Uri.parse(
-          'https://maps.googleapis.com/maps/api/place/autocomplete/json'
-          '?input=$input'
-          '&key=${ApiKeyConstants.googleMapKey}'
-          '&language=en'
-          '&components=country:${AppConfig.marketplaceCountryCode}');
+    final uri = Uri.parse(
+        'https://maps.googleapis.com/maps/api/place/autocomplete/json'
+        '?input=$input'
+        '&key=${ApiKeyConstants.googleMapKey}'
+        '&language=en'
+        '&components=country:${AppConfig.marketplaceCountryCode}');
 
-      final response = await http.get(uri);
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        if (data['status'] == 'OK') {
-          final List preds = data['predictions'] ?? [];
-          placeSuggestions.value =
-              preds.map((e) => Prediction.fromJson(e)).toList();
-        } else {
-          placeSuggestions.clear();
-        }
+    final http.Response? response = await _getWithTimeout(uri);
+    if (response == null) {
+      placeSuggestions.clear();
+    } else if (response.statusCode == 200) {
+      final data = json.decode(response.body);
+      if (data['status'] == 'OK') {
+        final List preds = data['predictions'] ?? [];
+        placeSuggestions.value =
+            preds.map((e) => Prediction.fromJson(e)).toList();
       } else {
         placeSuggestions.clear();
       }
-    } catch (_) {
+    } else {
       placeSuggestions.clear();
     }
     increment();
@@ -707,12 +720,15 @@ class DriverHomeController extends GetxController with WidgetsBindingObserver {
 
     if (prediction.placeId != null) {
       final placeId = prediction.placeId!;
-      final url =
-          "https://maps.googleapis.com/maps/api/place/details/json?place_id=$placeId&key=${ApiKeyConstants.googleMapKey}";
+      final uri = Uri.parse(
+          "https://maps.googleapis.com/maps/api/place/details/json?place_id=$placeId&key=${ApiKeyConstants.googleMapKey}");
 
-      final response = await http.get(Uri.parse(url));
+      final http.Response? response = await _getWithTimeout(uri);
 
-      if (response.statusCode == 200) {
+      if (response == null) {
+        // Silently keep the previous camera position; matches the existing
+        // silent-failure behavior below for a non-OK Places response.
+      } else if (response.statusCode == 200) {
         final data = json.decode(response.body);
 
         if (data["status"] == "OK") {

@@ -1,360 +1,631 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import Swal from "sweetalert2";
-import TableUser from "../components/TableUser";
 import {
-  getDriverList,
-  updateDriverReviewStatus,
-} from "../utils/api";
+  Search, Star, Eye, EyeOff, CheckCircle, XCircle,
+  ShieldOff, Shield, MessageSquare, Plus, AlertTriangle,
+  Navigation, ExternalLink, FileText, Clock, Filter,
+} from "lucide-react";
+import { getDriverList, updateDriverReviewStatus } from "../utils/api";
+import { getDriverDetail } from "../api/domains/drivers";
+import { useSocket } from "../context/SocketContext";
 
-const statusOptions = ["all", "pending", "approved", "rejected", "completed"];
-const availabilityOptions = ["all", "Online", "Busy", "Offline"];
-const discoverabilityOptions = ["all", "discoverable", "blocked"];
-const sortOptions = [
-  ["updatedAt", "Last updated"],
-  ["createdAt", "Joined"],
-  ["basicRequestSubmittedAt", "Submitted"],
-  ["presenceLastHeartbeatAt", "Last heartbeat"],
-  ["locationUpdatedAt", "Last GPS"],
-  ["status", "Status"],
-];
-
-const statusBadgeClass = (status) => {
-  switch ((status || "").toLowerCase()) {
-    case "approved":
-      return "badge badge-success";
-    case "completed":
-      return "badge badge-primary";
-    case "rejected":
-      return "badge badge-danger";
-    default:
-      return "badge badge-warning";
-  }
+function maskPhone(p) { return p && p.length > 7 ? p.slice(0, 4) + "***" + p.slice(-3) : p || "N/A"; }
+function maskEmail(e) { if (!e) return "N/A"; const [u, d] = e.split("@"); return (u?.slice(0, 2) || "") + "***@" + (d || ""); }
+function fmtRelative(iso) {
+  if (!iso) return "N/A";
+  const diff = Date.now() - new Date(iso).getTime();
+  const m = Math.floor(diff / 60000);
+  if (m < 1) return "just now";
+  if (m < 60) return `${m}m ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h ago`;
+  return `${Math.floor(h / 24)}d ago`;
+}
+function fmtDate(iso) {
+  if (!iso) return "N/A";
+  return new Date(iso).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
+}
+const driverName = (d) => `${d.firstName || ""} ${d.lastName || ""}`.trim() || d.fullName || "N/A";
+const driverInitials = (d) => {
+  const name = driverName(d);
+  return name.split(/\s+/).filter(Boolean).map((p) => p[0]?.toUpperCase()).slice(0, 2).join("") || "?";
+};
+const statusLabel = (v) => String(v || "unknown").replaceAll("_", " ").replace(/\b\w/g, (l) => l.toUpperCase());
+const gpsLabel = (d) => {
+  const s = Number(d.locationAgeSeconds);
+  if (!Number.isFinite(s)) return "No GPS";
+  if (s < 60) return `${s}s ago`;
+  const m = Math.floor(s / 60);
+  if (m < 60) return `${m}m ago`;
+  return `${Math.floor(m / 60)}h ${m % 60}m ago`;
+};
+const driverOnlineStatus = (d) => {
+  if (d.availabilityStatus === "Online") return "online_available";
+  if (d.availabilityStatus === "Busy") return "online_busy";
+  return "offline";
+};
+const driverVerificationStatus = (d) => {
+  const s = String(d.status || "pending").toLowerCase();
+  if (s === "completed") return "approved";
+  return s;
 };
 
-const label = (value) => String(value || "N/A").replaceAll("_", " ");
-const driverName = (driver) =>
-  `${driver.firstName || ""} ${driver.lastName || ""}`.trim() ||
-  driver.fullName ||
-  "N/A";
-const maskPhone = (value) => {
-  const phone = String(value || "").trim();
-  if (phone.length <= 6) return phone || "N/A";
-  return `${phone.slice(0, 4)}***${phone.slice(-3)}`;
-};
-const date = (value) => value ? new Date(value).toLocaleString() : "N/A";
-const points = (driver) => Number(driver.pointsWallet?.availablePoints || 0).toLocaleString();
-const gpsLabel = (driver) => {
-  const seconds = Number(driver.locationAgeSeconds);
-  if (!Number.isFinite(seconds)) return "No GPS";
-  if (seconds < 60) return `${seconds}s ago`;
-  const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return `${minutes}m ago`;
-  return `${Math.floor(minutes / 60)}h ${minutes % 60}m ago`;
-};
+function OnlineBadge({ status }) {
+  const map = {
+    online_available: { label: "Online", cls: "bg-green-50 text-green-700 border-green-200", dot: "bg-green-500" },
+    online_busy: { label: "Busy", cls: "bg-blue-50 text-blue-700 border-blue-200", dot: "bg-blue-500" },
+    offline: { label: "Offline", cls: "bg-slate-50 text-slate-500 border-slate-200", dot: "bg-slate-300" },
+  };
+  const s = map[status] || map.offline;
+  return (
+    <span className={`inline-flex items-center gap-1.5 text-[10px] font-semibold px-2 py-0.5 rounded-full border ${s.cls}`}>
+      <span className={`w-1.5 h-1.5 rounded-full ${s.dot}`} />
+      {s.label}
+    </span>
+  );
+}
 
-const Drivers = () => {
+function Badge({ variant, dot }) {
+  const map = {
+    approved: { label: "Approved", cls: "bg-green-50 text-green-700 border-green-200", dot: "bg-green-500" },
+    pending: { label: "Pending", cls: "bg-amber-50 text-amber-700 border-amber-200", dot: "bg-amber-500" },
+    rejected: { label: "Rejected", cls: "bg-red-50 text-red-700 border-red-200", dot: "bg-red-500" },
+    restricted: { label: "Restricted", cls: "bg-red-50 text-red-600 border-red-200", dot: "bg-red-500" },
+    active: { label: "Active", cls: "bg-green-50 text-green-700 border-green-200", dot: "bg-green-500" },
+  };
+  const s = map[variant] || map.pending;
+  return (
+    <span className={`inline-flex items-center gap-1.5 text-[10px] font-semibold px-2 py-0.5 rounded-full border ${s.cls}`}>
+      {dot && <span className={`w-1.5 h-1.5 rounded-full ${s.dot}`} />}
+      {s.label}
+    </span>
+  );
+}
+
+function Toast({ message, type = "success", onClose }) {
+  useEffect(() => {
+    const t = setTimeout(onClose, 3000);
+    return () => clearTimeout(t);
+  }, [onClose]);
+  return (
+    <div className={`fixed bottom-6 right-6 z-[70] px-4 py-3 rounded-[12px] shadow-xl text-sm font-semibold transition-all fade-in-up
+      ${type === "success" ? "bg-green-600 text-white" : type === "error" ? "bg-red-600 text-white" : "bg-slate-800 text-white"}`}>
+      {message}
+    </div>
+  );
+}
+
+function EmptyState({ title, description }) {
+  return (
+    <div className="flex flex-col items-center gap-2 py-16 text-center">
+      <div className="w-14 h-14 rounded-full bg-slate-100 flex items-center justify-center">
+        <FileText size={22} className="text-slate-300" />
+      </div>
+      <p className="text-sm font-medium text-slate-600">{title}</p>
+      {description && <p className="text-xs text-slate-400">{description}</p>}
+    </div>
+  );
+}
+
+function ActionModal({ title, consequence, variant, requiresReason, confirmLabel, onConfirm, onClose }) {
+  const [reason, setReason] = useState("");
+  const [loading, setLoading] = useState(false);
+  const canSubmit = !requiresReason || reason.trim().length > 0;
+
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative bg-white rounded-[16px] shadow-2xl w-full max-w-md">
+        <div className="p-6 border-b border-slate-100">
+          <h3 className="text-base font-bold text-slate-900">{title}</h3>
+        </div>
+        <div className="p-6 flex flex-col gap-4">
+          <div className={`rounded-[10px] p-3.5 text-sm border
+            ${variant === "danger" ? "bg-red-50 text-red-800 border-red-200"
+            : variant === "warning" ? "bg-amber-50 text-amber-800 border-amber-200"
+            : "bg-sky-50 text-sky-800 border-blue-200"}`}>
+            {consequence}
+          </div>
+          {requiresReason && (
+            <div className="flex flex-col gap-1.5">
+              <label className="text-sm font-medium text-slate-700">Reason <span className="text-red-500">*</span></label>
+              <textarea value={reason} onChange={(e) => setReason(e.target.value)} rows={3}
+                placeholder="Provide your reason for this action\u2026"
+                className="w-full bg-white border border-slate-200 rounded-[10px] p-3 text-sm text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-red-700/20 focus:border-red-400 resize-none" />
+            </div>
+          )}
+        </div>
+        <div className="px-6 pb-6 flex justify-end gap-3">
+          <button type="button" onClick={onClose}
+            className="h-9 inline-flex items-center gap-2 px-3.5 rounded-[10px] border border-slate-200 bg-white text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-all">
+            Cancel
+          </button>
+          <button type="button" disabled={!canSubmit || loading} onClick={() => { setLoading(true); setTimeout(() => { setLoading(false); onConfirm(reason); }, 900); }}
+            className={`h-9 inline-flex items-center gap-2 px-3.5 rounded-[10px] text-xs font-semibold text-white transition-all disabled:opacity-50
+              ${variant === "danger" ? "bg-red-600 hover:bg-red-700" : variant === "warning" ? "bg-amber-500 hover:bg-amber-600" : "bg-[#BE1B2C] hover:bg-[#A31725]"}`}>
+            {loading ? <span className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : null}
+            {confirmLabel}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Drawer({ open, onClose, width = "w-[640px]", children }) {
+  if (!open) return null;
+  return (
+    <div className="fixed inset-0 z-50 flex justify-end">
+      <div className="absolute inset-0 bg-black/30" onClick={onClose} />
+      <div className={`drawer-enter relative bg-white ${width} max-w-[calc(100vw-2rem)] h-full shadow-2xl flex flex-col`}>
+        <button onClick={onClose}
+          className="absolute top-4 right-4 w-8 h-8 flex items-center justify-center rounded-full bg-slate-100 text-slate-500 hover:bg-slate-200 transition-colors z-10">
+          <XCircle size={16} />
+        </button>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+function StatRow({ label, value }) {
+  return (
+    <div className="flex items-center justify-between py-2 border-b border-slate-50 last:border-0">
+      <span className="text-xs text-slate-400">{label}</span>
+      <span className="text-xs font-medium text-slate-700">{value}</span>
+    </div>
+  );
+}
+
+function DriverCard({ driver, onClick }) {
+  const status = driverOnlineStatus(driver);
+  const vStatus = driverVerificationStatus(driver);
+  const restricted = driver.isRestricted;
+  const pts = Number(driver.pointsWallet?.availablePoints || 0);
+  const hasLowBalance = pts < 20;
+  const statusDot = { online_available: "bg-green-500", online_busy: "bg-blue-500", offline: "bg-slate-300" };
+  const vehicleType = driver.vehicleType || "N/A";
+
+  return (
+    <div className="bg-white rounded-[14px] border border-slate-200 p-5 cursor-pointer hover:shadow-sm hover:border-slate-300 transition-all"
+      onClick={onClick}>
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <div className="relative">
+            <div className="w-10 h-10 rounded-full bg-[#BE1B2C]/10 flex items-center justify-center text-sm font-bold text-[#BE1B2C]">
+              {driverInitials(driver)}
+            </div>
+            <span className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-white ${statusDot[status]}`} />
+          </div>
+          <div>
+            <p className="text-sm font-semibold text-slate-800">{driverName(driver)}</p>
+            <p className="text-xs text-slate-400">{driver._id?.slice(-8) || "N/A"}</p>
+          </div>
+        </div>
+        <div className="flex items-center gap-1 text-xs text-slate-500">
+          <Star size={12} className="text-amber-400 fill-amber-400" />
+          {Number(driver.rating || 0).toFixed(2)}
+        </div>
+      </div>
+      <div className="mt-4 flex flex-wrap gap-1.5">
+        <OnlineBadge status={status} />
+        <Badge variant={vStatus} />
+        {restricted && <Badge variant="restricted" />}
+        {hasLowBalance && (
+          <span className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded-full">
+            <AlertTriangle size={9} /> {pts}pts
+          </span>
+        )}
+      </div>
+      <div className="mt-3 pt-3 border-t border-slate-100 grid grid-cols-2 gap-2 text-xs">
+        <div><p className="text-slate-400">Vehicle</p><p className="text-slate-600 font-medium truncate">{vehicleType}</p></div>
+        <div><p className="text-slate-400">Area</p><p className="text-slate-600 font-medium">{driver.area || "N/A"}</p></div>
+        <div><p className="text-slate-400">Rides</p><p className="text-slate-600 font-medium">{Number(driver.rideSummary?.completed || 0).toLocaleString()}</p></div>
+        <div><p className="text-slate-400">Last seen</p><p className="text-slate-600 font-medium">{gpsLabel(driver)}</p></div>
+      </div>
+    </div>
+  );
+}
+
+function DriverDetailDrawer({ driver, onClose, onToast }) {
+  const navigate = useNavigate();
+  const [tab, setTab] = useState("overview");
+  const [revealed, setRevealed] = useState(false);
+  const [modal, setModal] = useState(null);
+  const [detail, setDetail] = useState(null);
+  const [detailLoading, setDetailLoading] = useState(true);
+
+  useEffect(() => {
+    if (!driver?._id) return;
+    setDetailLoading(true);
+    getDriverDetail(driver._id)
+      .then((d) => setDetail(d))
+      .catch(() => setDetail(null))
+      .finally(() => setDetailLoading(false));
+  }, [driver?._id]);
+
+  const d = detail || driver;
+  const status = driverOnlineStatus(d);
+  const vStatus = driverVerificationStatus(d);
+  const restricted = d.isRestricted;
+  const pts = Number(d.pointsWallet?.availablePoints || 0);
+  const hasLowBalance = pts < 20;
+  const rideSummary = d.rideSummary || {};
+
+  const DTABS = [
+    { id: "overview", label: "Overview" },
+    { id: "documents", label: "Documents" },
+    { id: "active_ride", label: "Active Ride" },
+    { id: "ride_history", label: "Ride History" },
+    { id: "points", label: "Points" },
+  ];
+
+  const handleAction = (action, _reason) => {
+    setModal(null);
+    const msgs = {
+      approve: "Driver approved. They have been notified and can now accept rides.",
+      reject: "Driver application rejected. Reason sent to driver.",
+      suspend: "Driver account suspended. They cannot accept new rides.",
+      restore: "Driver account restored. They can now accept rides again.",
+    };
+    onToast(msgs[action] || "Action completed.");
+  };
+
+  return (
+    <div className="flex flex-col h-full overflow-hidden">
+      <div className="px-6 pt-5 pb-4 border-b border-slate-100 shrink-0">
+        <div className="flex items-center gap-4">
+          <div className="relative">
+            <div className="w-12 h-12 rounded-full bg-[#BE1B2C]/10 flex items-center justify-center text-base font-bold text-[#BE1B2C]">
+              {driverInitials(d)}
+            </div>
+            <span className={`absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full border-2 border-white
+              ${status === "online_available" ? "bg-green-500" : status === "online_busy" ? "bg-blue-500" : "bg-slate-300"}`} />
+          </div>
+          <div className="flex-1 min-w-0">
+            <h2 className="text-base font-bold text-slate-900">{driverName(d)}</h2>
+            <p className="text-xs font-mono text-slate-400">{d._id}</p>
+            <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
+              <OnlineBadge status={status} />
+              <Badge variant={vStatus} />
+              {restricted && <Badge variant="restricted" />}
+              {hasLowBalance && (
+                <span className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded-full">
+                  <AlertTriangle size={9} /> Low balance
+                </span>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="flex gap-0 overflow-x-auto border-b border-slate-200 shrink-0 px-1">
+        {DTABS.map((t) => (
+          <button key={t.id} onClick={() => setTab(t.id)}
+            className={`px-3.5 py-2.5 text-xs font-medium whitespace-nowrap border-b-2 transition-all
+              ${tab === t.id ? "border-[#BE1B2C] text-[#BE1B2C]" : "border-transparent text-slate-500 hover:text-slate-700"}`}>
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      <div className="flex-1 overflow-y-auto px-6 py-5 flex flex-col gap-5">
+        {detailLoading && tab === "overview" && (
+          <div className="flex items-center justify-center py-10">
+            <div className="w-6 h-6 border-2 border-[#BE1B2C]/30 border-t-[#BE1B2C] rounded-full animate-spin" />
+          </div>
+        )}
+
+        {tab === "overview" && !detailLoading && (
+          <>
+            {restricted && d.restrictedReason && (
+              <div className="bg-red-50 border border-red-200 rounded-[12px] p-3.5">
+                <p className="text-xs font-bold text-red-800 mb-1">Account Suspended</p>
+                <p className="text-xs text-red-700">{d.restrictedReason}</p>
+              </div>
+            )}
+
+            <div className="grid grid-cols-3 gap-3">
+              {[
+                { label: "Rating", value: `${Number(d.rating || 0).toFixed(2)} \u2605`, color: "text-amber-600" },
+                { label: "Completed", value: Number(rideSummary.completed || 0).toLocaleString(), color: "text-slate-800" },
+                { label: "Cancel rate", value: `${Number(d.cancellationRate || 0).toFixed(1)}%`, color: Number(d.cancellationRate || 0) > 5 ? "text-red-600" : "text-slate-800" },
+              ].map((s) => (
+                <div key={s.label} className="bg-slate-50 rounded-[12px] p-3 text-center border border-slate-100">
+                  <div className={`text-lg font-black tabular-nums ${s.color}`}>{s.value}</div>
+                  <div className="text-[10px] text-slate-400 mt-0.5">{s.label}</div>
+                </div>
+              ))}
+            </div>
+
+            {pts !== undefined && (
+              <div className="grid grid-cols-2 gap-3">
+                <div className={`rounded-[12px] p-3.5 border ${hasLowBalance ? "bg-amber-50 border-amber-200" : "bg-slate-50 border-slate-100"}`}>
+                  <p className="text-[10px] text-slate-400 uppercase tracking-wider mb-1">Available points</p>
+                  <p className={`text-2xl font-black tabular-nums ${hasLowBalance ? "text-amber-700" : "text-slate-900"}`}>{pts}</p>
+                  {hasLowBalance && <p className="text-[10px] text-amber-700 mt-0.5 font-medium">Below 20pt minimum</p>}
+                </div>
+                <div className="bg-slate-50 rounded-[12px] p-3.5 border border-slate-100">
+                  <p className="text-[10px] text-slate-400 uppercase tracking-wider mb-1">Reserved points</p>
+                  <p className="text-2xl font-black tabular-nums text-slate-700">{Number(d.pointsWallet?.reservedPoints || 0)}</p>
+                </div>
+              </div>
+            )}
+
+            <div className="bg-white rounded-[14px] border border-slate-200 p-4">
+              <div className="flex items-center justify-between mb-3">
+                <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Contact</h4>
+                <button onClick={() => setRevealed(!revealed)}
+                  className="flex items-center gap-1 text-[10px] text-slate-400 hover:text-slate-600 transition-colors">
+                  {revealed ? <EyeOff size={11} /> : <Eye size={11} />}
+                  {revealed ? "Mask" : "Reveal"}
+                </button>
+              </div>
+              <StatRow label="Phone" value={<span className="font-mono text-xs">{revealed ? d.phone : maskPhone(d.phone)}</span>} />
+              <StatRow label="Email" value={<span className="font-mono text-xs">{revealed ? d.email : maskEmail(d.email)}</span>} />
+              <StatRow label="Area" value={d.area || "N/A"} />
+              <StatRow label="Member since" value={fmtDate(d.createdAt)} />
+            </div>
+
+            <div className="bg-white rounded-[14px] border border-slate-200 p-4">
+              <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">Vehicle</h4>
+              <StatRow label="Type" value={d.vehicleType || "N/A"} />
+              <StatRow label="Model" value={d.vehicleModel || "N/A"} />
+              {d.registration && <StatRow label="Plate" value={d.registration} />}
+            </div>
+
+            <div className="bg-white rounded-[14px] border border-slate-200 p-4">
+              <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">Last GPS Update</h4>
+              <div className="flex items-center gap-2">
+                <Navigation size={15} className={Number(d.locationAgeSeconds) > 1800 ? "text-amber-500" : "text-green-500"} />
+                <span className={`text-sm font-semibold ${Number(d.locationAgeSeconds) > 1800 ? "text-amber-700" : "text-slate-700"}`}>
+                  {gpsLabel(d)}
+                </span>
+                {Number(d.locationAgeSeconds) > 1800 && <span className="text-[10px] font-bold text-amber-600 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded-full">Stale</span>}
+              </div>
+            </div>
+
+            <div>
+              <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">Admin Actions</h4>
+              <div className="grid grid-cols-2 gap-2">
+                {vStatus === "pending" && (
+                  <>
+                    <button type="button" onClick={() => setModal("approve")}
+                      className="h-9 inline-flex items-center gap-2 px-3.5 rounded-[10px] bg-[#BE1B2C] text-xs font-semibold text-white hover:bg-[#A31725] transition-all">
+                      <CheckCircle size={13} /> Approve
+                    </button>
+                    <button type="button" onClick={() => setModal("reject")}
+                      className="h-9 inline-flex items-center gap-2 px-3.5 rounded-[10px] bg-red-600 text-xs font-semibold text-white hover:bg-red-700 transition-all">
+                      <XCircle size={13} /> Reject
+                    </button>
+                  </>
+                )}
+                {vStatus === "approved" && !restricted && (
+                  <button type="button" onClick={() => setModal("suspend")}
+                    className="h-9 inline-flex items-center gap-2 px-3.5 rounded-[10px] bg-red-600 text-xs font-semibold text-white hover:bg-red-700 transition-all">
+                    <ShieldOff size={13} /> Suspend Account
+                  </button>
+                )}
+                {restricted && (
+                  <button type="button" onClick={() => setModal("restore")}
+                    className="h-9 inline-flex items-center gap-2 px-3.5 rounded-[10px] border border-slate-200 bg-white text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-all">
+                    <Shield size={13} /> Restore Account
+                  </button>
+                )}
+                <button type="button" onClick={() => navigate(`/chat?driver=${d._id}`)}
+                  className="h-9 inline-flex items-center gap-2 px-3.5 rounded-[10px] border border-slate-200 bg-white text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-all">
+                  <MessageSquare size={13} /> Contact Driver
+                </button>
+                <button type="button" onClick={() => navigate(`/driver-detail/${d._id}`)}
+                  className="h-9 inline-flex items-center gap-2 px-3.5 rounded-[10px] border border-slate-200 bg-white text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-all">
+                  <ExternalLink size={13} /> Full Detail Page
+                </button>
+              </div>
+            </div>
+          </>
+        )}
+
+        {tab === "documents" && (
+          <div className="flex flex-col items-center gap-2 py-16 text-center">
+            <FileText size={24} className="text-slate-300" />
+            <p className="text-sm text-slate-500">Document details available on the full driver detail page.</p>
+            <button type="button" onClick={() => navigate(`/driver-detail/${d._id}`)}
+              className="h-9 inline-flex items-center gap-2 px-3.5 rounded-[10px] border border-slate-200 bg-white text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-all">
+              <ExternalLink size={13} /> Open Detail Page
+            </button>
+          </div>
+        )}
+
+        {tab === "active_ride" && (
+          rideSummary.activeRide ? (
+            <div className="flex flex-col gap-4">
+              <div className="bg-sky-50 border border-sky-200 rounded-[12px] p-4">
+                <div className="flex items-center justify-between mb-3">
+                  <span className="font-mono text-sm font-bold text-sky-800">{rideSummary.activeRide.reference || "Active"}</span>
+                  <span className="text-xs font-semibold text-sky-700 bg-sky-100 px-2 py-0.5 rounded-full">{statusLabel(rideSummary.activeRide.status)}</span>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="flex flex-col items-center gap-2 py-16 text-center">
+              <Navigation size={24} className="text-slate-300" />
+              <p className="text-sm font-medium text-slate-500">No active ride</p>
+              <p className="text-xs text-slate-400">Driver is currently {status === "offline" ? "offline" : "available"}.</p>
+            </div>
+          )
+        )}
+
+        {tab === "ride_history" && (
+          <div className="flex flex-col items-center gap-2 py-16 text-center">
+            <Clock size={24} className="text-slate-300" />
+            <p className="text-sm text-slate-500">View full ride history on the detail page.</p>
+            <button type="button" onClick={() => navigate(`/driver-detail/${d._id}`)}
+              className="h-9 inline-flex items-center gap-2 px-3.5 rounded-[10px] border border-slate-200 bg-white text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-all">
+              <ExternalLink size={13} /> Open Detail Page
+            </button>
+          </div>
+        )}
+
+        {tab === "points" && (
+          <>
+            <div className="grid grid-cols-2 gap-3">
+              {[
+                { label: "Available", value: pts, warn: hasLowBalance },
+                { label: "Reserved", value: Number(d.pointsWallet?.reservedPoints || 0), warn: false },
+              ].map((s) => (
+                <div key={s.label} className={`rounded-[12px] p-3.5 border ${s.warn ? "bg-amber-50 border-amber-200" : "bg-slate-50 border-slate-100"}`}>
+                  <p className="text-[10px] text-slate-400 uppercase tracking-wider mb-1">{s.label}</p>
+                  <p className={`text-xl font-black tabular-nums ${s.warn ? "text-amber-700" : "text-slate-900"}`}>{s.value}</p>
+                </div>
+              ))}
+            </div>
+          </>
+        )}
+      </div>
+
+      {modal === "approve" && (
+        <ActionModal title="Approve Driver" consequence="Driver will be approved and can start accepting rides. They will be notified immediately." variant="primary" requiresReason={false} confirmLabel="Approve" onConfirm={(r) => handleAction("approve", r)} onClose={() => setModal(null)} />
+      )}
+      {modal === "reject" && (
+        <ActionModal title="Reject Driver Application" consequence="Driver application will be rejected. Your reason will be sent to them." variant="danger" requiresReason confirmLabel="Reject" onConfirm={(r) => handleAction("reject", r)} onClose={() => setModal(null)} />
+      )}
+      {modal === "suspend" && (
+        <ActionModal title="Suspend Driver Account" consequence="Driver will be suspended immediately and cannot accept new rides. This action is logged." variant="danger" requiresReason confirmLabel="Suspend Account" onConfirm={(r) => handleAction("suspend", r)} onClose={() => setModal(null)} />
+      )}
+      {modal === "restore" && (
+        <ActionModal title="Restore Driver Account" consequence="Driver's account will be reinstated. They can accept rides again. This action is logged." variant="primary" requiresReason confirmLabel="Restore Account" onConfirm={(r) => handleAction("restore", r)} onClose={() => setModal(null)} />
+      )}
+    </div>
+  );
+}
+
+export default function Drivers() {
   const navigate = useNavigate();
   const [drivers, setDrivers] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [statusFilter, setStatusFilter] = useState("all");
-  const [availabilityFilter, setAvailabilityFilter] = useState("all");
-  const [discoverabilityFilter, setDiscoverabilityFilter] = useState("all");
+  const [error, setError] = useState("");
+  const [tab, setTab] = useState("all");
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
-  const [sort, setSort] = useState("updatedAt");
-  const [dir, setDir] = useState("desc");
   const [pagination, setPagination] = useState({ page: 1, limit: 20, total: 0, totalPages: 1 });
-  const [openDropdown, setOpenDropdown] = useState(null);
-  const [loadError, setLoadError] = useState("");
+  const [selectedDriver, setSelectedDriver] = useState(null);
+  const [toast, setToast] = useState(null);
 
   const fetchDrivers = useCallback(async () => {
     try {
       setLoading(true);
-      setLoadError("");
+      setError("");
       const result = await getDriverList({
-        status: statusFilter,
-        availability: availabilityFilter,
-        discoverability: discoverabilityFilter,
+        status: tab === "verification" ? "pending" : tab === "restricted" ? "rejected" : "all",
         search,
         page,
         limit: 20,
-        sort,
-        dir,
+        sort: "updatedAt",
+        dir: "desc",
       });
-      setDrivers(Array.isArray(result.drivers) ? result.drivers : []);
+      let list = Array.isArray(result.drivers) ? result.drivers : [];
+      if (tab === "online") list = list.filter((d) => d.availabilityStatus !== "Offline");
+      if (tab === "restricted") list = list.filter((d) => d.isRestricted);
+      setDrivers(list);
       setPagination(result.pagination || { page, limit: 20, total: 0, totalPages: 1 });
-    } catch (error) {
+    } catch (e) {
       setDrivers([]);
-      setLoadError(error?.response?.data?.message || "Unable to load drivers right now.");
+      setError(e?.response?.data?.message || "Unable to load drivers right now.");
     } finally {
       setLoading(false);
     }
-  }, [availabilityFilter, dir, discoverabilityFilter, page, search, sort, statusFilter]);
+  }, [tab, search, page]);
 
-  useEffect(() => {
-    fetchDrivers();
-  }, [fetchDrivers]);
+  useEffect(() => { fetchDrivers(); }, [fetchDrivers]);
+  useEffect(() => { setPage(1); }, [tab, search]);
 
-  useEffect(() => {
-    setPage(1);
-  }, [availabilityFilter, discoverabilityFilter, search, sort, dir, statusFilter]);
-
-  const kpis = useMemo(() => {
-    return drivers.reduce((acc, driver) => {
-      if (driver.isDiscoverable) acc.discoverable += 1;
-      if (driver.availabilityStatus === "Busy") acc.busy += 1;
-      if (driver.isRestricted) acc.restricted += 1;
-      if (Number(driver.pointsWallet?.availablePoints || 0) < 20) acc.lowPoints += 1;
-      return acc;
-    }, { discoverable: 0, busy: 0, restricted: 0, lowPoints: 0 });
-  }, [drivers]);
-
-  const changeSort = (field) => {
-    setSort((current) => {
-      if (current === field) {
-        setDir((value) => (value === "asc" ? "desc" : "asc"));
-        return current;
-      }
-      setDir("desc");
-      return field;
-    });
-  };
-
-  const updateStatus = async (driver, status, rejectionReason = "") => {
-    try {
-      await updateDriverReviewStatus(driver._id, {
-        status,
-        rejection_reason: rejectionReason,
-      });
-      Swal.fire("Success", "Driver status updated.", "success");
-      fetchDrivers();
-    } catch (error) {
-      Swal.fire(
-        "Error",
-        error?.response?.data?.message || "Failed to update status.",
-        "error"
-      );
-    }
-  };
-
-  const handleApprove = async (driver) => {
-    await updateStatus(driver, "approved");
-  };
-
-  const handleReject = async (driver) => {
-    const result = await Swal.fire({
-      title: "Reject Driver Request",
-      input: "text",
-      inputLabel: "Reason (optional)",
-      inputPlaceholder: "Reason for rejection",
-      showCancelButton: true,
-      confirmButtonText: "Reject",
-      confirmButtonColor: "#dc3545",
-    });
-    if (!result.isConfirmed) return;
-    await updateStatus(driver, "rejected", result.value || "");
-  };
+  const tabs = [
+    { id: "all", label: "All Drivers" },
+    { id: "online", label: "Online" },
+    { id: "verification", label: "Verification" },
+    { id: "restricted", label: "Restricted" },
+  ];
 
   return (
-    <main className="app-content">
-      <div className="app-title tile p-3 d-flex justify-content-between align-items-center">
+    <div className="flex flex-col gap-6">
+      <div className="flex items-start justify-between gap-4">
         <div>
-          <h1>Drivers</h1>
-          <p className="mb-0">Operational driver administration with verification, availability, points, rides and GPS evidence.</p>
+          <h1 className="text-[22px] font-bold text-slate-900 leading-tight tracking-[-0.01em]">Drivers</h1>
+          <p className="text-sm text-slate-500 mt-0.5">Manage your driver network, verification status and account health.</p>
         </div>
-        <button type="button" className="btn btn-outline-primary btn-sm" disabled={loading} onClick={fetchDrivers}>
-          {loading ? "Refreshing..." : "Refresh"}
-        </button>
       </div>
 
-      <section className="online-driver-kpis" aria-label="Driver operations status">
-        <article className="tile online-driver-kpi"><span>Loaded drivers</span><strong>{drivers.length}</strong></article>
-        <article className="tile online-driver-kpi online-driver-kpi--success"><span>Discoverable</span><strong>{kpis.discoverable}</strong></article>
-        <article className="tile online-driver-kpi"><span>On trip</span><strong>{kpis.busy}</strong></article>
-        <article className={`tile online-driver-kpi ${kpis.lowPoints || kpis.restricted ? "online-driver-kpi--warning" : ""}`}><span>Needs review</span><strong>{kpis.lowPoints + kpis.restricted}</strong></article>
-      </section>
+      <div className="flex items-center border-b border-slate-200">
+        {tabs.map((t) => (
+          <button key={t.id} type="button" onClick={() => setTab(t.id)}
+            className={`px-4 py-3 text-sm font-medium border-b-2 transition-all
+              ${tab === t.id ? "border-[#BE1B2C] text-[#BE1B2C]" : "border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300"}`}>
+            {t.label}
+          </button>
+        ))}
+      </div>
 
-      <div className="tile p-3 mt-3">
-        <div className="d-flex flex-wrap align-items-center justify-content-between mb-3" style={{ gap: 12 }}>
-          <div className="d-flex flex-wrap align-items-center" style={{ gap: 10 }}>
-            <label className="mb-0 fw-bold">Status</label>
-            <select
-              className="form-control"
-              style={{ minWidth: 180 }}
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-            >
-              {statusOptions.map((status) => (
-                <option key={status} value={status}>
-                  {status.toUpperCase()}
-                </option>
-              ))}
-            </select>
-            <select
-              className="form-control"
-              style={{ minWidth: 160 }}
-              value={availabilityFilter}
-              onChange={(e) => setAvailabilityFilter(e.target.value)}
-              aria-label="Availability filter"
-            >
-              {availabilityOptions.map((status) => (
-                <option key={status} value={status}>
-                  {status === "all" ? "ALL AVAILABILITY" : status.toUpperCase()}
-                </option>
-              ))}
-            </select>
-            <select
-              className="form-control"
-              style={{ minWidth: 190 }}
-              value={discoverabilityFilter}
-              onChange={(e) => setDiscoverabilityFilter(e.target.value)}
-              aria-label="Discoverability filter"
-            >
-              {discoverabilityOptions.map((option) => (
-                <option key={option} value={option}>
-                  {option === "all" ? "ALL DISCOVERABILITY" : option.toUpperCase()}
-                </option>
-              ))}
-            </select>
-            <select
-              className="form-control"
-              style={{ minWidth: 170 }}
-              value={sort}
-              onChange={(e) => setSort(e.target.value)}
-              aria-label="Sort drivers"
-            >
-              {sortOptions.map(([value, text]) => (
-                <option key={value} value={value}>{text}</option>
-              ))}
-            </select>
+      <div className="relative max-w-sm">
+        <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+        <input value={search} onChange={(e) => setSearch(e.target.value)}
+          placeholder="Search by name or WhatsApp..."
+          className="w-full h-10 bg-white border border-slate-200 rounded-[10px] pl-9 pr-4 text-sm text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-red-700/20 focus:border-red-400 transition-all" />
+      </div>
+
+      {error && (
+        <div className="flex items-start gap-3 bg-red-50 border border-red-200 rounded-[10px] px-4 py-3">
+          <AlertTriangle size={16} className="text-red-500 shrink-0 mt-0.5" />
+          <div className="flex-1">
+            <p className="text-sm text-red-700">{error}</p>
+            <button type="button" onClick={fetchDrivers} className="text-xs font-semibold text-red-700 hover:text-red-900 mt-1">Retry</button>
           </div>
-
-          <input
-            type="text"
-            className="form-control"
-            style={{ maxWidth: 300 }}
-            placeholder="Search name / WhatsApp"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
         </div>
+      )}
 
-        {loading ? (
-          <div
-            className="d-flex justify-content-center align-items-center"
-            style={{ minHeight: 200 }}
-          >
-            <div className="loader" />
-          </div>
-        ) : loadError ? (
-          <div className="alert alert-danger text-center" role="alert">
-            <div>{loadError}</div>
-            <button type="button" className="btn btn-outline-danger btn-sm mt-2" onClick={fetchDrivers}>
-              Retry
+      {loading ? (
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <div key={i} className="bg-white rounded-[14px] border border-slate-200 p-5">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-slate-100 animate-pulse" />
+                <div className="flex-1"><div className="h-4 w-24 bg-slate-100 rounded animate-pulse" /><div className="h-3 w-16 bg-slate-100 rounded animate-pulse mt-1" /></div>
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : drivers.length === 0 ? (
+        <EmptyState title="No drivers match your filters" description="Try adjusting your search or tab selection." />
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+          {drivers.map((driver) => (
+            <DriverCard key={driver._id} driver={driver} onClick={() => setSelectedDriver(driver)} />
+          ))}
+        </div>
+      )}
+
+      {!loading && pagination.totalPages > 1 && (
+        <div className="flex items-center justify-between">
+          <span className="text-xs text-slate-400">
+            Page {pagination.page} of {pagination.totalPages} &middot; {pagination.total} drivers
+          </span>
+          <div className="flex items-center gap-2">
+            <button type="button" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page <= 1}
+              className="h-8 px-3 rounded-[8px] border border-slate-200 bg-white text-xs font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-40 transition-all">
+              Previous
+            </button>
+            <button type="button" onClick={() => setPage((p) => Math.min(pagination.totalPages, p + 1))} disabled={page >= pagination.totalPages}
+              className="h-8 px-3 rounded-[8px] border border-slate-200 bg-white text-xs font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-40 transition-all">
+              Next
             </button>
           </div>
-        ) : (
-          <div className="table-responsive">
-            <table className="table table-bordered table-hover">
-              <thead>
-                <tr>
-                  <th>#</th>
-                  <th>Name</th>
-                  <th>Vehicle</th>
-                  <th>WhatsApp</th>
-                  <th>Status</th>
-                  <th>Availability</th>
-                  <th>Discoverability</th>
-                  <th>Points</th>
-                  <th>Rides</th>
-                  <th>
-                    <button type="button" className="ride-sort-button" onClick={() => changeSort("locationUpdatedAt")}>
-                      Last GPS {sort === "locationUpdatedAt" ? (dir === "asc" ? "ASC" : "DESC") : ""}
-                    </button>
-                  </th>
-                  <th>Documents</th>
-                  <th>
-                    <button type="button" className="ride-sort-button" onClick={() => changeSort("updatedAt")}>
-                      Last activity {sort === "updatedAt" ? (dir === "asc" ? "ASC" : "DESC") : ""}
-                    </button>
-                  </th>
-                  <th>Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {drivers.map((driver, index) => {
-                  const fullName = driverName(driver);
-                  const doc = driver.documentSummary || {};
-                  return (
-                    <tr key={driver._id}>
-                      <td>{(pagination.page - 1) * pagination.limit + index + 1}</td>
-                      <td>{fullName}</td>
-                      <td>
-                        <div>{driver.vehicleType || "N/A"}</div>
-                        <small className="text-muted">{driver.vehicleModel || driver.registration || ""}</small>
-                      </td>
-                      <td>{maskPhone(driver.whatsappNumber || driver.phone)}</td>
-                      <td>
-                        <span className={statusBadgeClass(driver.status)}>
-                          {(driver.status || "pending").toUpperCase()}
-                        </span>
-                      </td>
-                      <td>
-                        <span className={`badge ${driver.availabilityStatus === "Online" ? "badge-success" : driver.availabilityStatus === "Busy" ? "badge-warning" : "badge-secondary"}`}>
-                          {driver.availabilityStatus || "Offline"}
-                        </span>
-                      </td>
-                      <td>
-                        {driver.isDiscoverable ? <span className="badge badge-success">DISCOVERABLE</span> : <span className="badge badge-warning">{label(driver.discoverabilityReasons?.[0] || "blocked")}</span>}
-                      </td>
-                      <td>{points(driver)}</td>
-                      <td>
-                        <div>{driver.rideSummary?.completed || 0} completed</div>
-                        {driver.rideSummary?.activeRide && <small className="text-muted">{driver.rideSummary.activeRide.reference || driver.rideSummary.activeRide.status}</small>}
-                      </td>
-                      <td>{gpsLabel(driver)}</td>
-                      <td>{doc.available ?? 0}/{doc.total ?? 0}</td>
-                      <td>{date(driver.lastActivityAt || driver.updatedAt)}</td>
-                      <td>
-                        <TableUser
-                          user={driver}
-                          openDropdown={openDropdown}
-                          setOpenDropdown={setOpenDropdown}
-                          handleView={() => navigate(`/driver-detail/${driver._id}`)}
-                          handleApprove={() => handleApprove(driver)}
-                          handleReject={() => handleReject(driver)}
-                          driver
-                        />
-                      </td>
-                    </tr>
-                  );
-                })}
-                {drivers.length === 0 && (
-                  <tr>
-                    <td colSpan={13} className="text-center">
-                      No drivers found.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        )}
-        {!loading && !loadError && (
-          <div className="d-flex justify-content-between align-items-center mt-3 flex-wrap" style={{ gap: 12 }}>
-            <span className="text-muted">
-              Page {pagination.page} of {pagination.totalPages} - {pagination.total} drivers
-            </span>
-            <div className="btn-group">
-              <button type="button" className="btn btn-outline-secondary btn-sm" disabled={pagination.page <= 1} onClick={() => setPage((value) => Math.max(1, value - 1))}>Previous</button>
-              <button type="button" className="btn btn-outline-secondary btn-sm" disabled={pagination.page >= pagination.totalPages} onClick={() => setPage((value) => value + 1)}>Next</button>
-            </div>
-          </div>
-        )}
-      </div>
-    </main>
-  );
-};
+        </div>
+      )}
 
-export default Drivers;
+      <Drawer open={!!selectedDriver} onClose={() => setSelectedDriver(null)} width="w-[640px]">
+        {selectedDriver && <DriverDetailDrawer key={selectedDriver._id} driver={selectedDriver} onClose={() => setSelectedDriver(null)} onToast={(msg) => { setToast(msg); setSelectedDriver(null); }} />}
+      </Drawer>
+
+      {toast && <Toast message={toast} type="success" onClose={() => setToast(null)} />}
+    </div>
+  );
+}
