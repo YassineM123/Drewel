@@ -22,7 +22,6 @@ const userPreferenceSchema = new mongoose.Schema(
     notifications: {
       rideUpdates: { type: Boolean, default: true },
       messages: { type: Boolean, default: true },
-      calls: { type: Boolean, default: true },
       accountUpdates: { type: Boolean, default: true },
       sounds: { type: Boolean, default: true },
       vibration: { type: Boolean, default: true },

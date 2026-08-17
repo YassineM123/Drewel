@@ -73,7 +73,6 @@ class ApiUrlConstants {
   static String get endPointOfGetBanner => '${baseUrl}banner/get-all';
 
   static String get endPointOfActiveRide => '${baseUrl}rides/active';
-  static String calls(String suffix) => '${baseUrl}calls$suffix';
   static String rideMessages(String rideId) =>
       '${baseUrl}rides/$rideId/messages';
   static String conversations(String suffix) => '${baseUrl}conversations$suffix';

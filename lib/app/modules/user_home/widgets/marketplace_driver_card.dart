@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../../common/colors.dart';
 import '../../../../common/common_widgets.dart';
+import '../../../../common/motion.dart';
 import '../../../../common/text_styles.dart';
 import '../../../data/apis/api_models/get_all_driver_model.dart';
 import '../../../data/constants/string_constants.dart';
@@ -12,19 +13,19 @@ class MarketplaceDriverCard extends StatelessWidget {
     required this.driver,
     required this.onTap,
     required this.onChat,
-    required this.onCall,
     this.selected = false,
     this.distanceKm,
     this.actionsLoading = false,
+    this.index = 0,
   });
 
   final Drivers driver;
   final VoidCallback onTap;
   final VoidCallback? onChat;
-  final VoidCallback? onCall;
   final bool selected;
   final double? distanceKm;
   final bool actionsLoading;
+  final int index;
 
   @override
   Widget build(BuildContext context) {
@@ -39,150 +40,149 @@ class MarketplaceDriverCard extends StatelessWidget {
         .where((String? value) => value?.trim().isNotEmpty == true)
         .join(' · ');
 
-    return Semantics(
-      button: true,
-      selected: selected,
-      label: '${driver.fullName ?? 'Driver'}, $status',
-      child: Material(
-        color: primary3Color,
-        shape: RoundedRectangleBorder(
-          side: BorderSide(
-            color: selected ? primaryColor : Colors.black.withOpacity(0.1),
-            width: selected ? 1.5 : 1,
-          ),
-          borderRadius: BorderRadius.circular(selected ? 22 : 15),
-        ),
-        clipBehavior: Clip.antiAlias,
-        child: InkWell(
+    return FadeSlideIn(
+      index: index,
+      child: Semantics(
+        button: true,
+        selected: selected,
+        label: '${driver.fullName ?? 'Driver'}, $status',
+        child: AnimatedPressable(
           onTap: onTap,
-          child: Padding(
-            padding: const EdgeInsets.all(14),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: <Widget>[
-                CommonWidgets.imageView(
-                  image: driver.profileImageUrl ??
-                      StringConstants.defaultNetworkImage,
-                  height: 60,
-                  width: 60,
-                  borderRadius: BorderRadius.circular(30),
-                  defaultNetworkImage: StringConstants.defaultNetworkImage,
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: <Widget>[
-                      Row(
-                        children: <Widget>[
-                          Expanded(
-                            child: Text(
-                              driver.fullName ?? 'Driver',
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: MyTextStyle.titleStyle16bb,
-                            ),
-                          ),
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 8,
-                              vertical: 4,
-                            ),
-                            decoration: BoxDecoration(
-                              color: statusColor.withOpacity(0.1),
-                              borderRadius: BorderRadius.circular(20),
-                            ),
-                            child: Text(
-                              _statusLabel(context, status),
-                              style: MyTextStyle.titleStyle12b.copyWith(
-                                color: statusColor,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                      if (vehicle.isNotEmpty) ...<Widget>[
-                        const SizedBox(height: 4),
-                        Text(
-                          vehicle,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: MyTextStyle.titleStyle12b,
-                        ),
-                      ],
-                      if (driver.registrationVisible &&
-                          driver.registrationNumber?.trim().isNotEmpty ==
-                              true) ...<Widget>[
-                        const SizedBox(height: 2),
-                        Text(
-                          driver.registrationNumber!,
-                          style: MyTextStyle.titleStyle12b,
-                        ),
-                      ],
-                      const SizedBox(height: 7),
-                      Wrap(
-                        spacing: 6,
-                        runSpacing: 3,
-                        children: <Widget>[
-                          if (driver.rating != null)
-                            _Fact(
-                              icon: Icons.star_rounded,
-                              text: driver.rating!.toStringAsFixed(1),
-                            ),
-                          if (displayedDistance != null &&
-                              displayedDistance.isFinite &&
-                              displayedDistance >= 0)
-                            _Fact(
-                              icon: Icons.near_me_rounded,
-                              text:
-                                  '${displayedDistance.toStringAsFixed(1)} km',
-                            ),
-                          if (driver.priceEstimate != null)
-                            _Fact(
-                              icon: Icons.payments_outlined,
-                              text:
-                                  '${driver.priceEstimate!.toStringAsFixed(0)} ${driver.currency ?? ''}'
-                                      .trim(),
-                            ),
-                        ],
-                      ),
-                      const SizedBox(height: 8),
-                      Row(
-                        children: <Widget>[
-                          Expanded(
-                            child: Text(
-                              driver.city ?? '',
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: MyTextStyle.titleStyle12b.copyWith(
-                                color: Colors.grey[600],
-                              ),
-                            ),
-                          ),
-                          _ContactIconButton(
-                            icon: Icons.message_rounded,
-                            tooltip: _chatLabel(context),
-                            enabled: driver.canChat &&
-                                onChat != null &&
-                                !actionsLoading,
-                            onPressed: onChat,
-                          ),
-                          const SizedBox(width: 8),
-                          _ContactIconButton(
-                            icon: Icons.call_rounded,
-                            tooltip: _callLabel(context),
-                            enabled: driver.canCall &&
-                                onCall != null &&
-                                !actionsLoading,
-                            onPressed: onCall,
-                          ),
-                        ],
-                      ),
-                    ],
+          borderRadius: BorderRadius.circular(selected ? 22 : 15),
+          child: AnimatedContainer(
+            duration: MotionDuration.normal,
+            curve: MotionCurve.standard,
+            decoration: BoxDecoration(
+              color: primary3Color,
+              border: Border.all(
+                color: selected
+                    ? primaryColor
+                    : Colors.black.withValues(alpha: 0.1),
+                width: selected ? 1.5 : 1,
+              ),
+              borderRadius: BorderRadius.circular(selected ? 22 : 15),
+            ),
+            clipBehavior: Clip.antiAlias,
+            child: Padding(
+              padding: const EdgeInsets.all(14),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  CommonWidgets.imageView(
+                    image: driver.profileImageUrl ??
+                        StringConstants.defaultNetworkImage,
+                    height: 60,
+                    width: 60,
+                    borderRadius: BorderRadius.circular(30),
+                    defaultNetworkImage: StringConstants.defaultNetworkImage,
                   ),
-                ),
-              ],
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: <Widget>[
+                        Row(
+                          children: <Widget>[
+                            Expanded(
+                              child: Text(
+                                driver.fullName ?? 'Driver',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: MyTextStyle.titleStyle16bb,
+                              ),
+                            ),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 4,
+                              ),
+                              decoration: BoxDecoration(
+                                color: statusColor.withValues(alpha: 0.1),
+                                borderRadius: BorderRadius.circular(20),
+                              ),
+                              child: Text(
+                                _statusLabel(context, status),
+                                style: MyTextStyle.titleStyle12b.copyWith(
+                                  color: statusColor,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        if (vehicle.isNotEmpty) ...<Widget>[
+                          const SizedBox(height: 4),
+                          Text(
+                            vehicle,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: MyTextStyle.titleStyle12b,
+                          ),
+                        ],
+                        if (driver.registrationVisible &&
+                            driver.registrationNumber?.trim().isNotEmpty ==
+                                true) ...<Widget>[
+                          const SizedBox(height: 2),
+                          Text(
+                            driver.registrationNumber!,
+                            style: MyTextStyle.titleStyle12b,
+                          ),
+                        ],
+                        const SizedBox(height: 7),
+                        Wrap(
+                          spacing: 6,
+                          runSpacing: 3,
+                          children: <Widget>[
+                            if (driver.rating != null)
+                              _Fact(
+                                icon: Icons.star_rounded,
+                                text: driver.rating!.toStringAsFixed(1),
+                              ),
+                            if (displayedDistance != null &&
+                                displayedDistance.isFinite &&
+                                displayedDistance >= 0)
+                              _Fact(
+                                icon: Icons.near_me_rounded,
+                                text:
+                                    '${displayedDistance.toStringAsFixed(1)} km',
+                              ),
+                            if (driver.priceEstimate != null)
+                              _Fact(
+                                icon: Icons.payments_outlined,
+                                text:
+                                    '${driver.priceEstimate!.toStringAsFixed(0)} ${driver.currency ?? ''}'
+                                        .trim(),
+                              ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        Row(
+                          children: <Widget>[
+                            Expanded(
+                              child: Text(
+                                driver.city ?? '',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: MyTextStyle.titleStyle12b.copyWith(
+                                  color: Colors.grey[600],
+                                ),
+                              ),
+                            ),
+                            _ContactIconButton(
+                              icon: Icons.message_rounded,
+                              tooltip: _chatLabel(context),
+                              enabled: driver.canChat &&
+                                  onChat != null &&
+                                  !actionsLoading,
+                              onPressed: onChat,
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ),
@@ -195,9 +195,6 @@ class MarketplaceDriverCard extends StatelessWidget {
 
   static String _chatLabel(BuildContext context) =>
       _isArabic(context) ? 'مراسلة السائق' : 'Message driver';
-
-  static String _callLabel(BuildContext context) =>
-      _isArabic(context) ? 'الاتصال بالسائق' : 'Call driver';
 
   static String _statusLabel(BuildContext context, String status) {
     if (!_isArabic(context)) {
@@ -256,8 +253,8 @@ class _ContactIconButton extends StatelessWidget {
             dimension: 44,
             child: Material(
               color: enabled
-                  ? primaryColor.withOpacity(0.1)
-                  : Colors.grey.withOpacity(0.08),
+                  ? primaryColor.withValues(alpha: 0.1)
+                  : Colors.grey.withValues(alpha: 0.08),
               shape: const CircleBorder(),
               child: InkWell(
                 customBorder: const CircleBorder(),

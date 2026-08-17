@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 
 import '../../../../common/colors.dart';
+import '../../../../common/motion.dart';
 import '../../../data/apis/api_models/active_ride_model.dart';
 import '../../../routes/app_pages.dart';
 import '../controllers/active_ride_controller.dart';
@@ -15,7 +16,8 @@ class ActiveRideCard extends GetView<ActiveRideController> {
         if (ride == null || !ride.isRecoverable) {
           return const SizedBox.shrink();
         }
-        return SafeArea(
+        return FadeSlideIn(
+          child: SafeArea(
           top: false,
           child: Material(
             color: primary3Color,
@@ -23,7 +25,7 @@ class ActiveRideCard extends GetView<ActiveRideController> {
             shape: Border(
               top: BorderSide(color: primaryColor.withValues(alpha: 0.12)),
             ),
-            child: InkWell(
+            child: AnimatedPressable(
               onTap: () => Get.toNamed(Routes.ACTIVE_RIDE),
               child: Padding(
                 padding: const EdgeInsets.symmetric(
@@ -50,12 +52,28 @@ class ActiveRideCard extends GetView<ActiveRideController> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         mainAxisSize: MainAxisSize.min,
                         children: <Widget>[
-                          Text(
-                            rideStatusLabel(ride.rideStatus),
-                            style: Theme.of(context)
-                                .textTheme
-                                .titleSmall
-                                ?.copyWith(fontWeight: FontWeight.w700),
+                          AnimatedSwitcher(
+                            duration: MotionDuration.normal,
+                            switchInCurve: MotionCurve.enter,
+                            transitionBuilder: (child, animation) =>
+                                FadeTransition(
+                              opacity: animation,
+                              child: SlideTransition(
+                                position: Tween<Offset>(
+                                  begin: const Offset(0, 0.15),
+                                  end: Offset.zero,
+                                ).animate(animation),
+                                child: child,
+                              ),
+                            ),
+                            child: Text(
+                              rideStatusLabel(ride.rideStatus),
+                              key: ValueKey<RideStatus>(ride.rideStatus),
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .titleSmall
+                                  ?.copyWith(fontWeight: FontWeight.w700),
+                            ),
                           ),
                           Text(
                             ride.reference?.trim().isNotEmpty == true
@@ -90,6 +108,7 @@ class ActiveRideCard extends GetView<ActiveRideController> {
                 ),
               ),
             ),
+          ),
           ),
         );
       });

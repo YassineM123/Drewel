@@ -11,6 +11,7 @@ import {
 import { sanitizeAuthSubject } from "../src/utils/authResponse.js";
 import driverRoutes from "../src/routes/driverRoutes.js";
 import userRoutes from "../src/routes/userRoutes.js";
+import accountRoutes from "../src/routes/accountRoutes.js";
 import {
   configureMongoSrvDns,
   parseMongoDnsServers,
@@ -316,6 +317,17 @@ test("user enumeration endpoint requires authentication and admin role", () => {
   ]);
 });
 
+test("legal document endpoint is public and mounted before account authentication", () => {
+  const layer = routeLayer(accountRoutes, "/legal/:type", "get");
+  assert.ok(layer);
+  assert.deepEqual(layer.route.stack.map((handler) => handler.handle.name), [
+    "getLegalContent",
+  ]);
+
+  const indexSource = readFileSync(new URL("../index.js", import.meta.url), "utf8");
+  assert.match(indexSource, /app\.use\("\/api\/account", accountRoutes\)/);
+});
+
 test("MongoDB SRV DNS override is opt-in and parses multiple resolvers", () => {
   assert.deepEqual(parseMongoDnsServers(" 1.1.1.1, 8.8.8.8 ,, "), [
     "1.1.1.1",
@@ -363,7 +375,7 @@ test("startup creates and verifies required marketplace geospatial indexes", () 
   assert.match(driverSource, /indexes\(\)[\s\S]*?Required marketplace index is missing/);
 });
 
-test("driver action-time availability paths reuse fresh Dubai GPS eligibility except active ride calls", () => {
+test("driver action-time availability paths reuse fresh Dubai GPS eligibility", () => {
   for (const relativePath of [
     "../src/controllers/rideController.js",
     "../src/services/tripOfferService.js",
@@ -371,15 +383,6 @@ test("driver action-time availability paths reuse fresh Dubai GPS eligibility ex
     const source = readFileSync(new URL(relativePath, import.meta.url), "utf8");
     assert.match(source, /buildFreshDubaiMarketplaceAvailabilityFilter\(\)/);
   }
-  const callSource = readFileSync(
-    new URL("../src/services/callSessionService.js", import.meta.url),
-    "utf8"
-  );
-  const initiateStart = callSource.indexOf("export const initiateCall");
-  const initiateEnd = callSource.indexOf("export const getAuthorizedCall", initiateStart);
-  const initiateBlock = callSource.slice(initiateStart, initiateEnd);
-  assert.match(initiateBlock, /assertRideParticipant\(principal, rideId, \{ requireContact: true \}\)/);
-  assert.doesNotMatch(initiateBlock, /buildFreshDubaiMarketplaceAvailabilityFilter/);
   const driverSource = readFileSync(
     new URL("../src/controllers/driverController.js", import.meta.url),
     "utf8"

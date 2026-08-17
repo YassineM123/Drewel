@@ -14,7 +14,7 @@
 // export default ProtectedRoute;
 
 import React from "react";
-import { Navigate, Outlet } from "react-router-dom";
+import { Navigate } from "react-router-dom";
 import Layout from "./Layout";
 import { clearAdminSession, isAuthTokenUsable } from "../utils/session";
 
@@ -26,12 +26,7 @@ const ProtectedRoute = () => {
     return <Navigate to="/login" replace />;
   }
 
-  return (
-    <>
-      <Layout />
-      <Outlet />
-    </>
-  );
+  return <Layout />;
 };
 
 export default ProtectedRoute;

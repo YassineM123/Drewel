@@ -1,5 +1,4 @@
 import 'active_ride_model.dart';
-import 'call_session_model.dart';
 
 class PassengerProfileModel {
   const PassengerProfileModel({
@@ -78,7 +77,6 @@ class NotificationPreferenceModel {
   const NotificationPreferenceModel({
     required this.rideUpdates,
     required this.messages,
-    required this.calls,
     required this.accountUpdates,
     required this.sounds,
     required this.vibration,
@@ -86,7 +84,6 @@ class NotificationPreferenceModel {
 
   final bool rideUpdates;
   final bool messages;
-  final bool calls;
   final bool accountUpdates;
   final bool sounds;
   final bool vibration;
@@ -95,7 +92,6 @@ class NotificationPreferenceModel {
       NotificationPreferenceModel(
         rideUpdates: json['rideUpdates'] != false,
         messages: json['messages'] != false,
-        calls: json['calls'] != false,
         accountUpdates: json['accountUpdates'] != false,
         sounds: json['sounds'] != false,
         vibration: json['vibration'] != false,
@@ -104,7 +100,6 @@ class NotificationPreferenceModel {
   Map<String, dynamic> toJson() => <String, dynamic>{
         'rideUpdates': rideUpdates,
         'messages': messages,
-        'calls': calls,
         'accountUpdates': accountUpdates,
         'sounds': sounds,
         'vibration': vibration,
@@ -113,7 +108,6 @@ class NotificationPreferenceModel {
   NotificationPreferenceModel copyWith({
     bool? rideUpdates,
     bool? messages,
-    bool? calls,
     bool? accountUpdates,
     bool? sounds,
     bool? vibration,
@@ -121,7 +115,6 @@ class NotificationPreferenceModel {
       NotificationPreferenceModel(
         rideUpdates: rideUpdates ?? this.rideUpdates,
         messages: messages ?? this.messages,
-        calls: calls ?? this.calls,
         accountUpdates: accountUpdates ?? this.accountUpdates,
         sounds: sounds ?? this.sounds,
         vibration: vibration ?? this.vibration,
@@ -147,29 +140,6 @@ class PassengerPreferenceModel {
       );
 }
 
-class PassengerCallModel {
-  const PassengerCallModel({
-    required this.call,
-    required this.direction,
-    required this.counterpartName,
-    required this.rideReference,
-  });
-
-  final CallSessionModel call;
-  final String direction;
-  final String counterpartName;
-  final String rideReference;
-
-  factory PassengerCallModel.fromJson(Map<String, dynamic> json) =>
-      PassengerCallModel(
-        call: CallSessionModel.fromJson(json),
-        direction: '${json['direction'] ?? ''}',
-        counterpartName:
-            '${(json['counterpart'] as Map?)?['displayName'] ?? 'Driver'}',
-        rideReference: '${json['rideReference'] ?? ''}',
-      );
-}
-
 class LegalContentModel {
   const LegalContentModel({
     required this.title,
@@ -187,6 +157,17 @@ class LegalContentModel {
         body: '${json['body'] ?? ''}',
         lastUpdated: json['lastUpdated']?.toString(),
       );
+
+  factory LegalContentModel.fallback(String type) {
+    final bool privacy = type.trim().toLowerCase() == 'privacy';
+    return LegalContentModel(
+      title: privacy ? 'Privacy' : 'Terms & Conditions',
+      lastUpdated: null,
+      body: privacy
+          ? 'Drewel uses account, contact, location, ride, communication, and device data to provide the transport marketplace safely.\n\nLocation data supports pickup, destination, driver discovery, route, safety, and support workflows. Secure ride chat is used for Drewel ride coordination and support.\n\nDrewel limits access to personal data to authorized operations, support, security, and administration workflows. Contact support if you need help with account data or privacy questions.'
+          : 'By using Drewel, passengers and drivers agree to use the marketplace honestly, safely, and only for lawful transport coordination.\n\nPassengers send ride requests, and drivers send official trip offers through Drewel. Prices, ride lifecycle changes, points, restrictions, and sensitive actions are controlled by the server.\n\nDrewel may restrict accounts, cancel unsafe activity, preserve ride and communication evidence, and require driver profile or document review when needed for marketplace safety.',
+    );
+  }
 }
 
 class RideHistoryFilter {

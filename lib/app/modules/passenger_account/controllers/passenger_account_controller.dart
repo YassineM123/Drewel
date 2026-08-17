@@ -26,7 +26,6 @@ class PassengerAccountController extends GetxController {
   final profile = Rxn<PassengerProfileModel>();
   final savedPlaces = <SavedPlaceModel>[].obs;
   final rides = <ActiveRideModel>[].obs;
-  final calls = <PassengerCallModel>[].obs;
   final preferences = Rxn<PassengerPreferenceModel>();
   final legalContent = Rxn<LegalContentModel>();
   final legalType = ''.obs;
@@ -61,19 +60,14 @@ class PassengerAccountController extends GetxController {
     loading.value = true;
     error.value = '';
     try {
-      final results = await Future.wait<dynamic>(<Future<dynamic>>[
-        _repository.getProfile(),
-        _repository.listSavedPlaces(),
-        _repository.listRides(),
-        _repository.listCalls(),
-        _repository.getPreferences(),
+      final PassengerProfileModel nextProfile = await _repository.getProfile();
+      profile.value = nextProfile;
+      await _persistProfile(nextProfile);
+      await Future.wait<void>(<Future<void>>[
+        _refreshSavedPlaces(),
+        _refreshRides(),
+        _refreshPreferences(),
       ]);
-      profile.value = results[0] as PassengerProfileModel;
-      savedPlaces.assignAll(results[1] as List<SavedPlaceModel>);
-      rides.assignAll(results[2] as List<ActiveRideModel>);
-      calls.assignAll(results[3] as List<PassengerCallModel>);
-      preferences.value = results[4] as PassengerPreferenceModel;
-      await _persistProfile(profile.value);
     } on CommunicationApiException catch (catchError) {
       error.value = catchError.message;
     } catch (_) {
@@ -81,6 +75,24 @@ class PassengerAccountController extends GetxController {
     } finally {
       loading.value = false;
     }
+  }
+
+  Future<void> _refreshSavedPlaces() async {
+    try {
+      savedPlaces.assignAll(await _repository.listSavedPlaces());
+    } catch (_) {}
+  }
+
+  Future<void> _refreshRides() async {
+    try {
+      rides.assignAll(await _repository.listRides());
+    } catch (_) {}
+  }
+
+  Future<void> _refreshPreferences() async {
+    try {
+      preferences.value = await _repository.getPreferences();
+    } catch (_) {}
   }
 
   Future<void> saveProfile({

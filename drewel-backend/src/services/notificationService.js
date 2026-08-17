@@ -66,9 +66,6 @@ const tokenTail = (token) =>
 export const notificationChannelForType = (type) => {
   const t = String(type || "").toUpperCase();
   if (t === "RIDE_REQUEST" || t === "NEW_RIDE") return "drewel_ride_requests";
-  if (t === "INCOMING_CALL" || t === "CALL" || t === "MISSED_CALL") {
-    return "drewel_calls";
-  }
   if (t === "RIDE_MESSAGE" || t === "CHAT") return "drewel_messages";
   if (t.startsWith("RIDE_") || t === "DRIVER_ARRIVED") return "drewel_rides";
   return "drewel_system";
@@ -77,9 +74,6 @@ export const notificationChannelForType = (type) => {
 export const notificationSoundForType = (type) => {
   const t = String(type || "").toUpperCase();
   if (t === "RIDE_REQUEST" || t === "NEW_RIDE") return "drewel_ride_request";
-  if (t === "INCOMING_CALL" || t === "CALL" || t === "MISSED_CALL") {
-    return "drewel_call";
-  }
   if (t === "RIDE_MESSAGE" || t === "CHAT") return "drewel_message";
   if (t === "DRIVER_ARRIVED") return "drewel_driver_arrived";
   return "drewel_notification";
@@ -88,8 +82,6 @@ export const notificationSoundForType = (type) => {
 export const pushPriorityForType = (type) => {
   const t = String(type || "").toUpperCase();
   if (
-    t === "INCOMING_CALL" ||
-    t === "CALL" ||
     t === "RIDE_REQUEST" ||
     t === "NEW_RIDE" ||
     t === "DRIVER_ARRIVED"
@@ -134,9 +126,6 @@ export const isActionableType = (type) => {
     t.startsWith("RIDE_") ||
     t === "RIDE_MESSAGE" ||
     t === "CHAT" ||
-    t === "CALL" ||
-    t === "INCOMING_CALL" ||
-    t === "MISSED_CALL" ||
     t === "OFFER" ||
     t === "TRIP_OFFER" ||
     t === "NEW_RIDE" ||
@@ -520,9 +509,6 @@ export const deepLinkFor = ({ type, rideId, conversationId, messageId, offerId }
   }
   if (t === "RIDE_MESSAGE" || t === "CHAT") {
     return `drewel://chat/ride${conversationId ? `?conversationId=${conversationId}` : ""}`;
-  }
-  if (t === "INCOMING_CALL" || t === "CALL" || t === "MISSED_CALL") {
-    return "drewel://call/active";
   }
   if (t === "DOCUMENT_REJECTED" || t === "DOCUMENT_EXPIRING" || t === "DOCUMENT_APPROVED") {
     return "drewel://documents";

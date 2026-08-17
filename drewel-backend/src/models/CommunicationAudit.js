@@ -3,7 +3,6 @@ import mongoose from "mongoose";
 const communicationAuditSchema = new mongoose.Schema(
   {
     rideId: { type: mongoose.Schema.Types.ObjectId, ref: "Ride", required: true, immutable: true, index: true },
-    callId: { type: mongoose.Schema.Types.ObjectId, ref: "CallSession", default: null, immutable: true, index: true },
     action: { type: String, required: true, trim: true, maxlength: 80, immutable: true },
     actorId: { type: mongoose.Schema.Types.ObjectId, default: null, immutable: true },
     actorRole: { type: String, enum: ["passenger", "driver", "admin", "system"], required: true, immutable: true },
@@ -15,7 +14,6 @@ const communicationAuditSchema = new mongoose.Schema(
 );
 
 communicationAuditSchema.index({ rideId: 1, occurredAt: -1 });
-communicationAuditSchema.index({ callId: 1, occurredAt: -1 });
 
 const rejectMutation = function rejectMutation() {
   throw new Error("Communication audit records are append-only");

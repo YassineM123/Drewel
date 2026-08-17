@@ -18,7 +18,6 @@ abstract class Routes {
   static const DRIVER_RIDE_DETAILS = _Paths.DRIVER_RIDE_DETAILS;
   static const DRIVER_EARNINGS = _Paths.DRIVER_EARNINGS;
   static const DRIVER_PERFORMANCE = _Paths.DRIVER_PERFORMANCE;
-  static const DRIVER_CALL_HISTORY = _Paths.DRIVER_CALL_HISTORY;
   static const DRIVER_SETTINGS = _Paths.DRIVER_SETTINGS;
   static const DRIVER_LANGUAGE = _Paths.DRIVER_LANGUAGE;
   static const DRIVER_NOTIFICATION_PREFERENCES =
@@ -33,9 +32,6 @@ abstract class Routes {
   static const SUPPORT_CHAT = _Paths.SUPPORT_CHAT;
   static const NOTIFICATIONS = _Paths.NOTIFICATIONS;
   static const DOCUMENTS = _Paths.DOCUMENTS;
-  static const INCOMING_CALL = _Paths.INCOMING_CALL;
-  static const OUTGOING_CALL = _Paths.OUTGOING_CALL;
-  static const ACTIVE_CALL = _Paths.ACTIVE_CALL;
   static const RIDE_CHAT = _Paths.RIDE_CHAT;
   static const MESSAGES = _Paths.MESSAGES;
   static const MY_POINTS = _Paths.MY_POINTS;
@@ -46,7 +42,6 @@ abstract class Routes {
   static const SAVED_PLACES = _Paths.SAVED_PLACES;
   static const RIDE_HISTORY = _Paths.RIDE_HISTORY;
   static const RIDE_DETAILS = _Paths.RIDE_DETAILS;
-  static const CALL_HISTORY = _Paths.CALL_HISTORY;
   static const LANGUAGE_SETTINGS = _Paths.LANGUAGE_SETTINGS;
   static const NOTIFICATION_PREFERENCES = _Paths.NOTIFICATION_PREFERENCES;
   static const LEGAL = _Paths.LEGAL;
@@ -72,7 +67,6 @@ abstract class _Paths {
   static const DRIVER_RIDE_DETAILS = '/driver/rides/details';
   static const DRIVER_EARNINGS = '/driver/earnings';
   static const DRIVER_PERFORMANCE = '/driver/performance';
-  static const DRIVER_CALL_HISTORY = '/driver/calls';
   static const DRIVER_SETTINGS = '/driver/settings';
   static const DRIVER_LANGUAGE = '/driver/language';
   static const DRIVER_NOTIFICATION_PREFERENCES =
@@ -87,9 +81,6 @@ abstract class _Paths {
   static const SUPPORT_CHAT = '/support-chat';
   static const NOTIFICATIONS = '/notifications';
   static const DOCUMENTS = '/documents';
-  static const INCOMING_CALL = '/communication/call/incoming';
-  static const OUTGOING_CALL = '/communication/call/outgoing';
-  static const ACTIVE_CALL = '/communication/call/active';
   static const RIDE_CHAT = '/communication/messages';
   static const MESSAGES = '/communication/inbox';
   static const MY_POINTS = '/driver/points';
@@ -100,7 +91,6 @@ abstract class _Paths {
   static const SAVED_PLACES = '/passenger/saved-places';
   static const RIDE_HISTORY = '/passenger/rides/history';
   static const RIDE_DETAILS = '/passenger/rides/details';
-  static const CALL_HISTORY = '/passenger/calls';
   static const LANGUAGE_SETTINGS = '/passenger/language';
   static const NOTIFICATION_PREFERENCES = '/passenger/notification-preferences';
   static const LEGAL = '/passenger/legal';

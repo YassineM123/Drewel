@@ -12,6 +12,9 @@ import {
 
 const router = express.Router();
 
+// Public legal documents: shown during pre-login signup consent.
+router.get("/legal/:type", getLegalContent);
+
 router.use(requireSignIn);
 router.get("/saved-places", listSavedPlaces);
 router.post("/saved-places", upsertSavedPlace);
@@ -22,6 +25,5 @@ router.post("/saved-places/:placeId/delete", deleteSavedPlace);
 router.get("/preferences", getPreferences);
 router.patch("/preferences", updatePreferences);
 router.post("/support-reports", createSupportReport);
-router.get("/legal/:type", getLegalContent);
 
 export default router;

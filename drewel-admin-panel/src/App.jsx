@@ -5,6 +5,7 @@ import Login from "./pages/Login";
 import ProtectedRoute from "./components/ProtectedRoute";
 import Dashboard from "./pages/Dashboard";
 import Users from "./pages/Users";
+import UserDetail from "./pages/UserDetail";
 import CmsManagement from "./pages/CmsManagement";
 import Faq from "./pages/Faq";
 import AccountSettings from "./pages/AccountSettings";
@@ -22,7 +23,6 @@ import PendingRequests from "./pages/PendingRequests";
 import ApprovedRequests from "./pages/ApprovedRequests";
 import RejectedRequests from "./pages/RejectedRequests";
 import AllRequests from "./pages/AllRequests";
-import Calls from "./pages/Calls";
 import Rides from "./pages/rides/Rides";
 import RideDetail from "./pages/rides/RideDetail";
 import RequirePointsAccess from "./components/driverPoints/RequirePointsAccess";
@@ -43,10 +43,14 @@ function App() {
             <Route path="/login" element={<Login />} />
             <Route element={<ProtectedRoute />}>
               <Route path="/" element={<Dashboard />} />
+              <Route path="/dashboard" element={<Dashboard />} />
               <Route path="/users" element={<Users />} />
+              <Route path="/users/:id" element={<UserDetail />} />
               <Route path="/sponsor" element={<Sponsor/>}/>
+              <Route path="/banners" element={<Sponsor/>}/>
               <Route path="/drivers" element={<Drivers />} />
               <Route path="/onlineDrivers" element={<OnlineDrivers />} />
+              <Route path="/online-drivers" element={<OnlineDrivers />} />
               <Route path="/driver-map" element={<DriverMap />} />
               <Route path="/requests/pending" element={<PendingRequests />} />
               <Route path="/requests/approved" element={<ApprovedRequests />} />
@@ -62,22 +66,39 @@ function App() {
               <Route path="/account-settings" element={<AccountSettings />} />
               <Route path="/notification" element={<PushNotification />} />
               <Route path="/chat" element={<ChatWrapper />} />
-              <Route path="/calls" element={<Calls />} />
               <Route path="/reservations" element={<Rides />} />
+              <Route path="/reservations/live" element={<Rides initialFilter="live" lockedFilter />} />
+              <Route path="/reservations/all" element={<Rides initialFilter="all" lockedFilter />} />
+              <Route path="/reservations/completed" element={<Rides initialFilter="completed" lockedFilter />} />
+              <Route path="/reservations/cancelled" element={<Rides initialFilter="cancelled" lockedFilter />} />
+              <Route path="/reservations/disputes" element={<Rides initialFilter="disputed" lockedFilter />} />
+              <Route path="/reservations/stuck" element={<Rides initialFilter="stuck" lockedFilter />} />
               <Route path="/reservations/:rideId" element={<RideDetail />} />
               <Route path="/rides" element={<Rides />} />
+              <Route path="/rides/live" element={<Rides initialFilter="live" lockedFilter />} />
+              <Route path="/rides/all" element={<Rides initialFilter="all" lockedFilter />} />
+              <Route path="/rides/completed" element={<Rides initialFilter="completed" lockedFilter />} />
+              <Route path="/rides/cancelled" element={<Rides initialFilter="cancelled" lockedFilter />} />
+              <Route path="/rides/disputes" element={<Rides initialFilter="disputed" lockedFilter />} />
+              <Route path="/rides/stuck" element={<Rides initialFilter="stuck" lockedFilter />} />
               <Route path="/rides/:rideId" element={<RideDetail />} />
               <Route element={<RequirePointsAccess />}>
                 <Route path="/driver-points" element={<PointsOverview />} />
+                <Route path="/points/overview" element={<PointsOverview />} />
                 <Route path="/driver-points/wallets" element={<DriverWallets />} />
+                <Route path="/points/balances" element={<DriverWallets />} />
                 <Route path="/driver-points/wallets/:driverId" element={<DriverWalletDetail />} />
                 <Route path="/driver-points/purchase-requests" element={<PurchaseRequests />} />
+                <Route path="/points/requests" element={<PurchaseRequests />} />
                 <Route path="/driver-points/transactions" element={<PointTransactions />} />
+                <Route path="/points/transactions" element={<PointTransactions />} />
               </Route>
               <Route element={<RequirePointsAccess ownerOnly />}>
                 <Route path="/driver-points/packs" element={<PointPacks />} />
+                <Route path="/points/packs" element={<PointPacks />} />
                 <Route path="/driver-points/settings" element={<PointsSettings />} />
               </Route>
+              <Route path="/settings" element={<AccountSettings />} />
             </Route>
           </Routes>
         </Router>

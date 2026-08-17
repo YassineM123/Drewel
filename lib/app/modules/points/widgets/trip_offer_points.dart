@@ -1,7 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 import 'package:get/get.dart';
 
 import '../../../../common/colors.dart';
+import '../../../../common/motion.dart';
 import '../../../data/apis/api_models/driver_points_models.dart';
 import '../../../routes/app_pages.dart';
 import '../controllers/driver_points_controller.dart';
@@ -102,12 +107,13 @@ class _QuoteRow extends StatelessWidget {
         child: Row(
           children: <Widget>[
             Expanded(child: Text(label)),
-            Text(
-              'points.points_value'.trParams({'points': '$value'}),
+            AnimatedNumber(
+              value: value,
               style: TextStyle(
                 fontWeight: FontWeight.bold,
                 color: emphasized ? primaryColor : Colors.black87,
               ),
+              builder: (v) => 'points.points_value'.trParams({'points': '$v'}),
             ),
           ],
         ),
@@ -136,7 +142,8 @@ class TripOfferStatusCard extends StatelessWidget {
           ? 'Price confirmed'
           : '${offer.offeredPrice!.toStringAsFixed(0)} ${offer.currency ?? ''}'
               .trim();
-      return Container(
+      return FadeSlideIn(
+        child: Container(
         margin: const EdgeInsets.fromLTRB(12, 8, 12, 0),
         decoration: BoxDecoration(
           color: Colors.white,
@@ -211,7 +218,14 @@ class TripOfferStatusCard extends StatelessWidget {
                             color: textColor,
                             fontWeight: FontWeight.w900,
                           ),
-                    ),
+                    )
+                        .animate()
+                        .scale(
+                          begin: const Offset(0.96, 0.96),
+                          end: const Offset(1, 1),
+                          duration: MotionDuration.deliberate,
+                          curve: MotionCurve.emphasized,
+                        ),
                   ],
                 ),
                 Divider(
@@ -234,26 +248,42 @@ class TripOfferStatusCard extends StatelessWidget {
                   Row(
                     children: <Widget>[
                       Expanded(
-                        child: OutlinedButton(
-                          style: OutlinedButton.styleFrom(
-                            minimumSize: const Size.fromHeight(44),
-                            foregroundColor: textColor,
-                            side: const BorderSide(color: Color(0xFFD9D1D3)),
+                        child: AnimatedPressable(
+                          onTap: onDecline == null
+                              ? null
+                              : () {
+                                  HapticFeedback.lightImpact();
+                                  onDecline!();
+                                },
+                          child: OutlinedButton(
+                            style: OutlinedButton.styleFrom(
+                              minimumSize: const Size.fromHeight(44),
+                              foregroundColor: textColor,
+                              side: const BorderSide(color: Color(0xFFD9D1D3)),
+                            ),
+                            onPressed: onDecline,
+                            child: const Text('Decline'),
                           ),
-                          onPressed: onDecline,
-                          child: const Text('Decline'),
                         ),
                       ),
                       const SizedBox(width: 10),
                       Expanded(
-                        child: FilledButton(
-                          style: FilledButton.styleFrom(
-                            backgroundColor: primaryColor,
-                            foregroundColor: Colors.white,
-                            minimumSize: const Size.fromHeight(44),
+                        child: AnimatedPressable(
+                          onTap: onAccept == null
+                              ? null
+                              : () {
+                                  HapticFeedback.mediumImpact();
+                                  onAccept!();
+                                },
+                          child: FilledButton(
+                            style: FilledButton.styleFrom(
+                              backgroundColor: primaryColor,
+                              foregroundColor: Colors.white,
+                              minimumSize: const Size.fromHeight(44),
+                            ),
+                            onPressed: onAccept,
+                            child: const Text('Accept'),
                           ),
-                          onPressed: onAccept,
-                          child: const Text('Accept'),
                         ),
                       ),
                     ],
@@ -262,6 +292,7 @@ class TripOfferStatusCard extends StatelessWidget {
               ],
             ),
           ),
+        ),
         ),
       );
     }
@@ -297,7 +328,11 @@ class TripOfferStatusCard extends StatelessWidget {
           'points.reserved_status'.trParams({'points': '${offer.pointsCost}'})
         ),
     };
-    return Material(
+    final bool showCountdown =
+        offer.status != 'accepted' && offer.expiresAt != null;
+    return FadeSlideIn(
+      key: ValueKey<String>(offer.status),
+      child: Material(
       color: color.withValues(alpha: 0.1),
       child: Semantics(
         liveRegion: true,
@@ -314,9 +349,14 @@ class TripOfferStatusCard extends StatelessWidget {
                   style: TextStyle(color: color, fontWeight: FontWeight.w600),
                 ),
               ),
+              if (showCountdown) ...<Widget>[
+                const SizedBox(width: 8),
+                _OfferExpiryCountdown(expiresAt: offer.expiresAt!, color: color),
+              ],
             ],
           ),
         ),
+      ),
       ),
     );
   }
@@ -364,4 +404,58 @@ class _TripOfferLocationRow extends StatelessWidget {
           ),
         ],
       );
+}
+
+/// Subtle timer readout for a Trip Offer's remaining reservation window.
+/// Updates itself once a second in isolation so the surrounding offer card
+/// never rebuilds just to tick a clock; only escalates color near expiry.
+class _OfferExpiryCountdown extends StatefulWidget {
+  const _OfferExpiryCountdown({required this.expiresAt, required this.color});
+
+  final DateTime expiresAt;
+  final Color color;
+
+  @override
+  State<_OfferExpiryCountdown> createState() => _OfferExpiryCountdownState();
+}
+
+class _OfferExpiryCountdownState extends State<_OfferExpiryCountdown> {
+  Timer? _timer;
+  late Duration _remaining;
+
+  @override
+  void initState() {
+    super.initState();
+    _remaining = widget.expiresAt.difference(DateTime.now());
+    _timer = Timer.periodic(const Duration(seconds: 1), (_) {
+      final Duration next = widget.expiresAt.difference(DateTime.now());
+      if (!mounted) return;
+      setState(() => _remaining = next);
+      if (next.isNegative) _timer?.cancel();
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_remaining.isNegative) return const SizedBox.shrink();
+    final int totalSeconds = _remaining.inSeconds;
+    final bool urgent = totalSeconds <= 10;
+    final String label =
+        '${(totalSeconds ~/ 60).toString().padLeft(1, '0')}:${(totalSeconds % 60).toString().padLeft(2, '0')}';
+    return AnimatedDefaultTextStyle(
+      duration: MotionDuration.normal,
+      style: TextStyle(
+        color: urgent ? Colors.red.shade700 : widget.color,
+        fontWeight: FontWeight.w800,
+        fontSize: 12,
+      ),
+      child: Text(label),
+    );
+  }
 }

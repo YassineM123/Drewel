@@ -26,6 +26,7 @@ class DrewelOsmMap extends StatelessWidget {
     super.key,
     required this.center,
     this.zoom = 12,
+    this.mapController,
     this.markers = const <DrewelOsmMarker>[],
     this.polylines = const <List<google.LatLng>>[],
     this.onTap,
@@ -34,6 +35,7 @@ class DrewelOsmMap extends StatelessWidget {
 
   final google.LatLng center;
   final double zoom;
+  final MapController? mapController;
   final List<DrewelOsmMarker> markers;
   final List<List<google.LatLng>> polylines;
   final ValueChanged<google.LatLng>? onTap;
@@ -48,6 +50,7 @@ class DrewelOsmMap extends StatelessWidget {
           'osm-${center.latitude.toStringAsFixed(6)}-'
           '${center.longitude.toStringAsFixed(6)}',
         ),
+        mapController: mapController,
         options: MapOptions(
           initialCenter: _point(center),
           initialZoom: zoom,

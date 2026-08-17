@@ -17,8 +17,8 @@ export const messagePageHandler = async (
   onlineUser,
   blockedUsers = []
 ) => {
-  let userDetails = await User.findById(userId).select("-password");
-  if (!userDetails) userDetails = await Admin.findById(userId);
+  let userDetails = await User.findById(userId).select("-otpCode -password");
+  if (!userDetails) userDetails = await Admin.findById(userId).select("-otpCode -password");
   if (!userDetails) userDetails = await Driver.findById(userId).select("-otpCode -password");
   if (userDetails) {
     const payload = {

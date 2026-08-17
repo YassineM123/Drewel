@@ -48,14 +48,16 @@ const ActionDialog = ({ action, busy, error, onClose, onSubmit }) => {
   const [reason, setReason] = useState("");
   const [note, setNote] = useState("");
   const [points, setPoints] = useState("20");
+  const [resolution, setResolution] = useState("completed");
   const config = ACTIONS[action];
   const invalid = reason.trim().length < 3 || (action === "refund" && (!Number.isSafeInteger(Number(points)) || Number(points) < 1));
   return <div className="ride-modal" role="presentation"><section className="ride-modal__dialog" role="dialog" aria-modal="true" aria-labelledby="ride-action-title">
     <header><h2 id="ride-action-title">{config.title}</h2><button type="button" className="points-icon-button" aria-label="Close" onClick={onClose}>&times;</button></header>
-    <form onSubmit={(event) => { event.preventDefault(); if (!invalid) onSubmit({ reason: reason.trim(), note: note.trim(), ...(action === "resolve" ? { resolution: reason.trim() } : {}), ...(action === "refund" ? { points: Number(points) } : {}) }); }}>
+    <form onSubmit={(event) => { event.preventDefault(); if (!invalid) onSubmit({ reason: reason.trim(), note: note.trim(), ...(action === "resolve" ? { resolution } : {}), ...(action === "refund" ? { points: Number(points) } : {}) }); }}>
       <div className="ride-form">
         {error && <div className="alert alert-danger" role="alert">{error}</div>}
         <div className="points-alert" role="note">{config.help}</div>
+        {action === "resolve" && <label>Resolution<select value={resolution} onChange={(event) => setResolution(event.target.value)}><option value="completed">Mark completed</option><option value="cancelled_by_admin">Cancel by admin</option></select></label>}
         {action === "refund" && <label>Points<input type="number" min="1" step="1" value={points} onChange={(event) => setPoints(event.target.value)} /></label>}
         <label>Reason<textarea rows="3" required minLength="3" value={reason} onChange={(event) => setReason(event.target.value)} /></label>
         <label>Internal note (optional)<textarea rows="3" value={note} onChange={(event) => setNote(event.target.value)} /></label>

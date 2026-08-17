@@ -17,6 +17,7 @@ const STATUS_COLORS = {
   Online: "#28a745",
   Busy: "#ffc107",
   Offline: "#6c757d",
+  Blocked: "#BE1B2C",
 };
 
 const CENTER = [24.4539, 54.3773];
@@ -25,7 +26,9 @@ const buildDriverIcon = (driver) => {
   const status = presenceIsOnline(driver)
     ? driver.availabilityStatus || "Online"
     : "Offline";
-  const color = STATUS_COLORS[status] || STATUS_COLORS.Offline;
+  const color = driver.isDiscoverable === false
+    ? STATUS_COLORS.Blocked
+    : STATUS_COLORS[status] || STATUS_COLORS.Offline;
   const initial = (
     (driver.fullName || `${driver.firstName || ""} ${driver.lastName || ""}`).trim() ||
     "D"
@@ -72,8 +75,26 @@ const hasValidLocation = (driver) => {
 const presenceLabel = (driver) => (presenceIsOnline(driver) ? "Online" : "Offline");
 const availabilityLabel = (driver) => driver.availabilityStatus || "Unavailable";
 const locationIsFresh = (driver) => {
+  if ((driver.discoverabilityReasons || []).includes("stale_gps")) return false;
   const updatedAt = new Date(driver.locationUpdatedAt || 0).getTime();
   return Number.isFinite(updatedAt) && Date.now() - updatedAt <= 45000;
+};
+const reasonLabels = {
+  active_ride: "On active ride",
+  stale_gps: "Stale GPS",
+  low_accuracy: "Low GPS accuracy",
+  missing_current_location: "No GPS point",
+  missing_location_time: "No GPS time",
+  missing_accuracy: "No accuracy",
+  missing_service_area: "No service area",
+  not_available: "Not available",
+  legacy_online_flag_off: "Online flag off",
+  profile_incomplete: "Profile incomplete",
+};
+const maskPhone = (value) => {
+  const phone = String(value || "").trim();
+  if (phone.length <= 6) return phone || "";
+  return `${phone.slice(0, 4)}***${phone.slice(-3)}`;
 };
 
 const DriverMap = () => {
@@ -248,9 +269,17 @@ const DriverMap = () => {
         if (!presenceIsOnline(driver)) acc.offline += 1;
         else if (availabilityLabel(driver) === "Busy") acc.busy += 1;
         else acc.online += 1;
+        if (driver.isDiscoverable) acc.discoverable += 1;
+        if (
+          (driver.discoverabilityReasons || []).some((reason) =>
+            ["stale_gps", "missing_current_location", "missing_location_time", "low_accuracy"].includes(reason)
+          )
+        ) {
+          acc.gpsWarnings += 1;
+        }
         return acc;
       },
-      { online: 0, busy: 0, offline: 0 }
+      { online: 0, busy: 0, offline: 0, discoverable: 0, gpsWarnings: 0 }
     );
   }, [visibleDrivers]);
 
@@ -260,12 +289,12 @@ const DriverMap = () => {
         <div>
           <h1>Driver Live Map</h1>
           <p className="mb-0">
-            {visibleDrivers.length} driver(s) shown · last update{" "}
-            {lastUpdate ? lastUpdate.toLocaleTimeString() : "—"}
+            {visibleDrivers.length} driver(s) shown - last update{" "}
+            {lastUpdate ? lastUpdate.toLocaleTimeString() : "-"}
             {isConnected ? (
-              <span className="text-success ms-2">● Live</span>
+              <span className="text-success ms-2">Live</span>
             ) : (
-              <span className="text-danger ms-2">● Socket disconnected</span>
+              <span className="text-danger ms-2">Socket disconnected</span>
             )}
           </p>
         </div>
@@ -282,13 +311,20 @@ const DriverMap = () => {
             <span className="driver-legend-dot" style={{ background: STATUS_COLORS.Offline }} />
             Offline ({counts.offline})
           </span>
+          <span>
+            <span className="driver-legend-dot" style={{ background: STATUS_COLORS.Blocked }} />
+            Blocked ({visibleDrivers.length - counts.discoverable})
+          </span>
+          <span className={counts.gpsWarnings ? "text-warning" : "text-muted"}>
+            GPS warnings ({counts.gpsWarnings})
+          </span>
           <button
             type="button"
             className="btn btn-outline-primary btn-sm"
             onClick={() => fetchDrivers(false)}
             disabled={loading}
           >
-            {loading ? "Refreshing…" : "Refresh"}
+            {loading ? "Refreshing..." : "Refresh"}
           </button>
         </div>
       </div>
@@ -341,8 +377,8 @@ const DriverMap = () => {
                     </strong>
                     <div className="text-muted small">
                       {driver.vehicleType || "Unknown vehicle"}
-                      {driver.vehicleModel ? ` · ${driver.vehicleModel}` : ""}
-                      {driver.registration ? ` · ${driver.registration}` : ""}
+                      {driver.vehicleModel ? ` - ${driver.vehicleModel}` : ""}
+                      {driver.registration ? ` - ${driver.registration}` : ""}
                     </div>
                     <div>
                       <span
@@ -358,10 +394,23 @@ const DriverMap = () => {
                     <div className="small mt-1">
                       Availability: {availabilityLabel(driver)}
                     </div>
-                    <div className="small mt-1">{driver.whatsappNumber || driver.phone || ""}</div>
+                    <div className="small mt-1">
+                      Discoverability:{" "}
+                      {driver.isDiscoverable ? (
+                        <span className="text-success">Discoverable</span>
+                      ) : (
+                        <span className="text-danger">
+                          {(driver.discoverabilityReasons || [])
+                            .slice(0, 2)
+                            .map((reason) => reasonLabels[reason] || reason)
+                            .join(", ") || "Blocked"}
+                        </span>
+                      )}
+                    </div>
+                    <div className="small mt-1">{maskPhone(driver.whatsappNumber || driver.phone)}</div>
                     <div className="small text-muted">
                       {driver.locationUpdatedAt
-                        ? `${locationIsFresh(driver) ? "GPS live" : "GPS stale"} · updated ${new Date(driver.locationUpdatedAt).toLocaleTimeString()}`
+                        ? `${locationIsFresh(driver) ? "GPS live" : "GPS stale"} - updated ${new Date(driver.locationUpdatedAt).toLocaleTimeString()}`
                         : "No location update yet"}
                     </div>
                   </div>

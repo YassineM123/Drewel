@@ -22,7 +22,6 @@ import {
 import { isAdmin, requireSignIn } from '../middlewares/authMiddleware.js';
 import { dashBoardData } from '../controllers/userController.js';
 import { sendOTPusingWhatsapp, verifyOTPWhatsapp } from '../controllers/authController.js';
-import { listAdminCalls } from '../controllers/callController.js';
 import {
   cancelAdminRide,
   getAdminRide,
@@ -56,7 +55,6 @@ router.put('/requests/:id/profile/approve', requireSignIn, isAdmin, approveAdmin
 router.put('/requests/:id/profile/reject', requireSignIn, isAdmin, rejectAdminProfileRequest);
 router.put('/requests/:id/profile/reopen', requireSignIn, isAdmin, reopenAdminProfileRequest);
 router.get('/requests/:id/history', requireSignIn, isAdmin, getAdminRequestHistory);
-router.get('/calls', requireSignIn, isAdmin, listAdminCalls);
 router.get('/rides', requireSignIn, isAdmin, listAdminRides);
 router.get('/rides/:rideId', requireSignIn, isAdmin, getAdminRide);
 router.post('/rides/:rideId/cancel', requireSignIn, isAdmin, cancelAdminRide);

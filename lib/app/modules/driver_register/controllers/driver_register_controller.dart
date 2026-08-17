@@ -43,6 +43,7 @@ class DriverRegisterController extends GetxController {
   final RxBool showStatusLoading = false.obs;
   final RxBool hasSubmittedRequest = false.obs;
   final RxInt refreshTick = 0.obs;
+  final RxBool consentAccepted = false.obs;
   final Map<String, String> _initialValues = <String, String>{};
   bool _initialValuesReady = false;
 
@@ -322,6 +323,11 @@ class DriverRegisterController extends GetxController {
   }
 
   Future<void> submitBasicRequest() async {
+    if (!consentAccepted.value) {
+      CommonWidgets.snackBarView(
+          title: 'Please accept the Terms of Service and Privacy Policy to continue.');
+      return;
+    }
     final String firstName = firstNameController.text.trim();
     final String lastName = lastNameController.text.trim();
     final String whatsapp = whatsappController.text.trim();

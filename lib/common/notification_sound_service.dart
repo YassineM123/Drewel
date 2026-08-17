@@ -12,8 +12,6 @@ import 'package:vibration/vibration.dart';
 ///    all collapse onto the same [eventKey]),
 ///  * a single `AudioPlayer` instance is reused (no duplicated/multiplexed
 ///    players, no memory leaks),
-///  * the incoming-call ringtone loops while ringing and is guaranteed to stop
-///    the moment the call disappears,
 ///  * vibration patterns stay paired with each sound,
 ///  * Android/iOS respect silent mode, DND and notification permissions
 ///    because we only request the same audio focus policed by the OS.
@@ -31,8 +29,6 @@ class NotificationSoundService {
   bool _vibrationEnabled = true;
   bool _hasVibrator = false;
 
-  String? _activeCallId;
-  Timer? _ringTimer;
   Timer? _pendingPlay;
 
   final Map<String, DateTime> _recentKeyFirstSeen = <String, DateTime>{};
@@ -42,7 +38,6 @@ class NotificationSoundService {
   String get _messageAsset => 'sounds/drewel_message.wav';
   String get _rideRequestAsset => 'sounds/drewel_ride_request.wav';
   String get _driverArrivedAsset => 'sounds/drewel_driver_arrived.wav';
-  String get _callAsset => 'sounds/drewel_call.wav';
   String get _successAsset => 'sounds/drewel_success.wav';
   String get _warningAsset => 'sounds/drewel_warning.wav';
 
@@ -51,8 +46,6 @@ class NotificationSoundService {
 
   /// Whether the user enabled app vibration (persisted).
   bool get vibrationEnabled => _vibrationEnabled;
-
-  bool get isCallRinging => _activeCallId != null;
 
   /// Initialises the shared player and pre-caches the short sounds.
   ///
@@ -78,7 +71,6 @@ class NotificationSoundService {
         _driverArrivedAsset,
         _successAsset,
         _warningAsset,
-        _callAsset,
       ]) {
         try {
           await AudioCache.instance.load(asset);
@@ -238,8 +230,6 @@ class NotificationSoundService {
   }) async {
     await init();
     if (!_soundsEnabled) return false;
-    // Never overlap a ringing incoming call with a notification beep.
-    if (isCallRinging) return false;
     if (!shouldPlay(key, window: window)) return false;
     try {
       await _stopCurrentPlayback();
@@ -259,81 +249,12 @@ class NotificationSoundService {
   }
 
   // ---------------------------------------------------------------------
-  // Incoming call ringtone
-  // ---------------------------------------------------------------------
-
-  /// Starts the looping Drewel ringtone for [callId].
-  ///
-  /// The ringtone belongs to exactly one live call. Re-invoking with the same
-  /// [callId] is a no-op; invoking with a different call id stops the previous
-  /// ringtone first.
-  Future<void> playIncomingCall({required String callId}) async {
-    if (callId.isEmpty) return;
-    if (!_soundsEnabled) return;
-    await init();
-    if (_activeCallId == callId) return;
-    if (_activeCallId != null) await _stopCallImpl();
-    _activeCallId = callId;
-    try {
-      await _stopCurrentPlayback();
-      await _player.setAudioContext(_callContext);
-      await _player.setReleaseMode(ReleaseMode.loop);
-      await _player.setSourceAsset(_callAsset);
-      await _player.resume();
-    } catch (_) {
-      _activeCallId = null;
-    }
-    if (_vibrationEnabled && _hasVibrator) {
-      _startCallVibration();
-    }
-  }
-
-  /// Stops the ringtone once the call is answered, declined, cancelled,
-  /// expired or otherwise gone. Ignoring [callId] (null) stops whatever is
-  /// ringing; passing the current id guarantees the caller only silences its
-  /// own call.
-  Future<void> stopCallSound({String? callId}) async {
-    if (_activeCallId == null) return;
-    if (callId != null && callId != _activeCallId) return;
-    await _stopCallImpl();
-    try {
-      await _player.setAudioContext(_notificationContext);
-    } catch (_) {}
-  }
-
-  Future<void> _stopCallImpl() async {
-    _activeCallId = null;
-    _ringTimer?.cancel();
-    _ringTimer = null;
-    if (_vibrationEnabled) {
-      try {
-        await Vibration.cancel();
-      } catch (_) {}
-    }
-  }
-
-  void _startCallVibration() {
-    _ringTimer?.cancel();
-    _ringTimer = Timer.periodic(const Duration(milliseconds: 1600), (_) async {
-      if (_activeCallId == null) return;
-      try {
-        await Vibration.vibrate(duration: 500, amplitude: 180);
-      } catch (_) {}
-    });
-    // Immediate first pulse.
-    try {
-      Vibration.vibrate(duration: 500, amplitude: 180);
-    } catch (_) {}
-  }
-
-  // ---------------------------------------------------------------------
   // Cleanup
   // ---------------------------------------------------------------------
 
   /// Stops the active ride-request alert (also used to clear stale alerts
   /// when a request is accepted, declined, expires or is invalidated).
   Future<void> stopRideRequestSound({String? rideId}) async {
-    if (_activeCallId != null) return;
     await _stopCurrentPlayback();
     if (_vibrationEnabled) {
       try {
@@ -347,11 +268,10 @@ class NotificationSoundService {
     }
   }
 
-  /// Hard-stop: any preview, pending play or ringtone.
+  /// Hard-stop: any preview or pending notification sound.
   Future<void> stopAllSounds() async {
     _pendingPlay?.cancel();
     _pendingPlay = null;
-    await _stopCallImpl();
     await _stopCurrentPlayback();
   }
 
@@ -447,22 +367,7 @@ class NotificationSoundService {
         ),
       );
 
-  AudioContext get _callContext => AudioContext(
-        android: const AudioContextAndroid(
-          isSpeakerphoneOn: true,
-          stayAwake: false,
-          contentType: AndroidContentType.sonification,
-          usageType: AndroidUsageType.notificationRingtone,
-          audioFocus: AndroidAudioFocus.gainTransient,
-        ),
-        iOS: AudioContextIOS(
-          category: AVAudioSessionCategory.playback,
-          options: const <AVAudioSessionOptions>{},
-        ),
-      );
-
   void dispose() {
-    _ringTimer?.cancel();
     _pendingPlay?.cancel();
     _player.dispose();
   }

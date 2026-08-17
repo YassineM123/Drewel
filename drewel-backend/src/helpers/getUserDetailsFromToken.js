@@ -12,12 +12,13 @@ const getUserDetailsFromToken = async (token) => {
 
   const decode = jwt.verify(token, process.env.JWT_SECRET);
   const userId = decode?._id || decode?.id;
+  const safeSelect = "-otpCode -password";
   let user =
-    (await User.findById(userId).select("-password")) ||
-    (await Admin.findById(userId).select("-password")) ||
-    (await Driver.findById(userId));
+    (await User.findById(userId).select(safeSelect)) ||
+    (await Admin.findById(userId).select(safeSelect)) ||
+    (await Driver.findById(userId).select(safeSelect));
   if (!user) {
-    user = await Admin.findById(userId).select("-password");
+    user = await Admin.findById(userId).select(safeSelect);
     // console.log('user: from token ', user);
 
     return { ...user?.toObject(), name: `${user.fullName}` };

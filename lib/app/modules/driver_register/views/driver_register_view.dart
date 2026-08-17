@@ -2,6 +2,7 @@ import 'package:drewel/common/colors.dart';
 import 'package:drewel/common/common_widgets.dart';
 import 'package:drewel/common/drewel_app_bar.dart';
 import 'package:drewel/common/drewel_pop_scope.dart';
+import 'package:drewel/common/legal_consent.dart';
 import 'package:drewel/common/text_styles.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
@@ -110,6 +111,14 @@ class DriverRegisterView extends GetView<DriverRegisterController> {
             focusNode: controller.whatsappFocus,
           ),
           SizedBox(height: 8.px),
+          Padding(
+            padding: EdgeInsets.only(bottom: 12.px),
+            child: LegalConsentCheckbox(
+              value: controller.consentAccepted.value,
+              onChanged: (bool checked) =>
+                  controller.consentAccepted.value = checked,
+            ),
+          ),
           CommonWidgets.commonElevatedButton(
             context: context,
             onPressed: controller.showBasicLoading.value

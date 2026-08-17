@@ -10,6 +10,15 @@ const Headers = ({ setIsSideBarOpen }) => {
   const headerRef = useRef(null);
   const navigate = useNavigate();
   const pointsAccess = getPointsAccess();
+  const admin = (() => {
+    try {
+      return JSON.parse(localStorage.getItem("admin") || "{}");
+    } catch {
+      return {};
+    }
+  })();
+  const adminName = admin.fullName || admin.name || "Drewel Admin";
+  const adminRole = String(admin.role || "admin").replaceAll("_", " ");
 
   // Rest of your state and code...
 
@@ -130,7 +139,7 @@ const Headers = ({ setIsSideBarOpen }) => {
             <p className="app-sidebar__user-name text-white">Drewel</p>
             {/* <img className="h-20 w-auto" src={logo1}  alt="logo Image"/> */}
             <p className="app-sidebar__user-designation text-white">
-               Riadh Slama
+               {adminName} / {adminRole}
             </p>
           </div>
         </div>
@@ -251,6 +260,21 @@ const Headers = ({ setIsSideBarOpen }) => {
               <span className="app-menu__label">Reservations</span>
             </NavLink>
           </li>
+          <li className="treeview">
+            <button type="button" className="app-menu__item" data-toggle="treeview" aria-haspopup="true" aria-expanded="false" style={{ background: "none", borderTop: 0, borderRight: 0, borderBottom: 0, width: "100%", textAlign: "left" }}>
+              <i className="app-menu__icon mx-3 fa fa-taxi" aria-hidden="true"></i>
+              <span className="app-menu__label">Operations</span>
+              <i className="treeview-indicator fa fa-angle-right" aria-hidden="true"></i>
+            </button>
+            <ul className="treeview-menu">
+              <li><NavLink className={({ isActive }) => `treeview-item${isActive ? " active" : ""}`} to="/reservations/live">Live Reservations</NavLink></li>
+              <li><NavLink className={({ isActive }) => `treeview-item${isActive ? " active" : ""}`} to="/reservations/all">All Reservations</NavLink></li>
+              <li><NavLink className={({ isActive }) => `treeview-item${isActive ? " active" : ""}`} to="/reservations/completed">Completed Reservations</NavLink></li>
+              <li><NavLink className={({ isActive }) => `treeview-item${isActive ? " active" : ""}`} to="/reservations/cancelled">Cancelled Reservations</NavLink></li>
+              <li><NavLink className={({ isActive }) => `treeview-item${isActive ? " active" : ""}`} to="/reservations/disputes">Disputes</NavLink></li>
+              <li><NavLink className={({ isActive }) => `treeview-item${isActive ? " active" : ""}`} to="/reservations/stuck">Stuck Rides</NavLink></li>
+            </ul>
+          </li>
           <li>
             <NavLink className="app-menu__item" to="/chat">
               <i
@@ -258,12 +282,6 @@ const Headers = ({ setIsSideBarOpen }) => {
                 style={{ fontWeight: "700" }}
               ></i>
               <span className="app-menu__label">Chat</span>
-            </NavLink>
-          </li>
-          <li>
-            <NavLink className="app-menu__item" to="/calls">
-              <i className="app-menu__icon mx-3 fa fa-phone" aria-hidden="true"></i>
-              <span className="app-menu__label">Secure Calls</span>
             </NavLink>
           </li>
           {/* <li>

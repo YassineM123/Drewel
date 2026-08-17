@@ -3,7 +3,6 @@ import 'package:get/get.dart';
 
 import '../../../../common/colors.dart';
 import '../controllers/call_state_controller.dart';
-import 'drewel_call_button.dart';
 
 class SecureCommunicationPanel extends GetView<CallStateController> {
   const SecureCommunicationPanel({
@@ -29,8 +28,6 @@ class SecureCommunicationPanel extends GetView<CallStateController> {
                 controller.counterpart?.role == 'driver';
             final String messageLabel =
                 counterpartIsDriver ? 'Message driver' : 'Message passenger';
-            final String callLabel =
-                counterpartIsDriver ? 'Call driver' : 'Call passenger';
             if (hideWhenUnavailable && !enabled && error == null) {
               return const SizedBox.shrink();
             }
@@ -81,20 +78,6 @@ class SecureCommunicationPanel extends GetView<CallStateController> {
                             ),
                           ),
                         ),
-                      ),
-                      const SizedBox(width: 12),
-                      DrewelCallButton(
-                        enabled: enabled,
-                        loading: controller.isBusy.value,
-                        label: callLabel,
-                        onPressed: () async {
-                          final String name =
-                              controller.counterpart?.firstName ??
-                                  (counterpartIsDriver ? 'Driver' : 'Rider');
-                          if (await controller.confirmDrewelCall(name)) {
-                            await controller.initiateCall();
-                          }
-                        },
                       ),
                     ],
                   ),

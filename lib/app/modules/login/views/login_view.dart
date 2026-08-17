@@ -8,6 +8,7 @@ import '../../../../common/colors.dart';
 import '../../../../common/common_widgets.dart';
 import '../../../../common/drewel_app_bar.dart';
 import '../../../../common/drewel_pop_scope.dart';
+import '../../../../common/legal_consent.dart';
 import '../../../../common/text_styles.dart';
 import '../../../data/constants/icons_constant.dart';
 import '../../../data/constants/string_constants.dart';
@@ -88,6 +89,14 @@ class LoginView extends GetView<LoginController> {
                                       .clickOnCountryCode(value: value),
                                   initialSelection:
                                       controller.countryDailCode.value,
+                                ),
+                              ),
+                              Padding(
+                                padding: EdgeInsets.only(top: 12.px),
+                                child: LegalConsentCheckbox(
+                                  value: controller.consentAccepted.value,
+                                  onChanged: (bool checked) =>
+                                      controller.consentAccepted.value = checked,
                                 ),
                               ),
                               CommonWidgets.commonElevatedButton(

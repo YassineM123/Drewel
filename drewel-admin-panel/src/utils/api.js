@@ -48,7 +48,7 @@ apiClient.interceptors.response.use(
     }
 );
 
-export const getUserList = async () => {
+export const getUserList = async (params = {}) => {
     const userExists = localStorage.getItem("admin");
     const authTokenExist = localStorage.getItem("authToken");
     // console.log('authTokenExist',authTokenExist)
@@ -60,20 +60,42 @@ export const getUserList = async () => {
             throw new Error("Auth token does not exist in localStorage.");
         }
 
-        const response = await apiClient.get(`${API_URL}/users/get-all`, {
+        const searchParams = new URLSearchParams();
+        Object.entries(params || {}).forEach(([key, value]) => {
+            if (value !== undefined && value !== null && value !== "" && value !== "all") {
+                searchParams.set(key, value);
+            }
+        });
+        const response = await apiClient.get(`${API_URL}/users/get-all${searchParams.toString() ? `?${searchParams}` : ""}`, {
             headers: {
                 Authorization: `Bearer ${authTokenExist}`
             }
         });
         // console.log('response',response.data.users)
-        return response.data.users;
+        return {
+            users: response.data.users || [],
+            pagination: response.data.pagination || {
+                page: 1,
+                limit: response.data.users?.length || 0,
+                total: response.data.users?.length || 0,
+                totalPages: 1,
+            },
+        };
     } catch (error) {
         console.error("Error fetching user list:", error.message || error);
         throw error;
     }
 };
 
-export const getDriverList = async (status = "all") => {
+export const getUserDetail = async (userId) => {
+    if (!userId) {
+        throw new Error("User id is required.");
+    }
+    const response = await apiClient.get(`${API_URL}/users/get-user-details/${userId}`);
+    return response.data.user;
+};
+
+export const getDriverList = async (params = {}) => {
     const userExists = localStorage.getItem("admin");
     const authTokenExist = localStorage.getItem("authToken");
     // console.log('authTokenExist',authTokenExist)
@@ -84,16 +106,31 @@ export const getDriverList = async (status = "all") => {
         if (!authTokenExist) {
             throw new Error("Auth token does not exist in localStorage.");
         }
-        const endpoint =
-            status && status !== "all"
-                ? `${API_URL}/admin/drivers?status=${encodeURIComponent(status)}`
-                : `${API_URL}/admin/drivers`;
+        const query =
+            typeof params === "string"
+                ? { status: params }
+                : { ...params };
+        const searchParams = new URLSearchParams();
+        Object.entries(query).forEach(([key, value]) => {
+            if (value !== undefined && value !== null && value !== "" && value !== "all") {
+                searchParams.set(key, value);
+            }
+        });
+        const endpoint = `${API_URL}/admin/drivers${searchParams.toString() ? `?${searchParams}` : ""}`;
         const response = await apiClient.get(endpoint, {
             headers: {
                 Authorization: `Bearer ${authTokenExist}`
             }
         });
-        return response.data.drivers || [];
+        return {
+            drivers: response.data.drivers || [],
+            pagination: response.data.pagination || {
+                page: 1,
+                limit: response.data.drivers?.length || 0,
+                total: response.data.drivers?.length || 0,
+                totalPages: 1,
+            },
+        };
     } catch (error) {
         console.error("Error fetching driver list:", error.message || error);
         throw error;

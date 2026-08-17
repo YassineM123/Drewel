@@ -144,6 +144,14 @@ export const listAdminRides = async (req, res) => {
       requested: ["requested"],
       searching: ["contacting", "offer_pending"],
       assigned: ["accepted", "confirmed"],
+      live: [
+        "driver_arriving",
+        "driver_on_the_way",
+        "driver_arrived",
+        "pickup_confirmed",
+        "in_progress",
+        "disputed",
+      ],
       active: [
         "driver_arriving",
         "driver_on_the_way",
@@ -155,6 +163,8 @@ export const listAdminRides = async (req, res) => {
       completed: ["completed"],
       cancelled: cancelledStatuses,
       disputed: ["disputed"],
+      disputes: ["disputed"],
+      stuck: ACTIVE_RIDE_STATUSES,
     };
     if (status !== "all") {
       const statusFilter = statusBuckets[status];
@@ -167,6 +177,12 @@ export const listAdminRides = async (req, res) => {
       }
       filter.status =
         statusFilter.length === 1 ? statusFilter[0] : { $in: statusFilter };
+      if (status === "stuck") {
+        filter.updatedAt = {
+          ...(filter.updatedAt || {}),
+          $lt: new Date(Date.now() - 60 * 60 * 1000),
+        };
+      }
     }
 
     const from = String(req.query.from || "").trim();
@@ -255,11 +271,29 @@ export const listAdminRides = async (req, res) => {
       ]),
     ]);
 
+    const sortKey = String(req.query.sort || "updatedAt").trim();
+    const sortDir = String(req.query.dir || "desc").trim().toLowerCase() === "asc" ? 1 : -1;
+    const sortFields = new Set([
+      "createdAt",
+      "updatedAt",
+      "requestedAt",
+      "endedAt",
+      "status",
+      "vehicleType",
+    ]);
+    if (!sortFields.has(sortKey)) {
+      throw new RideTransitionError(
+        "Invalid ride sort field",
+        400,
+        "INVALID_RIDE_SORT"
+      );
+    }
+
     const [rides, total] = await Promise.all([
       Ride.find(filter)
         .populate("passengerId", "fullName")
         .populate("driverId", "firstName lastName fullName vehicleType")
-        .sort({ updatedAt: -1, _id: -1 })
+        .sort({ [sortKey]: sortDir, _id: sortDir })
         .skip((page - 1) * limit)
         .limit(limit),
       Ride.countDocuments(filter),

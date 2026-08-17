@@ -766,13 +766,11 @@ class _UserHomeViewState extends State<UserHomeView> {
         driver: driver,
         selected: selected,
         distanceKm: distance,
+        index: index,
         actionsLoading: communication.contactingDriverId.value == driver.sId,
         onTap: () => controller.clickOnDriverIndex(index),
         onChat: driver.canChat
             ? () => _requestTripFromDriver(context, driver, communication)
-            : null,
-        onCall: driver.canCall
-            ? () => _confirmDriverCall(context, driver, communication)
             : null,
       ),
     );
@@ -784,18 +782,6 @@ class _UserHomeViewState extends State<UserHomeView> {
     CallStateController communication,
   ) async {
     await communication.openDriverChat(driver.sId ?? '');
-  }
-
-  Future<void> _confirmDriverCall(
-    BuildContext context,
-    Drivers driver,
-    CallStateController communication,
-  ) async {
-    final bool arabic = Localizations.localeOf(context).languageCode == 'ar';
-    final String name = driver.fullName ?? (arabic ? 'السائق' : 'Driver');
-    if (await communication.confirmDrewelCall(name)) {
-      await communication.initiateDriverCall(driver.sId ?? '');
-    }
   }
 
   Widget _buildDriversPlaceholderState(BuildContext context) {

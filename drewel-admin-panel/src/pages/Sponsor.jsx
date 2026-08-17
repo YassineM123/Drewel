@@ -158,15 +158,25 @@ function Sponsor() {
   return (
     <main className="app-content">
       <div className="app-title tile p-3 d-flex justify-content-between align-items-center">
-        <h1>Banners</h1>
+        <div>
+          <span className="points-eyebrow">Content</span>
+          <h1>Sponsor Banners</h1>
+          <p>Manage production banner images used across Drewel apps.</p>
+        </div>
         <button
           className="btn btn-primary"
-          style={{ fontWeight: 600, fontSize: 16, padding: "10px 24px", borderRadius: 8, boxShadow: "0 2px 8px rgba(0,0,0,0.08)" }}
           onClick={() => openModal()}
         >
           + Create Banner
         </button>
       </div>
+
+      <section className="online-driver-kpis" aria-label="Banner status">
+        <article className="tile online-driver-kpi"><span>Total banners</span><strong>{banners.length}</strong></article>
+        <article className="tile online-driver-kpi online-driver-kpi--success"><span>Connected API</span><strong>{loadError ? "0" : "1"}</strong></article>
+        <article className="tile online-driver-kpi"><span>Accepted formats</span><strong>4</strong></article>
+        <article className={`tile online-driver-kpi ${loadError ? "online-driver-kpi--warning" : ""}`}><span>Needs review</span><strong>{loadError ? "1" : "0"}</strong></article>
+      </section>
 
       {/* Modal for Create/Edit Banner */}
       {modalOpen && (

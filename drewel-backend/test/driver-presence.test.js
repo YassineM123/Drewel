@@ -28,6 +28,11 @@ test("admin location snapshot includes lease metadata for realtime reconciliatio
     adminController.indexOf("export const getDriversWithLocation"),
     adminController.indexOf("export const getDriversForReview")
   );
+  const projection = adminController.slice(
+    adminController.indexOf("const ADMIN_DRIVER_PRESENCE_FIELDS"),
+    adminController.indexOf("const hasValidMarketplacePoint")
+  );
+  assert.match(locationHandler, /\.select\(ADMIN_DRIVER_PRESENCE_FIELDS\)/);
   for (const field of [
     "isOnline",
     "presenceStatus",
@@ -35,8 +40,66 @@ test("admin location snapshot includes lease metadata for realtime reconciliatio
     "presenceLastHeartbeatAt",
     "presenceVersion",
   ]) {
-    assert.match(locationHandler, new RegExp(`\\.select\\([\\s\\S]*?${field}`));
+    assert.match(projection, new RegExp(field));
   }
+});
+
+test("admin driver presence endpoints expose marketplace discoverability diagnostics", () => {
+  const adminController = read("../src/controllers/adminController.js");
+  assert.match(adminController, /buildFreshAdminMarketplaceAvailabilityFilter/);
+  assert.match(adminController, /isDiscoverable:\s*discoverableIds\.has/);
+  assert.match(adminController, /discoverabilityReasons:\s*reasons/);
+  assert.match(adminController, /locationAgeSeconds/);
+  assert.match(adminController, /locationAccuracyM/);
+  for (const reason of [
+    "stale_gps",
+    "low_accuracy",
+    "active_ride",
+    "missing_current_location",
+    "not_available",
+  ]) {
+    assert.match(adminController, new RegExp(reason));
+  }
+});
+
+test("admin driver list and detail expose operational backoffice summaries", () => {
+  const adminController = read("../src/controllers/adminController.js");
+  const listHandler = adminController.slice(
+    adminController.indexOf("export const getDriversForReview"),
+    adminController.indexOf("export const getDriverReviewDetails")
+  );
+  const detailHandler = adminController.slice(
+    adminController.indexOf("export const getDriverReviewDetails"),
+    adminController.indexOf("export const updateDriverReviewStatus")
+  );
+  assert.match(listHandler, /pagination/);
+  assert.match(listHandler, /INVALID_DRIVER_SORT/);
+  assert.match(listHandler, /availabilityStatus/);
+  assert.match(listHandler, /discoverability/);
+  assert.match(adminController, /DriverPointsWallet/);
+  assert.match(adminController, /rideSummary/);
+  assert.match(adminController, /tripOfferSummary/);
+  assert.match(adminController, /documentSummary/);
+  assert.match(detailHandler, /recentRides/);
+  assert.match(detailHandler, /recentTripOffers/);
+  assert.match(detailHandler, /recentCalls/);
+  assert.match(detailHandler, /requestHistory/);
+});
+
+test("admin user list exposes operational summaries and bounded query controls", () => {
+  const userController = read("../src/controllers/userController.js");
+  const listHandler = userController.slice(
+    userController.indexOf("export const getAllUsers"),
+    userController.indexOf("export const updateUser")
+  );
+  assert.match(listHandler, /pagination/);
+  assert.match(listHandler, /INVALID_USER_SORT/);
+  assert.match(listHandler, /rideSummary/);
+  assert.match(listHandler, /supportSummary/);
+  assert.match(listHandler, /activeRide/);
+  assert.match(listHandler, /isRestricted/);
+  assert.match(listHandler, /Ride\.aggregate/);
+  assert.match(listHandler, /RideMessage\.aggregate/);
 });
 
 test("presence timing is configurable and timeout cannot be shorter than two heartbeats", () => {

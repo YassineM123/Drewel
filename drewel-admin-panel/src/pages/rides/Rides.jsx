@@ -1,15 +1,19 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
+import PropTypes from "prop-types";
 import { listAdminRides, rideApiError } from "../../utils/ridesAdminApi";
 import "../../assets/css/admin-rides.css";
 
 const FILTERS = [
+  ["live", "Live"],
   ["requested", "Requested"],
   ["searching", "Searching"],
   ["assigned", "Assigned"],
   ["active", "Active"],
   ["completed", "Completed"],
   ["cancelled", "Cancelled"],
+  ["disputed", "Disputes"],
+  ["stuck", "Stuck"],
   ["all", "All reservations"],
 ];
 
@@ -32,6 +36,7 @@ const date = (value) => {
 const label = (value) => String(value || "unknown").replaceAll("_", " ");
 const person = (value) => value?.fullName || value?.displayName || value?.name || "Drewel participant";
 const place = (value) => value?.address || value?.label || value?.name || "-";
+const csv = (value) => `"${String(value ?? "").replaceAll('"', '""')}"`;
 
 const badge = (status) => {
   if (ACTIVE.has(status)) return "ride-status--active";
@@ -41,8 +46,41 @@ const badge = (status) => {
   return "";
 };
 
-const Rides = () => {
-  const [filter, setFilter] = useState("active");
+const viewCopy = {
+  live: {
+    eyebrow: "Operations",
+    title: "Live Reservations",
+    description: "Monitor active ride states, stale records, exceptions and route evidence.",
+  },
+  all: {
+    eyebrow: "Operations",
+    title: "All Reservations",
+    description: "Search and export backend-authoritative Drewel ride records.",
+  },
+  completed: {
+    eyebrow: "Operations",
+    title: "Completed Reservations",
+    description: "Review finished reservations and final audit evidence.",
+  },
+  cancelled: {
+    eyebrow: "Operations",
+    title: "Cancelled Reservations",
+    description: "Inspect cancellation reasons, review state and point evidence.",
+  },
+  disputed: {
+    eyebrow: "Risk",
+    title: "Disputes",
+    description: "Review disputed reservations using backend ride state and audit records.",
+  },
+  stuck: {
+    eyebrow: "Risk",
+    title: "Stuck Rides",
+    description: "Active rides whose backend state has not progressed for more than one hour.",
+  },
+};
+
+const Rides = ({ initialFilter = "active", lockedFilter = false }) => {
+  const [filter, setFilter] = useState(initialFilter);
   const [search, setSearch] = useState("");
   const [driver, setDriver] = useState("");
   const [customer, setCustomer] = useState("");
@@ -52,6 +90,8 @@ const Rides = () => {
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(20);
+  const [sort, setSort] = useState("updatedAt");
+  const [dir, setDir] = useState("desc");
   const [state, setState] = useState({ loading: true, error: "", rides: [], pagination: {} });
 
   useEffect(() => {
@@ -71,6 +111,8 @@ const Rides = () => {
           vehicleType: vehicleType.trim() || undefined,
           from: from || undefined,
           to: to || undefined,
+          sort,
+          dir,
           page,
           limit,
         },
@@ -97,7 +139,7 @@ const Rides = () => {
         }));
       }
     }
-  }, [customer, debouncedSearch, driver, filter, from, limit, page, to, vehicleType]);
+  }, [customer, debouncedSearch, dir, driver, filter, from, limit, page, sort, to, vehicleType]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -110,32 +152,98 @@ const Rides = () => {
     setPage(1);
   };
 
+  const sortBy = (field) => {
+    setSort((current) => {
+      if (current === field) {
+        setDir((value) => (value === "asc" ? "desc" : "asc"));
+        return current;
+      }
+      setDir("desc");
+      return field;
+    });
+    setPage(1);
+  };
+
+  const exportCsv = () => {
+    const rows = [
+      [
+        "Reference",
+        "Status",
+        "Customer",
+        "Driver",
+        "Vehicle Type",
+        "Pickup",
+        "Destination",
+        "Updated",
+        "ETA Minutes",
+      ],
+      ...state.rides.map((ride) => [
+        ride.reference || ride.id || ride._id,
+        label(ride.status),
+        person(ride.user || ride.passenger),
+        person(ride.driver),
+        ride.vehicleType || ride.driver?.vehicleType || "",
+        place(ride.pickup),
+        place(ride.destination),
+        date(ride.updatedAt),
+        ride.etaMinutes ?? "",
+      ]),
+    ];
+    const blob = new Blob(
+      [rows.map((row) => row.map(csv).join(",")).join("\r\n")],
+      { type: "text/csv;charset=utf-8" },
+    );
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `drewel-reservations-${filter}-${new Date().toISOString().slice(0, 10)}.csv`;
+    document.body.append(anchor);
+    anchor.click();
+    anchor.remove();
+    URL.revokeObjectURL(url);
+  };
+
   const pagination = state.pagination;
   const totalPages = Math.max(1, Number(pagination.totalPages || 1));
+  const copy = viewCopy[initialFilter] || {
+    eyebrow: "Operations",
+    title: "Reservations",
+    description: "Monitor the live booking lifecycle, exceptions, point activity and audit evidence.",
+  };
 
   return (
     <main className="app-content admin-rides">
       <header className="app-title tile p-3 ride-heading">
         <div>
-          <span className="points-eyebrow">Operations</span>
-          <h1>Reservations</h1>
-          <p>Monitor the live booking lifecycle, exceptions, point activity and audit evidence.</p>
+          <span className="points-eyebrow">{copy.eyebrow}</span>
+          <h1>{copy.title}</h1>
+          <p>{copy.description}</p>
+        </div>
+        <div className="ride-heading__actions">
+          <button type="button" className="btn btn-light" onClick={() => load()} disabled={state.loading}>
+            Refresh
+          </button>
+          <button type="button" className="btn btn-outline-primary" onClick={exportCsv} disabled={state.loading || state.rides.length === 0}>
+            Export CSV
+          </button>
         </div>
       </header>
 
-      <nav className="tile ride-tabs" aria-label="Reservation status">
-        {FILTERS.map(([value, text]) => (
-          <button
-            type="button"
-            key={value}
-            className={`ride-tab${filter === value ? " active" : ""}`}
-            aria-pressed={filter === value}
-            onClick={() => selectFilter(value)}
-          >
-            {text}
-          </button>
-        ))}
-      </nav>
+      {!lockedFilter && (
+        <nav className="tile ride-tabs" aria-label="Reservation status">
+          {FILTERS.map(([value, text]) => (
+            <button
+              type="button"
+              key={value}
+              className={`ride-tab${filter === value ? " active" : ""}`}
+              aria-pressed={filter === value}
+              onClick={() => selectFilter(value)}
+            >
+              {text}
+            </button>
+          ))}
+        </nav>
+      )}
 
       <section className="tile ride-toolbar" aria-label="Reservation filters">
         <label>
@@ -223,6 +331,25 @@ const Rides = () => {
           </select>
         </label>
         <label>
+          Sort by
+          <select
+            value={`${sort}:${dir}`}
+            onChange={(event) => {
+              const [nextSort, nextDir] = event.target.value.split(":");
+              setSort(nextSort);
+              setDir(nextDir);
+              setPage(1);
+            }}
+          >
+            <option value="updatedAt:desc">Updated newest</option>
+            <option value="updatedAt:asc">Updated oldest</option>
+            <option value="createdAt:desc">Created newest</option>
+            <option value="createdAt:asc">Created oldest</option>
+            <option value="status:asc">Status A-Z</option>
+            <option value="vehicleType:asc">Vehicle A-Z</option>
+          </select>
+        </label>
+        <label>
           Data access
           <select disabled aria-label="Data access">
             <option>Authorized ride records only</option>
@@ -256,12 +383,12 @@ const Rides = () => {
               <thead>
                 <tr>
                   <th>Reservation</th>
-                  <th>Status</th>
+                  <th><button type="button" className="ride-sort-button" onClick={() => sortBy("status")}>Status</button></th>
                   <th>Customer</th>
                   <th>Driver</th>
                   <th>Pickup</th>
                   <th>Destination</th>
-                  <th>Updated</th>
+                  <th><button type="button" className="ride-sort-button" onClick={() => sortBy("updatedAt")}>Updated</button></th>
                   <th>Route / ETA</th>
                   <th>Action</th>
                 </tr>
@@ -324,6 +451,11 @@ const Rides = () => {
       </section>
     </main>
   );
+};
+
+Rides.propTypes = {
+  initialFilter: PropTypes.string,
+  lockedFilter: PropTypes.bool,
 };
 
 export default Rides;

@@ -2,13 +2,12 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:geolocator/geolocator.dart';
 import 'package:get/get.dart';
-import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../../common/colors.dart';
+import '../../../../common/motion.dart';
 import '../../../data/apis/api_constants/api_key_constants.dart';
 import '../../../data/apis/api_models/ride_message_model.dart';
 import '../../../data/apis/api_models/ride_conversation_model.dart';
@@ -23,7 +22,6 @@ import '../../active_ride/controllers/active_ride_controller.dart';
 import '../../points/bindings/driver_points_binding.dart';
 import '../../points/controllers/driver_points_controller.dart';
 import '../../points/widgets/trip_offer_points.dart';
-import '../../user_home/widgets/trip_request_map_sheet.dart';
 import '../controllers/call_state_controller.dart';
 
 class RideChatScreen extends StatefulWidget {
@@ -59,7 +57,6 @@ class _RideChatScreenState extends State<RideChatScreen> {
   static const List<String> _quickMessages = <String>[
     "I'm here",
     'On my way',
-    'Call me',
     "I'm waiting",
   ];
 
@@ -283,22 +280,11 @@ class _RideChatScreenState extends State<RideChatScreen> {
             ],
           ),
           actions: <Widget>[
-            if (_role == ApiKeyConstants.driver &&
-                _routeRide?.status == 'contacting')
-              IconButton(
-                tooltip: 'points.send_trip_offer'.tr,
-                onPressed: _showMissionConfirmation,
-                icon: const Icon(Icons.local_offer_outlined),
-              ),
-            if (_canChat)
-              IconButton(
-                tooltip: 'Call',
-                onPressed: () => _callParticipant(context),
-                icon: const Icon(
-                  Icons.phone_in_talk_outlined,
-                  color: primaryColor,
-                ),
-              ),
+            IconButton(
+              tooltip: 'Safety',
+              onPressed: _showSafetyActions,
+              icon: const Icon(Icons.shield_outlined, color: primaryColor),
+            ),
             const SizedBox(width: 6),
           ],
           bottom: PreferredSize(
@@ -347,13 +333,8 @@ class _RideChatScreenState extends State<RideChatScreen> {
                     : _MessageList(
                         messages: _messages,
                         selfId: _selfId,
-                        role: _role,
                         conversation: _conversation,
-                        routeRide: _routeRide,
                         onRefresh: () => _load(showLoader: false),
-                        onSendOfferFromRequest: _role == ApiKeyConstants.driver
-                            ? _sendOfferFromTripRequest
-                            : null,
                       ),
               ),
               _canChat
@@ -368,11 +349,7 @@ class _RideChatScreenState extends State<RideChatScreen> {
                       textController: _textController,
                       hintText: 'Message $_chatTitle...',
                       sending: _sending,
-                      role: _role,
-                      rideStatus: _routeRide?.status,
                       onSend: _send,
-                      onOffer: _showMissionConfirmation,
-                      onTripRequest: _showPassengerTripRequest,
                     )
                   : const SizedBox.shrink(),
             ],
@@ -511,479 +488,93 @@ class _RideChatScreenState extends State<RideChatScreen> {
     );
   }
 
-  Future<void> _showPassengerTripRequest() async {
-    if (_role == ApiKeyConstants.driver) return;
+  Future<void> _showSafetyActions() async {
     final String? rideId = _rideId;
-    if (rideId == null || _sending) return;
-    final RideCoordinateModel? existingPickup = _routeRide?.pickup;
-    TripRouteRequest? route;
-    if (existingPickup?.isValid != true && _isDesktopPlatform) {
-      route = await _showManualTripRouteDialog();
-    } else {
-      LatLng pickup;
-      String pickupAddress;
-      if (existingPickup?.isValid == true) {
-        pickup = LatLng(existingPickup!.latitude, existingPickup.longitude);
-        pickupAddress = existingPickup.address;
-      } else {
-        final Position? position = await _currentPassengerPosition();
-        if (position == null || !mounted) return;
-        pickup = LatLng(position.latitude, position.longitude);
-        pickupAddress = 'Current location';
-      }
-      route = await showTripRequestMapSheet(
-        context,
-        pickup: pickup,
-        pickupAddress: pickupAddress,
+    if (rideId == null || rideId.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'No active ride to report. Please use Help & Support instead.',
+          ),
+        ),
       );
+      return;
     }
-    if (route == null && _isDesktopPlatform && mounted) {
-      route = await _showManualTripRouteDialog();
-    }
-    if (route == null || !mounted) return;
-    final TextEditingController price = TextEditingController();
-    final TextEditingController currency = TextEditingController(text: 'AED');
-    final TextEditingController note = TextEditingController();
-    final bool? confirmed = await showDialog<bool>(
+    final String? action = await showDialog<String>(
       context: context,
       builder: (BuildContext dialogContext) => AlertDialog(
-        icon: const CircleAvatar(
-          backgroundColor: Color(0x1FBE1B2C),
-          child: Icon(Icons.add_road_rounded, color: primaryColor),
-        ),
-        title: const Text('Send trip request'),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
+        title: const Row(
           children: <Widget>[
-            TextField(
-              controller: price,
-              keyboardType:
-                  const TextInputType.numberWithOptions(decimal: true),
-              decoration: const InputDecoration(labelText: 'Proposed price'),
-            ),
-            TextField(
-              controller: currency,
-              textCapitalization: TextCapitalization.characters,
-              maxLength: 3,
-              decoration: const InputDecoration(labelText: 'Currency'),
-            ),
-            TextField(
-              controller: note,
-              maxLength: 240,
-              maxLines: 2,
-              decoration: const InputDecoration(
-                labelText: 'Note for the driver (optional)',
-                counterText: '',
-              ),
-            ),
+            Icon(Icons.shield_rounded),
+            SizedBox(width: 8),
+            Text('Safety'),
           ],
         ),
+        content: const Text(
+          'Report a safety concern or block the participant in this '
+          'conversation. Drewel support reviews every report.',
+        ),
         actions: <Widget>[
           TextButton(
-            onPressed: () => Navigator.pop(dialogContext, false),
-            child: const Text('Cancel'),
+            onPressed: () {
+              Navigator.pop(dialogContext);
+              Get.toNamed(Routes.SUPPORT);
+            },
+            child: const Text('Support'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, 'report'),
+            child: const Text('Report'),
           ),
           FilledButton(
-            onPressed: () {
-              final double? parsed = double.tryParse(price.text.trim());
-              if (parsed == null ||
-                  parsed < 0 ||
-                  currency.text.trim().length != 3) {
-                return;
-              }
-              Navigator.pop(dialogContext, true);
-            },
-            child: const Text('Send'),
+            style: FilledButton.styleFrom(backgroundColor: Colors.red),
+            onPressed: () => Navigator.pop(dialogContext, 'block'),
+            child: const Text('Block'),
           ),
         ],
       ),
     );
-    if (confirmed != true || !mounted) {
-      _disposeControllers(<TextEditingController>[price, currency, note]);
-      return;
-    }
-    setState(() {
-      _sending = true;
-      _error = null;
-    });
-    try {
-      final RideMessageModel sent =
-          await _communication.messageRepository.sendTripRequest(
-        rideId,
-        pickup: route.pickup,
-        destination: route.destination,
-        proposedPrice: double.parse(price.text.trim()),
-        currency: currency.text.trim().toUpperCase(),
-        note: note.text.trim(),
+    if (action == null || !mounted) return;
+    if (action == 'report') {
+      await _requestSafetyAction(
+        title: 'Report this ride?',
+        confirmLabel: 'Report',
+        destructive: false,
+        submit: (String reason) =>
+            _rideRepository.report(rideId, reason.trim()),
       );
-      if (!mounted) return;
-      setState(() {
-        _cancelOlderTripRequests(sent);
-        _messages.add(sent);
-      });
-      try {
-        _routeRide = await _rideRepository.getRide(rideId);
-      } catch (_) {}
-    } on CommunicationApiException catch (error) {
-      if (mounted) setState(() => _error = error.message);
-    } finally {
-      _disposeControllers(<TextEditingController>[price, currency, note]);
-      if (mounted) setState(() => _sending = false);
-    }
-  }
-
-  void _cancelOlderTripRequests(RideMessageModel latest) {
-    for (int index = 0; index < _messages.length; index += 1) {
-      final RideMessageModel message = _messages[index];
-      if (!message.isTripRequest ||
-          message.rideId != latest.rideId ||
-          message.id == latest.id ||
-          message.isCancelledTripRequest) {
-        continue;
-      }
-      final Map<String, dynamic> metadata = Map<String, dynamic>.from(
-          message.metadata ?? const <String, dynamic>{});
-      metadata['tripRequestStatus'] = 'cancelled';
-      metadata['cancellationReason'] = 'superseded';
-      metadata['supersededByMessageId'] = latest.id;
-      _messages[index] = message.copyWith(metadata: metadata);
-    }
-  }
-
-  Future<TripRouteRequest?> _showManualTripRouteDialog() async {
-    final TextEditingController pickup = TextEditingController(
-      text: _routeRide?.pickup?.address ?? '',
-    );
-    final TextEditingController pickupLat = TextEditingController(
-      text: _routeRide?.pickup?.isValid == true
-          ? _routeRide!.pickup!.latitude.toStringAsFixed(6)
-          : '',
-    );
-    final TextEditingController pickupLong = TextEditingController(
-      text: _routeRide?.pickup?.isValid == true
-          ? _routeRide!.pickup!.longitude.toStringAsFixed(6)
-          : '',
-    );
-    final TextEditingController destination = TextEditingController(
-      text: _routeRide?.destination?.address ?? '',
-    );
-    final TextEditingController destinationLat = TextEditingController(
-      text: _routeRide?.destination?.isValid == true
-          ? _routeRide!.destination!.latitude.toStringAsFixed(6)
-          : '',
-    );
-    final TextEditingController destinationLong = TextEditingController(
-      text: _routeRide?.destination?.isValid == true
-          ? _routeRide!.destination!.longitude.toStringAsFixed(6)
-          : '',
-    );
-    final bool? confirmed = await showDialog<bool>(
-      context: context,
-      builder: (BuildContext dialogContext) => AlertDialog(
-        icon: const CircleAvatar(
-          backgroundColor: Color(0x1FBE1B2C),
-          child: Icon(Icons.route_rounded, color: primaryColor),
-        ),
-        title: const Text('Trip route'),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: <Widget>[
-              TextField(
-                controller: pickup,
-                decoration: const InputDecoration(labelText: 'Pickup address'),
-              ),
-              Row(
-                children: <Widget>[
-                  Expanded(
-                    child: TextField(
-                      controller: pickupLat,
-                      keyboardType:
-                          const TextInputType.numberWithOptions(decimal: true),
-                      decoration:
-                          const InputDecoration(labelText: 'Pickup lat'),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: TextField(
-                      controller: pickupLong,
-                      keyboardType:
-                          const TextInputType.numberWithOptions(decimal: true),
-                      decoration:
-                          const InputDecoration(labelText: 'Pickup long'),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 10),
-              TextField(
-                controller: destination,
-                decoration:
-                    const InputDecoration(labelText: 'Destination address'),
-              ),
-              Row(
-                children: <Widget>[
-                  Expanded(
-                    child: TextField(
-                      controller: destinationLat,
-                      keyboardType:
-                          const TextInputType.numberWithOptions(decimal: true),
-                      decoration:
-                          const InputDecoration(labelText: 'Destination lat'),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: TextField(
-                      controller: destinationLong,
-                      keyboardType:
-                          const TextInputType.numberWithOptions(decimal: true),
-                      decoration:
-                          const InputDecoration(labelText: 'Destination long'),
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-        actions: <Widget>[
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext, false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () {
-              final bool valid = pickup.text.trim().isNotEmpty &&
-                  destination.text.trim().isNotEmpty &&
-                  double.tryParse(pickupLat.text.trim()) != null &&
-                  double.tryParse(pickupLong.text.trim()) != null &&
-                  double.tryParse(destinationLat.text.trim()) != null &&
-                  double.tryParse(destinationLong.text.trim()) != null;
-              if (!valid) return;
-              Navigator.pop(dialogContext, true);
-            },
-            child: const Text('Continue'),
-          ),
-        ],
-      ),
-    );
-    if (confirmed != true) {
-      _disposeControllers(<TextEditingController>[
-        pickup,
-        pickupLat,
-        pickupLong,
-        destination,
-        destinationLat,
-        destinationLong,
-      ]);
-      return null;
-    }
-    final TripRouteRequest route = TripRouteRequest(
-      pickup: <String, dynamic>{
-        'address': pickup.text.trim(),
-        'lat': double.parse(pickupLat.text.trim()),
-        'long': double.parse(pickupLong.text.trim()),
-      },
-      destination: <String, dynamic>{
-        'address': destination.text.trim(),
-        'lat': double.parse(destinationLat.text.trim()),
-        'long': double.parse(destinationLong.text.trim()),
-      },
-    );
-    _disposeControllers(<TextEditingController>[
-      pickup,
-      pickupLat,
-      pickupLong,
-      destination,
-      destinationLat,
-      destinationLong,
-    ]);
-    return route;
-  }
-
-  Future<Position?> _currentPassengerPosition() async {
-    try {
-      if (!await Geolocator.isLocationServiceEnabled()) {
-        setState(() => _error = 'Enable location to choose pickup.');
-        return null;
-      }
-      LocationPermission permission = await Geolocator.checkPermission();
-      if (permission == LocationPermission.denied) {
-        permission = await Geolocator.requestPermission();
-      }
-      if (permission == LocationPermission.denied ||
-          permission == LocationPermission.deniedForever) {
-        setState(() => _error = 'Location permission is required.');
-        return null;
-      }
-      return Geolocator.getCurrentPosition(
-        locationSettings: const LocationSettings(
-          accuracy: LocationAccuracy.high,
-        ),
+    } else if (action == 'block') {
+      await _requestSafetyAction(
+        title: 'Block this participant?',
+        confirmLabel: 'Block',
+        destructive: true,
+        submit: (String reason) => _rideRepository.block(rideId, reason.trim()),
       );
-    } catch (_) {
-      if (mounted) setState(() => _error = 'Unable to read your location.');
-      return null;
     }
   }
 
-  Future<void> _sendOfferFromTripRequest(RideMessageModel message) async {
-    final DriverPointsController? pointsController = _points;
-    final Map<String, dynamic> metadata =
-        message.metadata ?? const <String, dynamic>{};
-    if (pointsController == null) return;
-    if (metadata['pickup'] is! Map || metadata['destination'] is! Map) {
-      await _load(showLoader: false);
-    }
-    final RideCoordinateModel? ridePickup = _routeRide?.pickup;
-    final RideCoordinateModel? rideDestination = _routeRide?.destination;
-    final Map<String, dynamic>? pickup = metadata['pickup'] is Map
-        ? Map<String, dynamic>.from(metadata['pickup'] as Map)
-        : _tripRequestPointFromText(message.text, 'Pickup') ??
-            (ridePickup?.isValid == true ? ridePickup!.toJson() : null);
-    final Map<String, dynamic>? destination = metadata['destination'] is Map
-        ? Map<String, dynamic>.from(metadata['destination'] as Map)
-        : _tripRequestPointFromText(message.text, 'Destination') ??
-            (rideDestination?.isValid == true
-                ? rideDestination!.toJson()
-                : null);
-    final double? proposedPrice = metadata['proposedPrice'] is num
-        ? (metadata['proposedPrice'] as num).toDouble()
-        : double.tryParse((metadata['proposedPrice'] ?? '').toString()) ??
-            _tripRequestPriceFromText(message.text);
-    final String currency = (metadata['currency'] ??
-            _tripRequestCurrencyFromText(message.text) ??
-            'AED')
-        .toString()
-        .trim()
-        .toUpperCase();
-    final _CompletedTripRequest? completed = await _completeTripRequestForOffer(
-      initialPickup: pickup,
-      initialDestination: destination,
-      initialPrice: proposedPrice,
-      initialCurrency: currency,
-      initialNote: (metadata['note'] ?? '').toString(),
-    );
-    if (completed == null || !mounted) {
-      return;
-    }
-    final bool send =
-        await showOfferReservationConfirmation(context, pointsController);
-    if (!send || !mounted) return;
-    final SendOfferResult result = await pointsController.sendOffer(
-      TripOfferDraft(
-        contactRideId: _rideId ?? '',
-        pickup: completed.pickup,
-        destination: completed.destination,
-        offeredPrice: completed.price,
-        currency: completed.currency,
-        vehicleType: _routeRide?.vehicleType ?? '',
-        note: completed.note,
-      ),
-    );
-    if (!mounted) return;
-    if (result != SendOfferResult.sent) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            result == SendOfferResult.insufficientPoints
-                ? 'points.insufficient'.tr
-                : pointsController.lastSendOfferError?.trim().isNotEmpty == true
-                    ? pointsController.lastSendOfferError!.trim()
-                    : 'points.send_failed'.tr,
-          ),
-        ),
-      );
-      return;
-    }
-    await _openConfirmedRide();
-  }
-
-  Future<void> _openConfirmedRide() async {
-    if (Get.isRegistered<ActiveRideController>()) {
-      await Get.find<ActiveRideController>().recover(showLoader: false);
-    }
-    await _communication.refreshActiveRide();
-    if (mounted) {
-      Get.offNamed(Routes.ACTIVE_RIDE);
-    }
-  }
-
-  Future<_CompletedTripRequest?> _completeTripRequestForOffer({
-    required Map<String, dynamic>? initialPickup,
-    required Map<String, dynamic>? initialDestination,
-    required double? initialPrice,
-    required String initialCurrency,
-    required String initialNote,
+  Future<void> _requestSafetyAction({
+    required String title,
+    required String confirmLabel,
+    required bool destructive,
+    required Future<void> Function(String reason) submit,
   }) async {
-    Map<String, dynamic>? pickup = initialPickup;
-    Map<String, dynamic>? destination = initialDestination;
-
-    if (pickup == null || destination == null) {
-      await _showMissingPassengerRouteDialog();
-      return null;
-    }
-
-    if (initialPrice != null) {
-      return _CompletedTripRequest(
-        pickup: pickup,
-        destination: destination,
-        price: initialPrice,
-        currency: initialCurrency,
-        note: initialNote.trim(),
-      );
-    }
-
-    final TextEditingController price = TextEditingController(
-      text: initialPrice == null ? '' : initialPrice.toStringAsFixed(2),
-    );
-    final TextEditingController currency = TextEditingController(
-      text: initialCurrency.trim().isEmpty ? 'AED' : initialCurrency,
-    );
-    final TextEditingController note =
-        TextEditingController(text: initialNote.trim());
-    if (!mounted) {
-      _disposeControllers(<TextEditingController>[price, currency, note]);
-      return null;
-    }
+    final TextEditingController reasonController = TextEditingController();
     final bool? confirmed = await showDialog<bool>(
       context: context,
       builder: (BuildContext dialogContext) => AlertDialog(
-        icon: const CircleAvatar(
-          backgroundColor: Color(0x1FBE1B2C),
-          child: Icon(Icons.local_offer_rounded, color: primaryColor),
-        ),
-        title: const Text('Complete trip offer'),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: <Widget>[
-            TextField(
-              controller: price,
-              keyboardType:
-                  const TextInputType.numberWithOptions(decimal: true),
-              decoration: const InputDecoration(labelText: 'Offered price'),
-            ),
-            TextField(
-              controller: currency,
-              textCapitalization: TextCapitalization.characters,
-              maxLength: 3,
-              decoration: const InputDecoration(labelText: 'Currency'),
-            ),
-            TextField(
-              controller: note,
-              maxLength: 240,
-              maxLines: 2,
-              decoration: const InputDecoration(
-                labelText: 'A note for the passenger (optional)',
-                counterText: '',
-              ),
-            ),
-          ],
+        title: Text(title),
+        content: TextField(
+          controller: reasonController,
+          autofocus: true,
+          maxLength: 500,
+          minLines: 2,
+          maxLines: 4,
+          decoration: const InputDecoration(
+            labelText: 'Reason',
+            hintText: 'Tell Drewel support what happened',
+            border: OutlineInputBorder(),
+          ),
         ),
         actions: <Widget>[
           TextButton(
@@ -991,338 +582,40 @@ class _RideChatScreenState extends State<RideChatScreen> {
             child: const Text('Cancel'),
           ),
           FilledButton(
+            style: destructive
+                ? FilledButton.styleFrom(backgroundColor: Colors.red)
+                : null,
             onPressed: () {
-              final double? parsed = double.tryParse(price.text.trim());
-              if (parsed == null ||
-                  parsed < 0 ||
-                  currency.text.trim().length != 3) {
-                return;
-              }
+              if (reasonController.text.trim().isEmpty) return;
               Navigator.pop(dialogContext, true);
             },
-            child: const Text('Continue'),
+            child: Text(confirmLabel),
           ),
         ],
       ),
     );
-    final double? parsedPrice = double.tryParse(price.text.trim());
-    final String parsedCurrency = currency.text.trim().toUpperCase();
-    final String parsedNote = note.text.trim();
-    _disposeControllers(<TextEditingController>[price, currency, note]);
-    if (confirmed != true ||
-        parsedPrice == null ||
-        parsedCurrency.length != 3) {
-      return null;
+    final String reason = reasonController.text;
+    reasonController.dispose();
+    if (confirmed != true) return;
+    bool success = false;
+    String? failureMessage;
+    try {
+      await submit(reason);
+      success = true;
+    } on CommunicationApiException catch (error) {
+      failureMessage = error.message;
+    } catch (_) {
+      failureMessage = 'Unable to submit. Please retry or contact support.';
     }
-    return _CompletedTripRequest(
-      pickup: pickup,
-      destination: destination,
-      price: parsedPrice,
-      currency: parsedCurrency,
-      note: parsedNote,
-    );
-  }
-
-  Future<void> _showMissingPassengerRouteDialog() async {
     if (!mounted) return;
-    final bool askPassenger = await showDialog<bool>(
-          context: context,
-          builder: (BuildContext dialogContext) => AlertDialog(
-            icon: const CircleAvatar(
-              backgroundColor: Color(0x1FBE1B2C),
-              child: Icon(Icons.route_rounded, color: primaryColor),
-            ),
-            title: const Text('Passenger route required'),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(24),
-            ),
-            content: const Text(
-              'This request was sent without pickup and destination. Ask the '
-              'passenger to send the trip request again from the + button.',
-            ),
-            actions: <Widget>[
-              TextButton(
-                onPressed: () => Navigator.pop(dialogContext, false),
-                child: const Text('Close'),
-              ),
-              FilledButton(
-                onPressed: () => Navigator.pop(dialogContext, true),
-                child: const Text('Ask passenger'),
-              ),
-            ],
-          ),
-        ) ??
-        false;
-    if (askPassenger && mounted) {
-      await _send(
-          'Please resend the trip request with pickup and destination.');
-    }
-  }
-
-  static final RegExp _tripRequestTextPattern = RegExp(
-    r'^trip request:\s*([0-9]+(?:[.,][0-9]+)?)\s*([a-zA-Z]{3})?',
-    caseSensitive: false,
-  );
-
-  static double? _tripRequestPriceFromText(String text) {
-    final RegExpMatch? match = _tripRequestTextPattern.firstMatch(text.trim());
-    if (match == null) return null;
-    return double.tryParse((match.group(1) ?? '').replaceAll(',', '.'));
-  }
-
-  static String? _tripRequestCurrencyFromText(String text) {
-    final RegExpMatch? match = _tripRequestTextPattern.firstMatch(text.trim());
-    final String? currency = match?.group(2)?.trim();
-    return currency == null || currency.isEmpty ? null : currency;
-  }
-
-  static Map<String, dynamic>? _tripRequestPointFromText(
-    String text,
-    String label,
-  ) {
-    final RegExp pattern = RegExp(
-      '^$label:\\s*(.*?)\\s*\\((-?\\d+(?:\\.\\d+)?),\\s*(-?\\d+(?:\\.\\d+)?)\\)\\s*\$',
-      caseSensitive: false,
-      multiLine: true,
-    );
-    final RegExpMatch? match = pattern.firstMatch(text);
-    if (match == null) return null;
-    final double? lat = double.tryParse(match.group(2) ?? '');
-    final double? long = double.tryParse(match.group(3) ?? '');
-    if (lat == null || long == null) return null;
-    return <String, dynamic>{
-      'address': (match.group(1) ?? '').trim(),
-      'lat': lat,
-      'long': long,
-    };
-  }
-
-  Future<void> _callParticipant(BuildContext context) async {
-    final String name = _communication.counterpart?.firstName ??
-        _conversation?.counterpart?.fullName ??
-        'ride participant';
-    if (await _communication.confirmDrewelCall(name)) {
-      await _communication.initiateCall();
-    }
-  }
-
-  Future<void> _showMissionConfirmation() async {
-    final DriverPointsController? pointsController = _points;
-    if (pointsController == null) return;
-    final ActiveRideModel? ride = _routeRide ?? _communication.activeRide.value;
-    final RideCoordinateModel? ridePickup = ride?.pickup;
-    final RideCoordinateModel? rideDestination = ride?.destination;
-    final TextEditingController pickup =
-        TextEditingController(text: ridePickup?.address ?? '');
-    final TextEditingController pickupLat = TextEditingController(
-      text: ridePickup?.isValid == true ? '${ridePickup!.latitude}' : '',
-    );
-    final TextEditingController pickupLong = TextEditingController(
-      text: ridePickup?.isValid == true ? '${ridePickup!.longitude}' : '',
-    );
-    final TextEditingController destination =
-        TextEditingController(text: rideDestination?.address ?? '');
-    final TextEditingController destinationLat = TextEditingController(
-      text: rideDestination?.isValid == true
-          ? '${rideDestination!.latitude}'
-          : '',
-    );
-    final TextEditingController destinationLong = TextEditingController(
-      text: rideDestination?.isValid == true
-          ? '${rideDestination!.longitude}'
-          : '',
-    );
-    final TextEditingController price = TextEditingController();
-    final TextEditingController currency = TextEditingController(text: 'AED');
-    final TextEditingController note = TextEditingController();
-    final bool? confirmed = await showDialog<bool>(
-      context: context,
-      builder: (BuildContext dialogContext) => AlertDialog(
-        icon: const CircleAvatar(
-          backgroundColor: Color(0x1FBE1B2C),
-          child: Icon(Icons.local_offer_rounded, color: primaryColor),
-        ),
-        title: Text('points.send_trip_offer'.tr),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: <Widget>[
-              TextField(
-                controller: pickup,
-                readOnly: true,
-                decoration: InputDecoration(labelText: 'points.pickup'.tr),
-              ),
-              Row(
-                children: <Widget>[
-                  Expanded(
-                    child: TextField(
-                      controller: pickupLat,
-                      readOnly: true,
-                      keyboardType:
-                          const TextInputType.numberWithOptions(decimal: true),
-                      decoration:
-                          InputDecoration(labelText: 'points.pickup_lat'.tr),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: TextField(
-                      controller: pickupLong,
-                      readOnly: true,
-                      keyboardType:
-                          const TextInputType.numberWithOptions(decimal: true),
-                      decoration:
-                          InputDecoration(labelText: 'points.pickup_long'.tr),
-                    ),
-                  ),
-                ],
-              ),
-              TextField(
-                controller: destination,
-                readOnly: true,
-                decoration: InputDecoration(labelText: 'points.destination'.tr),
-              ),
-              Row(
-                children: <Widget>[
-                  Expanded(
-                    child: TextField(
-                      controller: destinationLat,
-                      readOnly: true,
-                      keyboardType:
-                          const TextInputType.numberWithOptions(decimal: true),
-                      decoration: InputDecoration(
-                        labelText: 'points.destination_lat'.tr,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: TextField(
-                      controller: destinationLong,
-                      readOnly: true,
-                      keyboardType:
-                          const TextInputType.numberWithOptions(decimal: true),
-                      decoration: InputDecoration(
-                        labelText: 'points.destination_long'.tr,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              TextField(
-                controller: price,
-                keyboardType:
-                    const TextInputType.numberWithOptions(decimal: true),
-                decoration:
-                    InputDecoration(labelText: 'points.offered_price'.tr),
-              ),
-              TextField(
-                controller: currency,
-                textCapitalization: TextCapitalization.characters,
-                maxLength: 3,
-                decoration: InputDecoration(labelText: 'points.currency'.tr),
-              ),
-              TextField(
-                controller: note,
-                maxLength: 240,
-                maxLines: 2,
-                decoration: const InputDecoration(
-                  labelText: 'A note for the passenger (optional)',
-                  counterText: '',
-                ),
-              ),
-            ],
-          ),
-        ),
-        actions: <Widget>[
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext, false),
-            child: Text('points.cancel'.tr),
-          ),
-          FilledButton(
-            onPressed: () {
-              if (pickup.text.trim().isEmpty ||
-                  destination.text.trim().isEmpty ||
-                  double.tryParse(pickupLat.text.trim()) == null ||
-                  double.tryParse(pickupLong.text.trim()) == null ||
-                  double.tryParse(destinationLat.text.trim()) == null ||
-                  double.tryParse(destinationLong.text.trim()) == null ||
-                  double.tryParse(price.text.trim()) == null ||
-                  currency.text.trim().length != 3) {
-                return;
-              }
-              Navigator.pop(dialogContext, true);
-            },
-            child: Text('points.continue'.tr),
-          ),
-        ],
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(success
+            ? '$confirmLabel submitted to Drewel.'
+            : failureMessage ??
+                'Unable to submit. Please retry or contact support.'),
       ),
     );
-    if (confirmed != true || !mounted) {
-      _disposeControllers(<TextEditingController>[
-        pickup,
-        pickupLat,
-        pickupLong,
-        destination,
-        destinationLat,
-        destinationLong,
-        price,
-        currency,
-        note,
-      ]);
-      return;
-    }
-    final draft = TripOfferDraft(
-      contactRideId: _rideId ?? '',
-      pickup: <String, dynamic>{
-        'address': pickup.text.trim(),
-        'lat': double.parse(pickupLat.text.trim()),
-        'long': double.parse(pickupLong.text.trim()),
-      },
-      destination: <String, dynamic>{
-        'address': destination.text.trim(),
-        'lat': double.parse(destinationLat.text.trim()),
-        'long': double.parse(destinationLong.text.trim()),
-      },
-      offeredPrice: double.parse(price.text.trim()),
-      currency: currency.text.trim().toUpperCase(),
-      vehicleType: ride?.vehicleType ?? '',
-      note: note.text.trim(),
-    );
-    final bool send =
-        await showOfferReservationConfirmation(context, pointsController);
-    _disposeControllers(<TextEditingController>[
-      pickup,
-      pickupLat,
-      pickupLong,
-      destination,
-      destinationLat,
-      destinationLong,
-      price,
-      currency,
-      note,
-    ]);
-    if (!send || !mounted) return;
-    final SendOfferResult result = await pointsController.sendOffer(draft);
-    if (!mounted) return;
-    // Successful reservations are already shown by the offer status card and
-    // the deduplicated realtime notification. Only surface failures here.
-    if (result != SendOfferResult.sent) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            result == SendOfferResult.insufficientPoints
-                ? 'points.insufficient'.tr
-                : pointsController.lastSendOfferError?.trim().isNotEmpty == true
-                    ? pointsController.lastSendOfferError!.trim()
-                    : 'points.send_failed'.tr,
-          ),
-        ),
-      );
-      return;
-    }
-    await _openConfirmedRide();
   }
 
   void _disposeControllers(List<TextEditingController> controllers) {
@@ -1369,9 +662,9 @@ class _CounterpartSubtitle extends StatelessWidget {
         ? <String?>[
             counterpart?.vehicleType,
             counterpart?.vehicleModel,
-          ]
-            .where((String? value) => value != null && value.isNotEmpty)
-            .join(' - ')
+          ].where((String? value) => value != null && value.isNotEmpty).join(
+              ' - ',
+            )
         : null;
     final String subtitle =
         vehicle != null && vehicle.isNotEmpty ? vehicle : 'Secure chat';
@@ -1387,22 +680,6 @@ class _CounterpartSubtitle extends StatelessWidget {
           ),
     );
   }
-}
-
-class _CompletedTripRequest {
-  const _CompletedTripRequest({
-    required this.pickup,
-    required this.destination,
-    required this.price,
-    required this.currency,
-    required this.note,
-  });
-
-  final Map<String, dynamic> pickup;
-  final Map<String, dynamic> destination;
-  final double price;
-  final String currency;
-  final String note;
 }
 
 class _QuickReplyBar extends StatelessWidget {
@@ -1459,21 +736,13 @@ class _ChatComposer extends StatelessWidget {
     required this.textController,
     required this.hintText,
     required this.sending,
-    required this.role,
-    required this.rideStatus,
     required this.onSend,
-    required this.onOffer,
-    required this.onTripRequest,
   });
 
   final TextEditingController textController;
   final String hintText;
   final bool sending;
-  final String role;
-  final String? rideStatus;
   final VoidCallback onSend;
-  final VoidCallback onOffer;
-  final VoidCallback onTripRequest;
 
   @override
   Widget build(BuildContext context) => Container(
@@ -1482,47 +751,6 @@ class _ChatComposer extends StatelessWidget {
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.end,
           children: <Widget>[
-            PopupMenuButton<String>(
-              tooltip: 'Chat actions',
-              icon: const Icon(
-                Icons.add_circle_outline_rounded,
-                color: Color(0xFF5E3D40),
-                size: 30,
-              ),
-              onSelected: (String action) {
-                if (action == 'offer') onOffer();
-                if (action == 'trip_request') onTripRequest();
-              },
-              itemBuilder: (BuildContext context) => <PopupMenuEntry<String>>[
-                if (role != ApiKeyConstants.driver &&
-                    rideStatus == 'contacting')
-                  const PopupMenuItem<String>(
-                    value: 'trip_request',
-                    child: ListTile(
-                      leading:
-                          Icon(Icons.add_road_rounded, color: primaryColor),
-                      title: Text('Trip request'),
-                      contentPadding: EdgeInsets.zero,
-                    ),
-                  ),
-                if (role == ApiKeyConstants.driver &&
-                    rideStatus == 'contacting')
-                  const PopupMenuItem<String>(
-                    value: 'offer',
-                    child: ListTile(
-                      leading:
-                          Icon(Icons.local_offer_rounded, color: primaryColor),
-                      title: Text('Send trip offer'),
-                      contentPadding: EdgeInsets.zero,
-                    ),
-                  ),
-                const PopupMenuItem<String>(
-                  enabled: false,
-                  child: Text('More attachments coming soon'),
-                ),
-              ],
-            ),
-            const SizedBox(width: 6),
             Expanded(
               child: DecoratedBox(
                 decoration: BoxDecoration(
@@ -1597,20 +825,14 @@ class _MessageList extends StatelessWidget {
   const _MessageList({
     required this.messages,
     required this.selfId,
-    required this.role,
     required this.onRefresh,
     this.conversation,
-    this.routeRide,
-    this.onSendOfferFromRequest,
   });
 
   final List<RideMessageModel> messages;
   final String selfId;
-  final String role;
   final VoidCallback onRefresh;
   final RideConversationModel? conversation;
-  final ActiveRideModel? routeRide;
-  final ValueChanged<RideMessageModel>? onSendOfferFromRequest;
 
   @override
   Widget build(BuildContext context) {
@@ -1642,38 +864,23 @@ class _MessageList extends StatelessWidget {
       itemBuilder: (BuildContext context, int index) {
         final RideMessageModel message = messages[index];
         final bool mine = message.senderId == selfId;
-        final bool requestCancelled = message.isCancelledTripRequest;
         final DateTime? previousTime =
             index > 0 ? messages[index - 1].createdAt : null;
         final DateTime? currentTime = message.createdAt;
         final bool showDayHeader =
             index == 0 || !_sameDay(previousTime, currentTime);
+        final Widget bubble = _MessageBubble(
+          message: message,
+          mine: mine,
+          counterpartImageUrl:
+              mine ? null : conversation?.counterpart?.profileImageUrl,
+        );
+        final bool isNewest = index == messages.length - 1;
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: <Widget>[
             if (showDayHeader) _DayHeader(at: currentTime),
-            if (message.isTripRequest)
-              _TripRequestMessageCard(
-                message: message,
-                mine: mine,
-                canSendOffer: role == ApiKeyConstants.driver &&
-                    !mine &&
-                    !requestCancelled &&
-                    routeRide?.rideStatus.acceptsTripOfferFromRequest == true,
-                counterpartImageUrl:
-                    mine ? null : conversation?.counterpart?.profileImageUrl,
-                routeRide: routeRide,
-                onSendOffer: onSendOfferFromRequest == null
-                    ? null
-                    : () => onSendOfferFromRequest!(message),
-              )
-            else
-              _MessageBubble(
-                message: message,
-                mine: mine,
-                counterpartImageUrl:
-                    mine ? null : conversation?.counterpart?.profileImageUrl,
-              ),
+            isNewest ? FadeSlideIn(offsetY: 8, child: bubble) : bubble,
           ],
         );
       },
@@ -1724,425 +931,6 @@ class _DayHeader extends StatelessWidget {
       ),
     );
   }
-}
-
-class _TripRequestMessageCard extends StatelessWidget {
-  const _TripRequestMessageCard({
-    required this.message,
-    required this.mine,
-    required this.canSendOffer,
-    this.counterpartImageUrl,
-    this.routeRide,
-    this.onSendOffer,
-  });
-
-  final RideMessageModel message;
-  final bool mine;
-  final bool canSendOffer;
-  final String? counterpartImageUrl;
-  final ActiveRideModel? routeRide;
-  final VoidCallback? onSendOffer;
-
-  static final RegExp _tripRequestTextPattern = RegExp(
-    r'^trip request:\s*([0-9]+(?:[.,][0-9]+)?)\s*([a-zA-Z]{3})?',
-    caseSensitive: false,
-  );
-
-  static double? _priceFromText(String text) {
-    final RegExpMatch? match = _tripRequestTextPattern.firstMatch(text.trim());
-    if (match == null) return null;
-    return double.tryParse((match.group(1) ?? '').replaceAll(',', '.'));
-  }
-
-  static String? _currencyFromText(String text) {
-    final RegExpMatch? match = _tripRequestTextPattern.firstMatch(text.trim());
-    final String? currency = match?.group(2)?.trim();
-    return currency == null || currency.isEmpty ? null : currency;
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final Map<String, dynamic> metadata =
-        message.metadata ?? const <String, dynamic>{};
-    final double? price = metadata['proposedPrice'] is num
-        ? (metadata['proposedPrice'] as num).toDouble()
-        : double.tryParse((metadata['proposedPrice'] ?? '').toString()) ??
-            _priceFromText(message.text);
-    final String currency =
-        (metadata['currency'] ?? _currencyFromText(message.text) ?? 'AED')
-            .toString()
-            .trim()
-            .toUpperCase();
-    final String note = (metadata['note'] ?? '').toString().trim();
-    return Align(
-      alignment: mine ? Alignment.centerRight : Alignment.centerLeft,
-      child: Padding(
-        padding: EdgeInsets.only(bottom: mine ? 0 : 10),
-        child: Stack(
-          clipBehavior: Clip.none,
-          children: <Widget>[
-            _buildCard(context, metadata, price, currency, note),
-            if (!mine)
-              Positioned(
-                left: 20,
-                bottom: -10,
-                child: CircleAvatar(
-                  radius: 14,
-                  backgroundColor: Colors.white,
-                  child: CircleAvatar(
-                    radius: 12,
-                    backgroundColor: primaryColor.withValues(alpha: 0.12),
-                    backgroundImage: counterpartImageUrl != null &&
-                            counterpartImageUrl!.isNotEmpty
-                        ? NetworkImage(counterpartImageUrl!)
-                        : null,
-                    child: counterpartImageUrl == null ||
-                            counterpartImageUrl!.isEmpty
-                        ? const Icon(Icons.person_rounded,
-                            size: 14, color: primaryColor)
-                        : null,
-                  ),
-                ),
-              ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildCard(
-    BuildContext context,
-    Map<String, dynamic> metadata,
-    double? price,
-    String currency,
-    String note,
-  ) {
-    String address(Object? value, String fallback) {
-      if (value is Map) {
-        final String text = (value['address'] ?? '').toString().trim();
-        if (text.isNotEmpty) return text;
-      }
-      return fallback;
-    }
-
-    final Map<String, dynamic>? textPickup =
-        _RideChatScreenState._tripRequestPointFromText(message.text, 'Pickup');
-    final Map<String, dynamic>? textDestination =
-        _RideChatScreenState._tripRequestPointFromText(
-      message.text,
-      'Destination',
-    );
-    final String pickup = address(
-      metadata['pickup'] ?? textPickup,
-      routeRide?.pickup?.address.trim().isNotEmpty == true
-          ? routeRide!.pickup!.address
-          : 'Pickup location',
-    );
-    final String destination = address(
-      metadata['destination'] ?? textDestination,
-      routeRide?.destination?.address.trim().isNotEmpty == true
-          ? routeRide!.destination!.address
-          : 'Destination',
-    );
-    final bool cancelled = message.isCancelledTripRequest;
-    final double cardWidth =
-        (MediaQuery.sizeOf(context).width - 92).clamp(280.0, 560.0).toDouble();
-    return Container(
-      width: cardWidth,
-      margin: EdgeInsets.fromLTRB(mine ? 12 : 58, 6, mine ? 18 : 12, 18),
-      decoration: BoxDecoration(
-        color: const Color(0xFFFCFCFC),
-        borderRadius: BorderRadius.circular(22),
-        border: Border.all(color: primaryColor.withValues(alpha: 0.22)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: <Widget>[
-          Container(
-            height: 54,
-            padding: const EdgeInsets.symmetric(horizontal: 20),
-            decoration: BoxDecoration(
-              color: const Color(0xFFFCFCFC),
-              borderRadius: const BorderRadius.vertical(
-                top: Radius.circular(22),
-              ),
-              border: Border(
-                bottom: BorderSide(
-                  color: primaryColor.withValues(alpha: 0.18),
-                ),
-              ),
-            ),
-            child: const Row(
-              children: <Widget>[
-                Expanded(
-                  child: Text(
-                    'Trip Update',
-                    style: TextStyle(
-                      color: primaryColor,
-                      fontWeight: FontWeight.w500,
-                      fontSize: 20,
-                    ),
-                  ),
-                ),
-                Icon(Icons.directions_car_filled_rounded,
-                    color: Color(0xFF5E3D40), size: 24),
-              ],
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(20, 22, 20, 20),
-            child: Column(
-              children: <Widget>[
-                _TripUpdateRouteRow(
-                  icon: Icons.my_location_rounded,
-                  title: 'Pickup',
-                  value: pickup,
-                ),
-                const SizedBox(height: 10),
-                _TripUpdateRouteRow(
-                  icon: Icons.location_on_outlined,
-                  title: 'Destination',
-                  value: destination,
-                ),
-                if (price != null || note.isNotEmpty) ...<Widget>[
-                  const SizedBox(height: 10),
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: <Widget>[
-                      const SizedBox(width: 38),
-                      Expanded(
-                        child: Text(
-                          <String>[
-                            if (price != null)
-                              '${price.toStringAsFixed(2)} $currency',
-                            if (note.isNotEmpty) note,
-                          ].join(' - '),
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            color: text2Color,
-                            fontSize: 12,
-                            height: 1.25,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ],
-            ),
-          ),
-          if (cancelled)
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.fromLTRB(20, 12, 20, 14),
-              decoration: BoxDecoration(
-                border: Border(
-                  top: BorderSide(
-                    color: primaryColor.withValues(alpha: 0.18),
-                  ),
-                ),
-              ),
-              child: Row(
-                children: <Widget>[
-                  Icon(
-                    Icons.block_rounded,
-                    size: 18,
-                    color: text2Color.withValues(alpha: 0.9),
-                  ),
-                  const SizedBox(width: 8),
-                  const Expanded(
-                    child: Text(
-                      'Cancelled by new request',
-                      style: TextStyle(
-                        color: text2Color,
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            )
-          else if (canSendOffer)
-            Container(
-              padding: const EdgeInsets.fromLTRB(20, 16, 20, 18),
-              decoration: BoxDecoration(
-                border: Border(
-                  top: BorderSide(
-                    color: primaryColor.withValues(alpha: 0.18),
-                  ),
-                ),
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: <Widget>[
-                  OutlinedButton(
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: textColor,
-                      minimumSize: const Size(116, 48),
-                      side: BorderSide(
-                        color: primaryColor.withValues(alpha: 0.48),
-                      ),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(26),
-                      ),
-                    ),
-                    onPressed: () => _showTripRequestDetails(
-                      context,
-                      pickup: pickup,
-                      destination: destination,
-                      price: price,
-                      currency: currency,
-                      note: note,
-                    ),
-                    child: const Text('Details'),
-                  ),
-                  const SizedBox(width: 10),
-                  FilledButton(
-                    style: FilledButton.styleFrom(
-                      backgroundColor: primaryColor,
-                      foregroundColor: Colors.white,
-                      minimumSize: const Size(116, 48),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(26),
-                      ),
-                    ),
-                    onPressed: onSendOffer,
-                    child: const Text('Confirm'),
-                  ),
-                ],
-              ),
-            ),
-          if (message.createdAt != null) ...<Widget>[
-            Padding(
-              padding: EdgeInsets.fromLTRB(
-                12,
-                canSendOffer ? 0 : 0,
-                12,
-                canSendOffer ? 8 : 10,
-              ),
-              child: Align(
-                alignment: Alignment.centerRight,
-                child: Text(
-                  DateFormat.Hm().format(message.createdAt!.toLocal()),
-                  style: const TextStyle(color: text2Color, fontSize: 11),
-                ),
-              ),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-
-  void _showTripRequestDetails(
-    BuildContext context, {
-    required String pickup,
-    required String destination,
-    required double? price,
-    required String currency,
-    required String note,
-  }) {
-    showModalBottomSheet<void>(
-      context: context,
-      showDragHandle: true,
-      builder: (BuildContext sheetContext) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(20, 4, 20, 24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: <Widget>[
-              Text(
-                'Trip Update',
-                style: Theme.of(sheetContext).textTheme.titleLarge?.copyWith(
-                      fontWeight: FontWeight.w800,
-                    ),
-              ),
-              const SizedBox(height: 16),
-              _TripUpdateRouteRow(
-                icon: Icons.my_location_rounded,
-                title: 'Pickup',
-                value: pickup,
-              ),
-              const SizedBox(height: 12),
-              _TripUpdateRouteRow(
-                icon: Icons.location_on_outlined,
-                title: 'Destination',
-                value: destination,
-              ),
-              if (price != null) ...<Widget>[
-                const SizedBox(height: 16),
-                Text(
-                  '${price.toStringAsFixed(2)} $currency',
-                  style: Theme.of(sheetContext).textTheme.titleMedium?.copyWith(
-                        color: primaryColor,
-                        fontWeight: FontWeight.w800,
-                      ),
-                ),
-              ],
-              if (note.isNotEmpty) ...<Widget>[
-                const SizedBox(height: 10),
-                Text(note),
-              ],
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _TripUpdateRouteRow extends StatelessWidget {
-  const _TripUpdateRouteRow({
-    required this.icon,
-    required this.title,
-    required this.value,
-  });
-
-  final IconData icon;
-  final String title;
-  final String value;
-
-  @override
-  Widget build(BuildContext context) => Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: <Widget>[
-          SizedBox(
-            width: 30,
-            child: Icon(icon, color: primaryColor, size: 30),
-          ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: <Widget>[
-                Text(
-                  title,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w600,
-                    fontSize: 18,
-                    color: textColor,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  value,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: Color(0xFF4B3F42),
-                    fontSize: 15,
-                    height: 1.2,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      );
 }
 
 class _MessageBubble extends StatelessWidget {

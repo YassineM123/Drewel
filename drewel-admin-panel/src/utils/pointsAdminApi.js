@@ -43,6 +43,14 @@ export const getPointTransactions = (params, signal) =>
     signal,
   });
 
+export const getPointsAdminAudits = (params, signal) =>
+  request({
+    method: "GET",
+    url: `${API_URL}/admin/points/audits`,
+    params: compactParams(params),
+    signal,
+  });
+
 export const getPurchaseRequests = (params, signal) =>
   request({
     method: "GET",

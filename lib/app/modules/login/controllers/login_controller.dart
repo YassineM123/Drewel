@@ -28,6 +28,7 @@ class LoginController extends GetxController {
   final count = 0.obs;
   final showPhoneOtpLoading = false.obs;
   final showWhatsAppOtpLoading = false.obs;
+  final consentAccepted = false.obs;
   String type = '';
   bool get isAnyLoading =>
       showPhoneOtpLoading.value || showWhatsAppOtpLoading.value;
@@ -112,6 +113,10 @@ class LoginController extends GetxController {
 
   Future<void> clickOnWhatsAppLoginButton() async {
     if (isAnyLoading) return;
+    if (!consentAccepted.value) {
+      CommonWidgets.snackBarView(title: StringConstants.consentRequired);
+      return;
+    }
     if (mobileController.text.trim().isEmpty) {
       CommonWidgets.snackBarView(title: 'Phone number is required...');
       return;

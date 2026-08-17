@@ -9,9 +9,11 @@ const AccountSettings = () => {
     <main className="app-content">
       <div className="app-title tile p-3">
         <div>
+          <span className="points-eyebrow">Governance</span>
           <h1 className="">
             <span className="mr-4 fw-bold">&nbsp; Account Settings</span>
           </h1>
+          <p className="mb-0">Manage admin credentials and account access.</p>
         </div>
       </div>
 

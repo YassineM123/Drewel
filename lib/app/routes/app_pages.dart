@@ -28,9 +28,6 @@ import '../modules/user_register/views/user_register_view.dart';
 import '../modules/user_type/bindings/user_type_binding.dart';
 import '../modules/user_type/views/user_type_view.dart';
 import '../modules/communication/controllers/call_state_controller.dart';
-import '../modules/communication/views/active_call_screen.dart';
-import '../modules/communication/views/incoming_call_screen.dart';
-import '../modules/communication/views/outgoing_call_screen.dart';
 import '../modules/communication/views/ride_chat_screen.dart';
 import '../modules/messages/bindings/messages_binding.dart';
 import '../modules/messages/views/messages_view.dart';
@@ -126,11 +123,6 @@ class AppPages {
       binding: DriverAccountBinding(),
     ),
     GetPage(
-      name: _Paths.DRIVER_CALL_HISTORY,
-      page: () => const DriverCallHistoryView(),
-      binding: DriverAccountBinding(),
-    ),
-    GetPage(
       name: _Paths.DRIVER_SETTINGS,
       page: () => const DriverSettingsView(),
       binding: DriverAccountBinding(),
@@ -196,21 +188,6 @@ class AppPages {
       binding: DocumentsBinding(),
     ),
     GetPage(
-      name: _Paths.INCOMING_CALL,
-      page: () => const IncomingCallScreen(),
-      binding: CommunicationBinding(),
-    ),
-    GetPage(
-      name: _Paths.OUTGOING_CALL,
-      page: () => const OutgoingCallScreen(),
-      binding: CommunicationBinding(),
-    ),
-    GetPage(
-      name: _Paths.ACTIVE_CALL,
-      page: () => const ActiveCallScreen(),
-      binding: CommunicationBinding(),
-    ),
-    GetPage(
       name: _Paths.RIDE_CHAT,
       page: () => const RideChatScreen(),
       binding: CommunicationBinding(),
@@ -258,11 +235,6 @@ class AppPages {
     GetPage(
       name: _Paths.RIDE_DETAILS,
       page: () => const RideDetailsView(),
-      binding: PassengerAccountBinding(),
-    ),
-    GetPage(
-      name: _Paths.CALL_HISTORY,
-      page: () => const CallHistoryView(),
       binding: PassengerAccountBinding(),
     ),
     GetPage(

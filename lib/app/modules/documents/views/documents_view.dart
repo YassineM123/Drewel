@@ -8,6 +8,7 @@ import 'package:get/get.dart';
 import 'package:responsive_sizer/responsive_sizer.dart';
 
 import '../../../../common/colors.dart';
+import '../../../../common/authenticated_image_url.dart';
 import '../../../../common/common_widgets.dart';
 import '../../../../common/drewel_app_bar.dart';
 import '../../../../common/drewel_pop_scope.dart';
@@ -377,7 +378,7 @@ class _StatusChip extends StatelessWidget {
       );
 }
 
-class _DocumentPreview extends StatelessWidget {
+class _DocumentPreview extends StatefulWidget {
   const _DocumentPreview({
     required this.documentUrl,
     required this.selectedBytes,
@@ -392,8 +393,28 @@ class _DocumentPreview extends StatelessWidget {
   final bool isBackImage;
   final bool isRequired;
 
+  @override
+  State<_DocumentPreview> createState() => _DocumentPreviewState();
+}
+
+class _DocumentPreviewState extends State<_DocumentPreview> {
+  late String _resolvedUrl = widget.documentUrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _resolveUrl();
+  }
+
+  Future<void> _resolveUrl() async {
+    final String resolved =
+        await AuthenticatedImageUrl.withToken(widget.documentUrl);
+    if (!mounted || resolved == _resolvedUrl) return;
+    setState(() => _resolvedUrl = resolved);
+  }
+
   bool get _isNetworkUrl {
-    final Uri? uri = Uri.tryParse(documentUrl.trim());
+    final Uri? uri = Uri.tryParse(_resolvedUrl.trim());
     return uri != null &&
         uri.hasScheme &&
         (uri.scheme == 'http' || uri.scheme == 'https');
@@ -401,12 +422,12 @@ class _DocumentPreview extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (selectedBytes != null) {
+    if (widget.selectedBytes != null) {
       return Stack(
         alignment: Alignment.center,
         children: <Widget>[
           Image.memory(
-            selectedBytes!,
+            widget.selectedBytes!,
             height: 130.px,
             width: double.infinity,
             fit: BoxFit.cover,
@@ -420,24 +441,24 @@ class _DocumentPreview extends StatelessWidget {
       );
     }
 
-    if (localFile != null && !kIsWeb) {
-      if (!localFile!.existsSync()) {
-        return _DocumentErrorState(isRequired: isRequired);
+    if (widget.localFile != null && !kIsWeb) {
+      if (!widget.localFile!.existsSync()) {
+        return _DocumentErrorState(isRequired: widget.isRequired);
       }
       return Image.file(
-        localFile!,
+        widget.localFile!,
         height: 130.px,
         width: double.infinity,
         fit: BoxFit.cover,
         errorBuilder: (_, __, ___) =>
-            _DocumentErrorState(isRequired: isRequired),
+            _DocumentErrorState(isRequired: widget.isRequired),
       );
     }
 
-    if (documentUrl.trim().isNotEmpty && _isNetworkUrl) {
+    if (_resolvedUrl.trim().isNotEmpty && _isNetworkUrl) {
       if (kIsWeb) {
         return Image.network(
-          documentUrl,
+          _resolvedUrl,
           height: 130.px,
           width: double.infinity,
           fit: BoxFit.cover,
@@ -448,12 +469,12 @@ class _DocumentPreview extends StatelessWidget {
                   height: 130,
                   child: Center(child: CircularProgressIndicator()),
                 ),
-          errorBuilder: (_, __, ___) =>
-              _DocumentErrorState(isRequired: isRequired, uploaded: true),
+          errorBuilder: (_, __, ___) => _DocumentErrorState(
+              isRequired: widget.isRequired, uploaded: true),
         );
       }
       return CachedNetworkImage(
-        imageUrl: documentUrl,
+        imageUrl: _resolvedUrl,
         height: 130.px,
         width: double.infinity,
         fit: BoxFit.cover,
@@ -461,13 +482,13 @@ class _DocumentPreview extends StatelessWidget {
           height: 130,
           child: Center(child: CircularProgressIndicator()),
         ),
-        errorWidget: (context, error, stackTrace) =>
-            _DocumentErrorState(isRequired: isRequired, uploaded: true),
+        errorWidget: (context, error, stackTrace) => _DocumentErrorState(
+            isRequired: widget.isRequired, uploaded: true),
       );
     }
 
-    if (documentUrl.trim().isNotEmpty && !kIsWeb) {
-      final File file = File(documentUrl);
+    if (_resolvedUrl.trim().isNotEmpty && !kIsWeb) {
+      final File file = File(_resolvedUrl);
       if (file.existsSync()) {
         return Image.file(
           file,
@@ -475,7 +496,7 @@ class _DocumentPreview extends StatelessWidget {
           width: double.infinity,
           fit: BoxFit.cover,
           errorBuilder: (_, __, ___) =>
-              _DocumentErrorState(isRequired: isRequired),
+              _DocumentErrorState(isRequired: widget.isRequired),
         );
       }
     }
@@ -483,7 +504,7 @@ class _DocumentPreview extends StatelessWidget {
     return Container(
       height: 130.px,
       width: double.infinity,
-      color: isBackImage
+      color: widget.isBackImage
           ? Colors.orange.withValues(alpha: 0.05)
           : Colors.black.withValues(alpha: 0.03),
       alignment: Alignment.center,
@@ -493,13 +514,13 @@ class _DocumentPreview extends StatelessWidget {
           Icon(
             Icons.cloud_upload_outlined,
             size: 30.px,
-            color: isBackImage ? Colors.orange : Colors.black54,
+            color: widget.isBackImage ? Colors.orange : Colors.black54,
           ),
           SizedBox(height: 5.px),
           Text(
             StringConstants.uploadHere,
             style: MyTextStyle.titleStyle14b.copyWith(
-              color: isBackImage ? Colors.orange : Colors.black54,
+              color: widget.isBackImage ? Colors.orange : Colors.black54,
             ),
           ),
         ],

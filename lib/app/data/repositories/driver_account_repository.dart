@@ -5,36 +5,9 @@ import 'package:drewel/common/http_methods.dart';
 
 import '../apis/api_constants/api_url_constants.dart';
 import '../apis/api_models/active_ride_model.dart';
-import '../apis/api_models/call_session_model.dart';
 import '../apis/api_models/get_add_driver_details_model.dart';
 import '../apis/api_models/passenger_account_models.dart';
 import '../apis/communication_api_client.dart';
-
-class DriverCallHistoryItem {
-  const DriverCallHistoryItem({
-    required this.call,
-    required this.direction,
-    required this.counterpartName,
-    required this.rideReference,
-    required this.rideStatus,
-  });
-
-  final CallSessionModel call;
-  final String direction;
-  final String counterpartName;
-  final String rideReference;
-  final String rideStatus;
-
-  factory DriverCallHistoryItem.fromJson(Map<String, dynamic> json) =>
-      DriverCallHistoryItem(
-        call: CallSessionModel.fromJson(json),
-        direction: '${json['direction'] ?? ''}',
-        counterpartName:
-            '${(json['counterpart'] as Map?)?['displayName'] ?? 'Passenger'}',
-        rideReference: '${json['rideReference'] ?? ''}',
-        rideStatus: '${json['rideStatus'] ?? ''}',
-      );
-}
 
 class DriverAccountRepository {
   DriverAccountRepository(this._api);
@@ -117,17 +90,6 @@ class DriverAccountRepository {
         .toList(growable: false);
   }
 
-  Future<List<DriverCallHistoryItem>> listCalls() async {
-    final Map<String, dynamic> response =
-        await _api.get('${ApiUrlConstants.baseUrl}calls?limit=50');
-    final List<dynamic> raw = response['calls'] as List? ?? const <dynamic>[];
-    return raw
-        .whereType<Map>()
-        .map((Map item) =>
-            DriverCallHistoryItem.fromJson(Map<String, dynamic>.from(item)))
-        .toList(growable: false);
-  }
-
   Future<PassengerPreferenceModel> getPreferences() async {
     final Map<String, dynamic> response =
         await _api.get('${ApiUrlConstants.baseUrl}account/preferences');
@@ -155,10 +117,23 @@ class DriverAccountRepository {
   }
 
   Future<LegalContentModel> legal(String type) async {
-    final Map<String, dynamic> response =
-        await _api.get('${ApiUrlConstants.baseUrl}account/legal/$type');
-    final dynamic raw = response['legal'] ?? response['data'];
-    return LegalContentModel.fromJson(Map<String, dynamic>.from(raw as Map));
+    try {
+      final Map<String, dynamic> response =
+          await _api.get('${ApiUrlConstants.baseUrl}account/legal/$type');
+      final dynamic raw = response['legal'] ?? response['data'];
+      final LegalContentModel legal =
+          LegalContentModel.fromJson(Map<String, dynamic>.from(raw as Map));
+      return legal.body.trim().isEmpty
+          ? LegalContentModel.fallback(type)
+          : legal;
+    } on CommunicationApiException catch (error) {
+      if (error.statusCode == 404 ||
+          error.code == 'API_ROUTE_NOT_FOUND' ||
+          error.message.contains('Cannot GET')) {
+        return LegalContentModel.fallback(type);
+      }
+      rethrow;
+    }
   }
 
   Future<void> reportProblem({

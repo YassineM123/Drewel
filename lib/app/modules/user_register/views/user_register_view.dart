@@ -30,19 +30,6 @@ class UserRegisterView extends GetView<UserRegisterController> {
             ),
             backgroundColor: primaryColor,
             resizeToAvoidBottomInset: false,
-            floatingActionButtonLocation:
-                FloatingActionButtonLocation.centerDocked,
-            floatingActionButton: CommonWidgets.commonElevatedButton(
-                onPressed: () {
-                  controller.clickOnFindNowButton();
-                },
-                context: context,
-                child: Text(
-                  StringConstants.findNow,
-                  style: MyTextStyle.titleStyle16bw,
-                ),
-                buttonMargin:
-                    EdgeInsets.symmetric(vertical: 0.px, horizontal: 15.px)),
             body: Column(
               mainAxisAlignment: MainAxisAlignment.end,
               crossAxisAlignment: CrossAxisAlignment.center,
@@ -113,8 +100,9 @@ class UserRegisterView extends GetView<UserRegisterController> {
                                                               .value ==
                                                           index
                                                       ? primaryColor
-                                                      : Colors.black
-                                                          .withOpacity(0.2))),
+                                                      : Colors.black.withValues(
+                                                          alpha: 0.2,
+                                                        ))),
                                           child: Text(
                                             controller.cityList[index],
                                             style: controller.cityIndex.value ==
@@ -169,14 +157,16 @@ class UserRegisterView extends GetView<UserRegisterController> {
                                                               .value ==
                                                           index
                                                       ? primaryColor
-                                                      : Colors.black
-                                                          .withOpacity(0.2))),
+                                                      : Colors.black.withValues(
+                                                          alpha: 0.2,
+                                                        ))),
                                           child: CommonWidgets.appIcons(
                                               assetName: controller
                                                           .transportList[index]
                                                       ['image'] ??
                                                   '',
-                                              height: index == 7 ? 44.px : 32.px,
+                                              height:
+                                                  index == 7 ? 44.px : 32.px,
                                               width: index == 7 ? 70.px : 50.px,
                                               color: index == 0
                                                   ? Colors.black
@@ -280,7 +270,18 @@ class UserRegisterView extends GetView<UserRegisterController> {
                             ),
                             SizedBox(
                               height: 10.px,
-                            )
+                            ),
+                            CommonWidgets.commonElevatedButton(
+                              onPressed: () {
+                                controller.clickOnFindNowButton();
+                              },
+                              context: context,
+                              child: Text(
+                                StringConstants.findNow,
+                                style: MyTextStyle.titleStyle16bw,
+                              ),
+                            ),
+                            SizedBox(height: 10.px),
                           ],
                         ),
                       )),

@@ -34,12 +34,8 @@
 	<string>Drewel uses your photo library to select profile photos and required driver documents.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Drewel uses your microphone so you can speak securely with your assigned driver or passenger during an active ride.</string>
-	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
-	<string>This app requires your location at all times to function properly.</string>
-	<key>NSLocationAlwaysUsageDescription</key>
-	<string>We need access to your location to provide accurate maps and directions.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>Location access is required for navigation and nearby features.</string>
+	<string>Drewel uses your location while the app is in use to show your position, find nearby drivers, provide navigation, and keep your ride safe and on track.</string>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
 	<key>UILaunchStoryboardName</key>

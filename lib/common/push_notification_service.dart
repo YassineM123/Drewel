@@ -51,12 +51,6 @@ class PushNotificationService extends GetxService {
       importance: Importance.max,
     ),
     AndroidNotificationChannel(
-      'drewel_calls',
-      'Calls',
-      description: 'Incoming Drewel voice calls.',
-      importance: Importance.max,
-    ),
-    AndroidNotificationChannel(
       'drewel_messages',
       'Messages',
       description: 'New messages in an active ride chat.',
@@ -80,31 +74,19 @@ class PushNotificationService extends GetxService {
   static AndroidNotificationChannel channelForType(String type) {
     final String t = type.toUpperCase();
     if (t == 'RIDE_REQUEST' || t == 'NEW_RIDE') return channels[0];
-    if (t == 'CALL' ||
-        t == 'INCOMING_CALL' ||
-        t == 'MISSED_CALL' ||
-        t == 'CALL_MISSED') {
-      return channels[1];
-    }
-    if (t == 'RIDE_MESSAGE' || t == 'CHAT') return channels[2];
+    if (t == 'RIDE_MESSAGE' || t == 'CHAT') return channels[1];
     if (t.startsWith('RIDE') ||
         t.startsWith('DRIVER_ARRIVED') ||
         t.startsWith('TRIP_OFFER') ||
         t.startsWith('OFFER')) {
-      return channels[3];
+      return channels[2];
     }
-    return channels[4];
+    return channels[3];
   }
 
   static String soundAssetForType(String type) {
     final String t = type.toUpperCase();
     if (t == 'RIDE_REQUEST' || t == 'NEW_RIDE') return 'drewel_ride_request';
-    if (t == 'CALL' ||
-        t == 'INCOMING_CALL' ||
-        t == 'MISSED_CALL' ||
-        t == 'CALL_MISSED') {
-      return 'drewel_call';
-    }
     if (t == 'RIDE_MESSAGE' || t == 'CHAT') return 'drewel_message';
     if (t == 'DRIVER_ARRIVED') return 'drewel_driver_arrived';
     if (t == 'POINTS_LOW_BALANCE' || t == 'POINTS_INSUFFICIENT_BALANCE') {

@@ -51,9 +51,9 @@ video {
 }
 
 .custom-btn {
-  background: #00489d !important;
+  background: #be1b2c !important;
   color: #fff;
-  border-color: #00489d !important;
+  border-color: #be1b2c !important;
 }
 
 .custom-color-1 {
@@ -92,34 +92,34 @@ video {
 }
 
 .form-check-input:checked {
-  background-color: #00489d !important;
-  border-color: #00489d !important;
+  background-color: #be1b2c !important;
+  border-color: #be1b2c !important;
 }
 
 .form-check-input:focus {
-  border-color: #00489d85 !important;
+  border-color: #be1b2c85 !important;
   filter: grayscale(1);
   outline: 0;
   box-shadow: none;
 }
 
 .ctm-bg-1 {
-  background-color: #00489d;
+  background-color: #be1b2c;
   /* background-image: url(../images/gig.png); */
 }
 
 .ctm-bg-2 {
-  background-color: #00489d;
+  background-color: #7f1020;
   /* background-image: url(../images/gig.png); */
 }
 
 .ctm-bg-3 {
-  background-color: #00489d;
+  background-color: #5b0b15;
   /* background-image: url(../images/gig.png); */
 }
 
 .ctm-bg-4 {
-  background-color: #00489d;
+  background-color: #3a0c12;
   /* background-image: url(../images/gig.png); */
 }
 
@@ -902,3 +902,78 @@ a {
   margin-right: 4px;
 }
 
+.online-driver-kpis {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+  margin-top: 16px;
+}
+
+.online-driver-kpi {
+  padding: 16px;
+  border-left: 4px solid #d8dde6;
+}
+
+.online-driver-kpi span {
+  display: block;
+  color: #687385;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.online-driver-kpi strong {
+  display: block;
+  color: #1b1f24;
+  font-size: 28px;
+  line-height: 1.1;
+  margin-top: 8px;
+}
+
+.online-driver-kpi--success {
+  border-left-color: #1f8a4c;
+}
+
+.online-driver-kpi--warning {
+  border-left-color: #c47a00;
+}
+
+.online-driver-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+.online-driver-reasons {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.online-driver-reasons small {
+  max-width: 180px;
+  color: #687385;
+  line-height: 1.25;
+}
+
+@media (max-width: 991px) {
+  .online-driver-kpis {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 575px) {
+  .online-driver-kpis {
+    grid-template-columns: 1fr;
+  }
+
+  .online-driver-toolbar {
+    justify-content: stretch;
+  }
+
+  .online-driver-toolbar .form-control {
+    max-width: none !important;
+  }
+}

@@ -60,6 +60,16 @@ const formatDate = (value) => value ? new Intl.DateTimeFormat(undefined, {
   dateStyle: "medium",
   timeStyle: "short",
 }).format(new Date(value)) : "Not available";
+const formatNumber = (value) => Number(value || 0).toLocaleString();
+const compactStatus = (value) => String(value || "not available").replaceAll("_", " ");
+const gpsAge = (driver) => {
+  const seconds = Number(driver?.locationAgeSeconds);
+  if (!Number.isFinite(seconds)) return "No GPS fix";
+  if (seconds < 60) return `${seconds}s ago`;
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m ago`;
+  return `${Math.floor(minutes / 60)}h ${minutes % 60}m ago`;
+};
 
 const getDocumentUrl = (request, document) => {
   const manifestEntry = request?.documents?.find((item) => item.key === document.key);
@@ -380,6 +390,64 @@ const DriverDetail = () => {
               {document.url && <div className="request-document-actions"><button type="button" className="btn btn-sm btn-outline-primary" disabled={Boolean(busyDocument)} aria-busy={busyDocument === `preview-${document.key}`} onClick={(event) => openDocument(document, event)}>{busyDocument === `preview-${document.key}` ? "Opening..." : "Preview"}</button><button type="button" className="btn btn-sm btn-outline-secondary" disabled={Boolean(busyDocument)} aria-busy={busyDocument === `download-${document.key}`} onClick={() => downloadDocument(document)}>{busyDocument === `download-${document.key}` ? "Downloading..." : "Download"}</button></div>}
             </article>)}
           </div>
+        </section>
+
+        <section className="tile p-4 request-detail-section" aria-labelledby="driver-operations-title">
+          <div className="request-section-heading">
+            <div><span>Operations</span><h2 id="driver-operations-title">Driver activity</h2></div>
+            <span className={`badge ${request.isDiscoverable ? "badge-success" : "badge-warning"}`}>
+              {request.isDiscoverable ? "DISCOVERABLE" : "NOT DISCOVERABLE"}
+            </span>
+          </div>
+          <dl className="request-info-grid">
+            <div><dt>Availability</dt><dd>{request.availabilityStatus || "Offline"}</dd></div>
+            <div><dt>Presence</dt><dd>{request.presenceStatus || "Offline"}</dd></div>
+            <div><dt>Last GPS</dt><dd>{gpsAge(request)}{request.locationAccuracyM !== null && request.locationAccuracyM !== undefined ? ` / +/-${Math.round(Number(request.locationAccuracyM))}m` : ""}</dd></div>
+            <div><dt>Service area</dt><dd>{request.currentServiceArea || "Not available"}</dd></div>
+            <div><dt>Points available</dt><dd>{formatNumber(request.pointsWallet?.availablePoints)}</dd></div>
+            <div><dt>Reserved points</dt><dd>{formatNumber(request.pointsWallet?.reservedPoints)}</dd></div>
+            <div><dt>Completed rides</dt><dd>{formatNumber(request.rideSummary?.completed)}</dd></div>
+            <div><dt>Pending TripOffers</dt><dd>{formatNumber(request.tripOfferSummary?.pending)}</dd></div>
+          </dl>
+          {!request.isDiscoverable && (
+            <div className="alert alert-warning mt-3" role="status">
+              {(request.discoverabilityReasons || []).map(compactStatus).join(", ") || "Driver is blocked from passenger discovery."}
+            </div>
+          )}
+        </section>
+
+        <section className="tile p-4 request-detail-section" aria-labelledby="driver-recent-title">
+          <div className="request-section-heading"><div><span>Activity</span><h2 id="driver-recent-title">Recent rides and offers</h2></div></div>
+          <div className="request-documents-grid">
+            <article className="request-document-card is-available">
+              <div className="request-document-content">
+                <span>Active ride</span>
+                <h4>{request.rideSummary?.activeRide?.reference || "None"}</h4>
+                <span className="request-document-availability available">{compactStatus(request.rideSummary?.activeRide?.status || "No active ride")}</span>
+              </div>
+            </article>
+            <article className="request-document-card is-available">
+              <div className="request-document-content">
+                <span>TripOffers</span>
+                <h4>{formatNumber(request.tripOfferSummary?.total)} total</h4>
+                <span className="request-document-availability available">{formatNumber(request.tripOfferSummary?.pending)} pending</span>
+              </div>
+            </article>
+          </div>
+          {request.recentRides?.length ? (
+            <ol className="request-history mt-3">
+              {request.recentRides.slice(0, 5).map((ride) => (
+                <li key={ride._id}>
+                  <span className="request-history__dot badge-primary" aria-hidden="true"/>
+                  <div>
+                    <strong>{ride.reference || ride._id} / {compactStatus(ride.status)}</strong>
+                    <span>{ride.pickup?.address || "Pickup not available"} to {ride.destination?.address || "Destination not available"}</span>
+                    <small>{formatDate(ride.updatedAt || ride.requestedAt)}</small>
+                  </div>
+                </li>
+              ))}
+            </ol>
+          ) : <p className="request-muted mt-3">No ride history returned for this driver.</p>}
         </section>
       </div>
 

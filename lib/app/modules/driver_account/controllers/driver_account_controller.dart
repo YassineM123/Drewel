@@ -48,7 +48,6 @@ class DriverAccountController extends GetxController {
 
   final driver = Rxn<Driver>();
   final rides = <ActiveRideModel>[].obs;
-  final calls = <DriverCallHistoryItem>[].obs;
   final preferences = Rxn<PassengerPreferenceModel>();
   final legalContent = Rxn<LegalContentModel>();
   final legalType = ''.obs;
@@ -118,18 +117,14 @@ class DriverAccountController extends GetxController {
       if (driverId.isEmpty) {
         throw const CommunicationApiException('Authentication required.');
       }
-      final results = await Future.wait<dynamic>(<Future<dynamic>>[
-        _repository.getDriver(driverId),
-        _repository.listRides(),
-        _repository.listCalls(),
-        _repository.getPreferences(),
+      final Driver nextDriver = await _repository.getDriver(driverId);
+      driver.value = nextDriver;
+      await _persistDriver(nextDriver);
+      await Future.wait<void>(<Future<void>>[
+        _refreshRides(),
+        _refreshPreferences(),
+        _refreshPoints(),
       ]);
-      driver.value = results[0] as Driver;
-      rides.assignAll(results[1] as List<ActiveRideModel>);
-      calls.assignAll(results[2] as List<DriverCallHistoryItem>);
-      preferences.value = results[3] as PassengerPreferenceModel;
-      await _persistDriver(driver.value);
-      await pointsController?.refreshAll(silent: true);
     } on CommunicationApiException catch (catchError) {
       error.value = catchError.message;
     } catch (_) {
@@ -137,6 +132,24 @@ class DriverAccountController extends GetxController {
     } finally {
       loading.value = false;
     }
+  }
+
+  Future<void> _refreshRides() async {
+    try {
+      rides.assignAll(await _repository.listRides());
+    } catch (_) {}
+  }
+
+  Future<void> _refreshPreferences() async {
+    try {
+      preferences.value = await _repository.getPreferences();
+    } catch (_) {}
+  }
+
+  Future<void> _refreshPoints() async {
+    try {
+      await pointsController?.refreshAll(silent: true);
+    } catch (_) {}
   }
 
   Future<void> saveProfile({

@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../../../common/colors.dart';
+import '../../../../common/motion.dart';
 
 class DriverHomeBottomBar extends StatelessWidget {
   const DriverHomeBottomBar({
@@ -19,6 +21,11 @@ class DriverHomeBottomBar extends StatelessWidget {
   final Widget activeRide;
   final Widget rideRequests;
   final Widget communication;
+
+  void _toggle() {
+    HapticFeedback.mediumImpact();
+    onToggleOnline?.call();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -52,11 +59,13 @@ class DriverHomeBottomBar extends StatelessWidget {
                     button: true,
                     label: label,
                     enabled: !isLoading,
-                    child: InkWell(
-                      key: const Key('driver-online-button'),
+                    child: AnimatedPressable(
+                      onTap: isLoading ? null : _toggle,
                       borderRadius: BorderRadius.circular(14),
-                      onTap: isLoading ? null : onToggleOnline,
-                      child: Ink(
+                      child: AnimatedContainer(
+                        key: const Key('driver-online-button'),
+                        duration: MotionDuration.deliberate,
+                        curve: MotionCurve.standard,
                         padding: const EdgeInsets.symmetric(
                           horizontal: 18,
                           vertical: 12,
@@ -68,7 +77,9 @@ class DriverHomeBottomBar extends StatelessWidget {
                         ),
                         child: Row(
                           children: <Widget>[
-                            Container(
+                            AnimatedContainer(
+                              duration: MotionDuration.deliberate,
+                              curve: MotionCurve.standard,
                               width: 36,
                               height: 36,
                               decoration: BoxDecoration(
@@ -91,20 +102,36 @@ class DriverHomeBottomBar extends StatelessWidget {
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 mainAxisSize: MainAxisSize.min,
                                 children: <Widget>[
-                                  Text(
-                                    label,
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.w800,
-                                      fontSize: 16,
-                                      color: content,
-                                    ),
+                                  Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: <Widget>[
+                                      Text(
+                                        label,
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.w800,
+                                          fontSize: 16,
+                                          color: content,
+                                        ),
+                                      ),
+                                      if (isOnline) ...<Widget>[
+                                        const SizedBox(width: 8),
+                                        AnimatedStatusDot(
+                                          color: content,
+                                          size: 8,
+                                        ),
+                                      ],
+                                    ],
                                   ),
-                                  Text(
-                                    subtitle,
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.w500,
-                                      fontSize: 12,
-                                      color: content.withValues(alpha: 0.7),
+                                  AnimatedSwitcher(
+                                    duration: MotionDuration.normal,
+                                    child: Text(
+                                      subtitle,
+                                      key: ValueKey<String>(subtitle),
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.w500,
+                                        fontSize: 12,
+                                        color: content.withValues(alpha: 0.7),
+                                      ),
                                     ),
                                   ),
                                 ],
@@ -123,8 +150,7 @@ class DriverHomeBottomBar extends StatelessWidget {
                             else
                               Switch.adaptive(
                                 value: isOnline,
-                                onChanged:
-                                    isLoading ? null : (_) => onToggleOnline?.call(),
+                                onChanged: isLoading ? null : (_) => _toggle(),
                                 activeColor: Colors.white,
                                 activeTrackColor: primaryColor,
                                 inactiveThumbColor: Colors.white,

@@ -223,3 +223,16 @@ test("admin ride operations are authenticated and refunds are capped", () => {
   assert.match(walletService, /RIDE_CHARGE_ALREADY_REFUNDED/);
   assert.match(walletService, /refundPoints > refundablePoints/);
 });
+
+test("admin ride list exposes operational aliases and bounded sorting", () => {
+  const controller = fs.readFileSync(
+    new URL("../src/controllers/adminRideController.js", import.meta.url),
+    "utf8"
+  );
+  assert.match(controller, /live:\s*\[/);
+  assert.match(controller, /stuck:\s*ACTIVE_RIDE_STATUSES/);
+  assert.match(controller, /status === "stuck"/);
+  assert.match(controller, /sortFields = new Set/);
+  assert.match(controller, /INVALID_RIDE_SORT/);
+  assert.match(controller, /\.sort\(\{ \[sortKey\]: sortDir, _id: sortDir \}\)/);
+});

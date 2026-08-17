@@ -52,7 +52,6 @@ const preferenceDto = (preference) => ({
   notifications: {
     rideUpdates: preference.notifications?.rideUpdates !== false,
     messages: preference.notifications?.messages !== false,
-    calls: preference.notifications?.calls !== false,
     accountUpdates: preference.notifications?.accountUpdates !== false,
     sounds: preference.notifications?.sounds !== false,
     vibration: preference.notifications?.vibration !== false,
@@ -75,6 +74,19 @@ const normalizePlaceInput = (body = {}) => {
   if (!Number.isFinite(long) || long < -180 || long > 180) throw new AccountError("Valid longitude is required", 400, "INVALID_LONGITUDE");
   return { type, name, address, lat, long, category };
 };
+
+const defaultLegalBody = (type) =>
+  type === "privacy"
+    ? [
+        "Drewel uses account, contact, location, ride, payment-status, communication, and device data to provide the transport marketplace safely.",
+        "Location data is used for pickup, destination, driver discovery, route, safety, and support workflows. Secure ride chat is used only for Drewel ride coordination and support.",
+        "Drewel limits access to personal data to authorized operations, support, security, and administration workflows. Contact support if you need help with account data or privacy questions.",
+      ].join("\n\n")
+    : [
+        "By using Drewel, passengers and drivers agree to use the marketplace honestly, safely, and only for lawful transport coordination.",
+        "Passengers send ride requests, and drivers send official trip offers through Drewel. Prices, ride lifecycle changes, points, restrictions, and sensitive actions are controlled by the server.",
+        "Drewel may restrict accounts, cancel unsafe activity, preserve ride and communication evidence, and require driver profile or document review when needed for marketplace safety.",
+      ].join("\n\n");
 
 export const listSavedPlaces = async (req, res) => {
   try {
@@ -146,13 +158,12 @@ export const updatePreferences = async (req, res) => {
       update.language = language;
     }
     if (req.body?.notifications && typeof req.body.notifications === "object") {
-      for (const key of ["rideUpdates", "messages", "calls", "accountUpdates", "sounds", "vibration"]) {
+      for (const key of ["rideUpdates", "messages", "accountUpdates", "sounds", "vibration"]) {
         if (req.body.notifications[key] !== undefined) {
           update[`notifications.${key}`] = req.body.notifications[key] === true;
         }
       }
       update["notifications.rideUpdates"] = true;
-      update["notifications.calls"] = true;
     }
     const preference = await UserPreference.findOneAndUpdate(
       { userId: principal.id },
@@ -209,18 +220,20 @@ export const createSupportReport = async (req, res) => {
 
 export const getLegalContent = async (req, res) => {
   try {
-    await requireAccountOwner(req);
+    // Public by design: the pre-login signup flow must be able to show terms
+    // and privacy content before an account exists.
     const type = String(req.params.type || "").trim().toLowerCase();
     if (!["privacy", "terms"].includes(type)) {
       throw new AccountError("Invalid legal document", 400, "INVALID_LEGAL_TYPE");
     }
+    const envKey = type === "privacy" ? "PRIVACY_CONTENT" : "TERMS_CONTENT";
     return res.json({
       success: true,
       legal: {
         type,
         title: type === "privacy" ? "Privacy" : "Terms & Conditions",
         lastUpdated: process.env.LEGAL_LAST_UPDATED || null,
-        body: process.env[type === "privacy" ? "PRIVACY_CONTENT" : "TERMS_CONTENT"] || "",
+        body: String(process.env[envKey] || "").trim() || defaultLegalBody(type),
       },
     });
   } catch (error) {

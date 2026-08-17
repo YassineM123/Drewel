@@ -102,7 +102,6 @@ class AppNotificationModel {
         'RIDE_DRIVER_CANCELLED' => 'Your driver cancelled',
         'RIDE_PASSENGER_CANCELLED' => 'Passenger cancelled the ride',
         'RIDE_DISPUTED' => 'Ride under review',
-        'CALL_MISSED' => 'Missed call',
         'DRIVER_APPROVED' => 'Application approved',
         'DRIVER_REJECTED' => 'Application not approved',
         'TRIP_OFFER_RECEIVED' => 'New trip offer',
@@ -130,7 +129,6 @@ class AppNotificationModel {
           ? 'drewel://chat/ride?rideId=$id'
           : 'drewel://notifications';
     }
-    if (t == 'CALL_MISSED' || t == 'MISSED_CALL') return 'drewel://call/active';
     if (t == 'DRIVER_APPROVED' || t == 'DRIVER_REJECTED') {
       return 'drewel://driver/status';
     }

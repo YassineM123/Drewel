@@ -10,13 +10,17 @@ import '../../../data/apis/api_models/passenger_account_models.dart';
 import '../../../routes/app_pages.dart';
 import '../controllers/passenger_account_controller.dart';
 
+const Color _pageColor = Color(0xFFF6F7F9);
+const Color _lineColor = Color(0xFFE7E8EC);
+const double _radius = 8;
+
 class PassengerProfileView extends GetView<PassengerAccountController> {
   const PassengerProfileView({super.key});
 
   @override
   Widget build(BuildContext context) => Scaffold(
         appBar: const DrewelAppBar(title: 'Profile', showBackButton: true),
-        backgroundColor: const Color(0xFFFAFAFA),
+        backgroundColor: _pageColor,
         body: SafeArea(
           child: Obx(() {
             if (controller.loading.value && controller.profile.value == null) {
@@ -38,7 +42,7 @@ class PassengerProfileView extends GetView<PassengerAccountController> {
             return RefreshIndicator(
               onRefresh: controller.refreshAll,
               child: ListView(
-                padding: const EdgeInsets.fromLTRB(20, 8, 20, 32),
+                padding: const EdgeInsets.fromLTRB(16, 14, 16, 28),
                 children: <Widget>[
                   _IdentityHeader(profile: profile),
                   const SizedBox(height: 22),
@@ -85,12 +89,6 @@ class PassengerProfileView extends GetView<PassengerAccountController> {
                         title: 'Notifications',
                         subtitle: 'Ride, message and account updates',
                         onTap: () => Get.toNamed(Routes.NOTIFICATIONS),
-                      ),
-                      _MenuRow(
-                        icon: Icons.call_outlined,
-                        title: 'Call History',
-                        subtitle: 'Secure ride communication calls',
-                        onTap: () => Get.toNamed(Routes.CALL_HISTORY),
                       ),
                     ],
                   ),
@@ -162,7 +160,7 @@ class PassengerProfileView extends GetView<PassengerAccountController> {
                       minimumSize: const Size.fromHeight(50),
                       side: const BorderSide(color: primaryColor),
                       shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
+                        borderRadius: BorderRadius.circular(_radius),
                       ),
                     ),
                     onPressed: controller.logout,
@@ -211,10 +209,10 @@ class _EditProfileViewState extends State<EditProfileView> {
   @override
   Widget build(BuildContext context) => Scaffold(
         appBar: const DrewelAppBar(title: 'Edit Profile', showBackButton: true),
-        backgroundColor: const Color(0xFFFAFAFA),
+        backgroundColor: _pageColor,
         body: SafeArea(
           child: ListView(
-            padding: const EdgeInsets.all(20),
+            padding: const EdgeInsets.all(16),
             children: <Widget>[
               Obx(() {
                 final PassengerProfileModel? profile = controller.profile.value;
@@ -262,7 +260,7 @@ class _EditProfileViewState extends State<EditProfileView> {
                     backgroundColor: primaryColor,
                     minimumSize: const Size.fromHeight(52),
                     shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
+                      borderRadius: BorderRadius.circular(_radius),
                     ),
                   ),
                   onPressed: controller.saving.value
@@ -293,7 +291,7 @@ class SavedPlacesView extends GetView<PassengerAccountController> {
   @override
   Widget build(BuildContext context) => Scaffold(
         appBar: const DrewelAppBar(title: 'Saved Places', showBackButton: true),
-        backgroundColor: const Color(0xFFFAFAFA),
+        backgroundColor: _pageColor,
         floatingActionButton: FloatingActionButton(
           backgroundColor: primaryColor,
           foregroundColor: Colors.white,
@@ -305,7 +303,7 @@ class SavedPlacesView extends GetView<PassengerAccountController> {
           return RefreshIndicator(
             onRefresh: controller.refreshAll,
             child: ListView(
-              padding: const EdgeInsets.all(20),
+              padding: const EdgeInsets.all(16),
               children: <Widget>[
                 _PlaceShortcut(
                   title: 'Home',
@@ -458,7 +456,7 @@ class RideHistoryView extends GetView<PassengerAccountController> {
   @override
   Widget build(BuildContext context) => Scaffold(
         appBar: const DrewelAppBar(title: 'Ride History', showBackButton: true),
-        backgroundColor: const Color(0xFFFAFAFA),
+        backgroundColor: _pageColor,
         body: Column(
           children: <Widget>[
             _RideFilters(controller: controller),
@@ -475,7 +473,7 @@ class RideHistoryView extends GetView<PassengerAccountController> {
                 return RefreshIndicator(
                   onRefresh: controller.refreshAll,
                   child: ListView.separated(
-                    padding: const EdgeInsets.all(20),
+                    padding: const EdgeInsets.all(16),
                     itemCount: rides.length,
                     separatorBuilder: (_, __) => const SizedBox(height: 10),
                     itemBuilder: (_, int index) => _RideTile(
@@ -502,9 +500,9 @@ class RideDetailsView extends StatelessWidget {
     final ActiveRideModel ride = Get.arguments as ActiveRideModel;
     return Scaffold(
       appBar: const DrewelAppBar(title: 'Ride Details', showBackButton: true),
-      backgroundColor: const Color(0xFFFAFAFA),
+      backgroundColor: _pageColor,
       body: ListView(
-        padding: const EdgeInsets.all(20),
+        padding: const EdgeInsets.all(16),
         children: <Widget>[
           _InfoBlock('Ride ID', ride.reference ?? ride.id),
           _InfoBlock('Status', _statusLabel(ride.status)),
@@ -542,64 +540,25 @@ class RideDetailsView extends StatelessWidget {
   }
 }
 
-class CallHistoryView extends GetView<PassengerAccountController> {
-  const CallHistoryView({super.key});
-
-  @override
-  Widget build(BuildContext context) => Scaffold(
-        appBar: const DrewelAppBar(title: 'Call History', showBackButton: true),
-        backgroundColor: const Color(0xFFFAFAFA),
-        body: Obx(() {
-          if (controller.calls.isEmpty) {
-            return const _StateMessage(
-              icon: Icons.call_outlined,
-              title: 'No calls yet',
-              message: 'Ride communication call records appear here.',
-            );
-          }
-          return RefreshIndicator(
-            onRefresh: controller.refreshAll,
-            child: ListView.separated(
-              padding: const EdgeInsets.all(20),
-              itemCount: controller.calls.length,
-              separatorBuilder: (_, __) => const Divider(height: 1),
-              itemBuilder: (_, int index) {
-                final PassengerCallModel item = controller.calls[index];
-                return ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  leading: Icon(
-                    item.direction == 'outgoing'
-                        ? Icons.call_made_rounded
-                        : Icons.call_received_rounded,
-                    color: primaryColor,
-                  ),
-                  title: Text(item.counterpartName),
-                  subtitle: Text(
-                    'Ride ${item.rideReference.isEmpty ? item.call.rideId : item.rideReference} - ${item.call.status.name}',
-                  ),
-                  trailing: Text('${item.call.durationSeconds}s'),
-                );
-              },
-            ),
-          );
-        }),
-      );
-}
-
 class LanguageSettingsView extends GetView<PassengerAccountController> {
   const LanguageSettingsView({super.key});
 
   @override
   Widget build(BuildContext context) => Scaffold(
         appBar: const DrewelAppBar(title: 'Language', showBackButton: true),
-        backgroundColor: const Color(0xFFFAFAFA),
+        backgroundColor: _pageColor,
         body: Obx(() {
           final String language = controller.preferences.value?.language ??
               Get.locale?.languageCode ??
               'en';
           return ListView(
-            padding: const EdgeInsets.all(20),
+            padding: const EdgeInsets.all(16),
             children: <Widget>[
+              const _PageIntro(
+                icon: Icons.language_rounded,
+                title: 'Choose app language',
+                message: 'This updates Drewel labels immediately.',
+              ),
               _RadioRow(
                 title: 'English',
                 selected: language == 'en',
@@ -625,21 +584,25 @@ class NotificationPreferencesView extends GetView<PassengerAccountController> {
           title: 'Notification Preferences',
           showBackButton: true,
         ),
-        backgroundColor: const Color(0xFFFAFAFA),
+        backgroundColor: _pageColor,
         body: Obx(() {
           final NotificationPreferenceModel prefs =
               controller.preferences.value?.notifications ??
                   const NotificationPreferenceModel(
                     rideUpdates: true,
                     messages: true,
-                    calls: true,
                     accountUpdates: true,
                     sounds: true,
                     vibration: true,
                   );
           return ListView(
-            padding: const EdgeInsets.all(20),
+            padding: const EdgeInsets.all(16),
             children: <Widget>[
+              const _PageIntro(
+                icon: Icons.notifications_none_rounded,
+                title: 'Notification controls',
+                message: 'Manage ride, message and account alerts.',
+              ),
               const _SwitchRow(
                 title: 'Ride updates',
                 subtitle: 'Required for active ride safety',
@@ -652,12 +615,6 @@ class NotificationPreferencesView extends GetView<PassengerAccountController> {
                 onChanged: (bool value) =>
                     controller.updateNotificationPreference(
                         prefs.copyWith(messages: value)),
-              ),
-              const _SwitchRow(
-                title: 'Calls',
-                subtitle: 'Required for secure ride calls',
-                value: true,
-                onChanged: null,
               ),
               _SwitchRow(
                 title: 'Account updates',
@@ -703,7 +660,7 @@ class LegalView extends GetView<PassengerAccountController> {
         title: type == 'terms' ? 'Terms & Conditions' : 'Privacy',
         showBackButton: true,
       ),
-      backgroundColor: const Color(0xFFFAFAFA),
+      backgroundColor: _pageColor,
       body: Obx(() {
         final LegalContentModel? legal = controller.legalContent.value;
         if (legal == null) {
@@ -727,7 +684,7 @@ class LegalView extends GetView<PassengerAccountController> {
           );
         }
         return ListView(
-          padding: const EdgeInsets.all(20),
+          padding: const EdgeInsets.all(16),
           children: <Widget>[
             Text(legal.title, style: MyTextStyle.titleStyle20bb),
             if (legal.lastUpdated?.isNotEmpty == true) ...<Widget>[
@@ -751,10 +708,16 @@ class HelpSupportView extends StatelessWidget {
   Widget build(BuildContext context) => Scaffold(
         appBar:
             const DrewelAppBar(title: 'Help & Support', showBackButton: true),
-        backgroundColor: const Color(0xFFFAFAFA),
+        backgroundColor: _pageColor,
         body: ListView(
-          padding: const EdgeInsets.all(20),
+          padding: const EdgeInsets.all(16),
           children: <Widget>[
+            const _PageIntro(
+              icon: Icons.support_agent_rounded,
+              title: 'How can we help?',
+              message:
+                  'Pick the closest topic so support gets the right context.',
+            ),
             _MenuRow(
               icon: Icons.route_outlined,
               title: 'Ride issue',
@@ -818,10 +781,15 @@ class _ReportProblemViewState extends State<ReportProblemView> {
   Widget build(BuildContext context) => Scaffold(
         appBar:
             const DrewelAppBar(title: 'Report a Problem', showBackButton: true),
-        backgroundColor: const Color(0xFFFAFAFA),
+        backgroundColor: _pageColor,
         body: ListView(
-          padding: const EdgeInsets.all(20),
+          padding: const EdgeInsets.all(16),
           children: <Widget>[
+            const _PageIntro(
+              icon: Icons.flag_outlined,
+              title: 'Send a clear report',
+              message: 'Add the ride when relevant and describe what happened.',
+            ),
             DropdownButtonFormField<String>(
               initialValue: category,
               decoration: _inputDecoration('Issue category'),
@@ -884,31 +852,24 @@ class AboutDrewelView extends GetView<PassengerAccountController> {
   @override
   Widget build(BuildContext context) => Scaffold(
         appBar: const DrewelAppBar(title: 'About Drewel', showBackButton: true),
-        backgroundColor: const Color(0xFFFAFAFA),
+        backgroundColor: _pageColor,
         body: ListView(
-          padding: const EdgeInsets.all(24),
+          padding: const EdgeInsets.all(16),
           children: <Widget>[
-            const Icon(Icons.local_taxi_rounded, size: 64, color: primaryColor),
-            const SizedBox(height: 12),
-            Center(child: Text('Drewel', style: MyTextStyle.titleStyle20bb)),
-            const SizedBox(height: 6),
-            const Center(
-              child: Text(
-                'A mobility marketplace for secure ride communication and offers.',
-                textAlign: TextAlign.center,
-                style: TextStyle(color: text2Color),
+            _PageIntro(
+              icon: Icons.local_taxi_rounded,
+              title: 'Drewel',
+              message:
+                  'A mobility marketplace for secure ride communication and offers.',
+              footer: Obx(
+                () => Text(
+                  controller.appVersion.value.isEmpty
+                      ? 'Version unavailable'
+                      : 'Version ${controller.appVersion.value}',
+                  style: const TextStyle(fontWeight: FontWeight.w700),
+                ),
               ),
             ),
-            const SizedBox(height: 18),
-            Obx(() => Center(
-                  child: Text(
-                    controller.appVersion.value.isEmpty
-                        ? 'Version unavailable'
-                        : 'Version ${controller.appVersion.value}',
-                    style: const TextStyle(fontWeight: FontWeight.w700),
-                  ),
-                )),
-            const SizedBox(height: 26),
             _MenuRow(
               icon: Icons.description_outlined,
               title: 'Terms & Conditions',
@@ -937,38 +898,60 @@ class _IdentityHeader extends StatelessWidget {
   final PassengerProfileModel? profile;
 
   @override
-  Widget build(BuildContext context) => Column(
+  Widget build(BuildContext context) {
+    final String phone =
+        '${profile?.countryCode ?? ''} ${profile?.phone ?? ''}'.trim();
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(_radius),
+        border: Border.all(color: _lineColor),
+      ),
+      child: Row(
         children: <Widget>[
-          _Avatar(url: profile?.profileImageUrl, radius: 44),
-          const SizedBox(height: 12),
-          Text(
-            profile?.fullName.trim().isNotEmpty == true
-                ? profile!.fullName
-                : 'Passenger',
-            style: MyTextStyle.titleStyle20bb,
-            textAlign: TextAlign.center,
-          ),
-          const SizedBox(height: 4),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: <Widget>[
-              Text(
-                '${profile?.countryCode ?? ''} ${profile?.phone ?? ''}'.trim(),
-                style: const TextStyle(color: text2Color),
-              ),
-              if (profile?.isVerified == true) ...<Widget>[
-                const SizedBox(width: 6),
-                const Icon(Icons.verified_rounded,
-                    color: Color(0xFFFFC136), size: 18),
+          _Avatar(url: profile?.profileImageUrl, radius: 36),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Text(
+                  profile?.fullName.trim().isNotEmpty == true
+                      ? profile!.fullName
+                      : 'Passenger',
+                  style: MyTextStyle.titleStyle20bb,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 4),
+                Row(
+                  children: <Widget>[
+                    Expanded(
+                      child: Text(
+                        phone.isEmpty ? 'Phone not available' : phone,
+                        style: const TextStyle(color: text2Color),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    if (profile?.isVerified == true)
+                      const Icon(Icons.verified_rounded,
+                          color: amberColor, size: 18),
+                  ],
+                ),
               ],
-            ],
+            ),
           ),
-          TextButton(
+          IconButton(
+            tooltip: 'Edit Profile',
             onPressed: () => Get.toNamed(Routes.EDIT_PROFILE),
-            child: const Text('Edit Profile'),
+            icon: const Icon(Icons.edit_outlined),
           ),
         ],
-      );
+      ),
+    );
+  }
 }
 
 class _Avatar extends StatelessWidget {
@@ -1008,7 +991,8 @@ class _Section extends StatelessWidget {
             DecoratedBox(
               decoration: BoxDecoration(
                 color: Colors.white,
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: BorderRadius.circular(_radius),
+                border: Border.all(color: _lineColor),
               ),
               child: Column(children: children),
             ),
@@ -1033,10 +1017,22 @@ class _MenuRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) => ListTile(
         onTap: onTap,
-        leading: Icon(icon, color: primaryColor),
-        title: Text(title, style: const TextStyle(fontWeight: FontWeight.w700)),
-        subtitle: subtitle == null ? null : Text(subtitle!),
-        trailing: const Icon(Icons.chevron_right_rounded),
+        minLeadingWidth: 42,
+        leading: _IconBadge(icon),
+        title: Text(
+          title,
+          style: const TextStyle(fontWeight: FontWeight.w700),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
+        subtitle: subtitle == null
+            ? null
+            : Text(
+                subtitle!,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+        trailing: const Icon(Icons.chevron_right_rounded, color: text2Color),
       );
 }
 
@@ -1067,10 +1063,82 @@ InputDecoration _inputDecoration(String label) => InputDecoration(
       filled: true,
       fillColor: Colors.white,
       border: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
-        borderSide: BorderSide.none,
+        borderRadius: BorderRadius.circular(_radius),
+        borderSide: const BorderSide(color: _lineColor),
+      ),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(_radius),
+        borderSide: const BorderSide(color: _lineColor),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(_radius),
+        borderSide: const BorderSide(color: primaryColor),
       ),
     );
+
+class _IconBadge extends StatelessWidget {
+  const _IconBadge(this.icon);
+
+  final IconData icon;
+
+  @override
+  Widget build(BuildContext context) => Container(
+        width: 38,
+        height: 38,
+        decoration: BoxDecoration(
+          color: primaryColor.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(_radius),
+        ),
+        child: Icon(icon, color: primaryColor, size: 21),
+      );
+}
+
+class _PageIntro extends StatelessWidget {
+  const _PageIntro({
+    required this.icon,
+    required this.title,
+    required this.message,
+    this.footer,
+  });
+
+  final IconData icon;
+  final String title;
+  final String message;
+  final Widget? footer;
+
+  @override
+  Widget build(BuildContext context) => Container(
+        margin: const EdgeInsets.only(bottom: 14),
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(_radius),
+          border: Border.all(color: _lineColor),
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            _IconBadge(icon),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  Text(title,
+                      style: const TextStyle(fontWeight: FontWeight.w800)),
+                  const SizedBox(height: 4),
+                  Text(message, style: const TextStyle(color: text2Color)),
+                  if (footer != null) ...<Widget>[
+                    const SizedBox(height: 10),
+                    footer!,
+                  ],
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
+}
 
 class _PlaceShortcut extends StatelessWidget {
   const _PlaceShortcut({
@@ -1143,10 +1211,13 @@ class _RideTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Material(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(_radius),
+          side: const BorderSide(color: _lineColor),
+        ),
         child: ListTile(
           onTap: onTap,
-          leading: const Icon(Icons.local_taxi_rounded, color: primaryColor),
+          leading: const _IconBadge(Icons.local_taxi_rounded),
           title:
               Text(ride.destination?.address ?? 'Ride ${ride.reference ?? ''}'),
           subtitle: Text(
@@ -1172,7 +1243,8 @@ class _InfoBlock extends StatelessWidget {
         child: DecoratedBox(
           decoration: BoxDecoration(
             color: Colors.white,
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(_radius),
+            border: Border.all(color: _lineColor),
           ),
           child: Padding(
             padding: const EdgeInsets.all(14),
@@ -1282,7 +1354,7 @@ class _SheetHandle extends StatelessWidget {
         margin: const EdgeInsets.only(bottom: 18),
         decoration: BoxDecoration(
           color: const Color(0xFFE0E0E0),
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: BorderRadius.circular(_radius),
         ),
       );
 }

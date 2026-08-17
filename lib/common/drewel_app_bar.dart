@@ -53,7 +53,8 @@ class DrewelAppBar extends StatelessWidget implements PreferredSizeWidget {
     ];
     return AppBar(
       elevation: 0,
-      shadowColor: primary3Color,
+      scrolledUnderElevation: 0,
+      shadowColor: Colors.transparent,
       surfaceTintColor: primary3Color,
       foregroundColor: Colors.black,
       backgroundColor: primaryColor,

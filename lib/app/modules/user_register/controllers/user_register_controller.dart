@@ -4,6 +4,7 @@ import 'package:drewel/app/routes/app_pages.dart';
 import 'package:drewel/common/local_data.dart';
 import 'package:get/get.dart';
 import 'package:carousel_slider/carousel_slider.dart';
+import 'package:flutter/foundation.dart';
 
 import '../../../data/apis/api_methods/api_methods.dart';
 
@@ -48,10 +49,10 @@ class UserRegisterController extends GetxController {
           bannerModel.banners != null) {
         bannerList = bannerModel.banners!;
       } else {
-        print("Banner Image not found.....");
+        debugPrint("Banner Image not found.....");
       }
     } catch (e) {
-      print("Error: -----${e.toString()}");
+      debugPrint("Error: -----${e.toString()}");
     }
     increment();
   }

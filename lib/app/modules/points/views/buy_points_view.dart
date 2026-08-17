@@ -209,7 +209,7 @@ class _PointPackCard extends StatelessWidget {
                       style: const TextStyle(fontWeight: FontWeight.bold),
                     ),
                     Text('${pack.points} ${'points.available'.tr}'),
-                    Text('${pack.price.toStringAsFixed(2)} ${pack.currency}'),
+                    Text('points.arranged_directly'.tr),
                   ],
                 ),
               );

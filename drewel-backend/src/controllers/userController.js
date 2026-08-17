@@ -8,6 +8,15 @@ import path from "path";
 import { fileURLToPath } from "url";
 import Driver from "../models/Driver.js";
 import Admin from "../models/Admin.js";
+import Ride, { ACTIVE_RIDE_STATUSES } from "../models/Ride.js";
+import TripOffer from "../models/TripOffer.js";
+import DriverPointsWallet from "../models/DriverPointsWallet.js";
+import PointPurchaseRequest from "../models/PointPurchaseRequest.js";
+import RideMessage from "../models/RideMessage.js";
+import PointsSettings from "../models/PointsSettings.js";
+import SavedPlace from "../models/SavedPlace.js";
+import SupportReport from "../models/SupportReport.js";
+import UserPreference from "../models/UserPreference.js";
 import generateOtp from "../helpers/generateOtp.js";
 import { sendOtpUsingTwilio } from "../utils/sendOtp.js";
 import { serveUploadedFile } from "../utils/fileServing.js";
@@ -15,6 +24,7 @@ import { buildPublicAssetUrl } from "../utils/publicAssets.js";
 import { sanitizeAuthSubject } from "../utils/authResponse.js";
 import { grantWelcomeBonus } from "../services/pointsWalletService.js";
 import { buildActiveDriverPresenceFilter } from "../services/driverPresenceService.js";
+import { buildFreshAdminMarketplaceAvailabilityFilter } from "../utils/availableDrivers.js";
 import validator from "validator";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -60,6 +70,50 @@ const isAdminUser = async (userId) => {
   if (!userId) return false;
   const admin = await Admin.findById(userId);
   return !!admin && admin.role === "admin";
+};
+
+const PRIVATE_DRIVER_DOCUMENT_FIELDS = [
+  "licenseCompanyUrl",
+  "licenseCarUrl",
+  "licenseDriverUrl",
+  "idDocumentUrl",
+  "carLicenseFrontUrl",
+  "carLicenseBackUrl",
+  "drivingLicenseFrontUrl",
+  "drivingLicenseBackUrl",
+  "idProofFrontUrl",
+  "idProofBackUrl",
+  "passportCopyUrl",
+];
+
+const escapeRegExp = (value = "") =>
+  String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+const resolveAuthToken = (req) => {
+  const header = req.headers.authorization || "";
+  const match = header.match(/^Bearer\s+(.+)$/i);
+  if (match?.[1]) return match[1].trim();
+  return String(req.query.token || "").trim() || null;
+};
+
+const findPrivateDocumentOwnerId = async (fileName) => {
+  const pattern = new RegExp(`${escapeRegExp(fileName)}$`);
+  const driver = await Driver.findOne({
+    $or: PRIVATE_DRIVER_DOCUMENT_FIELDS.map((field) => ({
+      [field]: { $regex: pattern },
+    })),
+  })
+    .select("_id")
+    .lean();
+  return driver?._id ? String(driver._id) : null;
+};
+
+const isKnownPublicAvatar = async (fileName) => {
+  const pattern = new RegExp(`${escapeRegExp(fileName)}$`);
+  const byUser = await User.exists({ profilePicture: { $regex: pattern } });
+  if (byUser) return true;
+  const byDriver = await Driver.exists({ profileImageUrl: { $regex: pattern } });
+  return Boolean(byDriver);
 };
 
 // Register User
@@ -236,11 +290,109 @@ export const getUser = async (req, res) => {
 // Get All Users
 export const getAllUsers = async (req, res) => {
   try {
-    const users = await User.find();
+    const {
+      search = "",
+      status = "all",
+      page = 1,
+      limit = 20,
+      sort = "updatedAt",
+      dir = "desc",
+    } = req.query || {};
+    const filter = {};
+    if (status === "restricted") filter.isRestricted = true;
+    if (status === "active") filter.isRestricted = { $ne: true };
+    const term = String(search || "").trim();
+    if (term) {
+      const regex = new RegExp(term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");
+      filter.$or = [
+        { fullName: regex },
+        { phone: regex },
+        { email: regex },
+      ];
+    }
+    const pageNumber = Math.max(1, Math.trunc(Number(page) || 1));
+    const limitNumber = Math.min(100, Math.max(1, Math.trunc(Number(limit) || 20)));
+    const allowedSort = new Set(["updatedAt", "createdAt", "fullName", "phone"]);
+    if (!allowedSort.has(String(sort))) {
+      return res.status(400).json({
+        success: false,
+        code: "INVALID_USER_SORT",
+        message: "Invalid user sort field",
+      });
+    }
+    const sortDir = String(dir).toLowerCase() === "asc" ? 1 : -1;
+    const [users, total] = await Promise.all([
+      User.find(filter)
+        .sort({ [sort]: sortDir, _id: sortDir })
+        .skip((pageNumber - 1) * limitNumber)
+        .limit(limitNumber)
+        .lean(),
+      User.countDocuments(filter),
+    ]);
+    const userIds = users.map((user) => user._id);
+    const [rideCounts, activeRides, messageCounts] = await Promise.all([
+      Ride.aggregate([
+        { $match: { passengerId: { $in: userIds } } },
+        { $group: {
+          _id: "$passengerId",
+          total: { $sum: 1 },
+          completed: { $sum: { $cond: [{ $eq: ["$status", "completed"] }, 1, 0] } },
+          cancelled: { $sum: { $cond: [{ $in: ["$status", ["cancelled", "cancelled_by_user", "cancelled_by_driver", "cancelled_by_admin"]] }, 1, 0] } },
+          disputed: { $sum: { $cond: [{ $eq: ["$status", "disputed"] }, 1, 0] } },
+        } },
+      ]),
+      Ride.find({ passengerId: { $in: userIds }, status: { $in: ACTIVE_RIDE_STATUSES } })
+        .select("_id passengerId reference status vehicleType requestedAt updatedAt")
+        .sort({ updatedAt: -1 })
+        .lean(),
+      RideMessage.aggregate([
+        { $match: { senderId: { $in: userIds } } },
+        { $group: { _id: "$senderId", total: { $sum: 1 } } },
+      ]),
+    ]);
+    const rideCountsByUser = new Map(rideCounts.map((item) => [String(item._id), item]));
+    const activeRideByUser = new Map(activeRides.map((ride) => [String(ride.passengerId), ride]));
+    const messageCountsByUser = new Map(messageCounts.map((item) => [String(item._id), item]));
+    const enriched = users.map((user) => {
+      const userId = String(user._id);
+      const rideSummary = rideCountsByUser.get(userId) || {};
+      const activeRide = activeRideByUser.get(userId) || null;
+      const messageSummary = messageCountsByUser.get(userId) || {};
+      return {
+        ...user,
+        rideSummary: {
+          total: Number(rideSummary.total || 0),
+          completed: Number(rideSummary.completed || 0),
+          cancelled: Number(rideSummary.cancelled || 0),
+          disputed: Number(rideSummary.disputed || 0),
+          activeRide: activeRide ? {
+            id: String(activeRide._id),
+            reference: activeRide.reference,
+            status: activeRide.status,
+            vehicleType: activeRide.vehicleType || "",
+            updatedAt: activeRide.updatedAt,
+          } : null,
+        },
+        supportSummary: {
+          messagesSent: Number(messageSummary.total || 0),
+        },
+        lastActivityAt: activeRide?.updatedAt || user.updatedAt,
+      };
+    });
 
     return res
       .status(200)
-      .send({ success: true, message: "List of users fetched", users });
+      .send({
+        success: true,
+        message: "List of users fetched",
+        users: enriched,
+        pagination: {
+          page: pageNumber,
+          limit: limitNumber,
+          total,
+          totalPages: Math.max(1, Math.ceil(total / limitNumber)),
+        },
+      });
   } catch (error) {
     sendResponse(res, 500, false, "Failed to fetch users", error.message);
   }
@@ -370,14 +522,46 @@ export const getProfileImage = async (req, res) => {
   try {
     const { fileName } = req.params;
     if (!fileName) return res.status(400).send("File name is required");
-
+    const safeName = path.basename(fileName);
     const rootDir = path.join(__dirname, "../../public");
+
+    const privateDocumentOwnerId = await findPrivateDocumentOwnerId(safeName);
+    if (privateDocumentOwnerId) {
+      // Private driver document (ID, license, passport): require the owner
+      // or an admin. The app passes the JWT via a query token because image
+      // widgets cannot attach Authorization headers.
+      let requesterId = null;
+      let requesterIsAdmin = false;
+      const token = resolveAuthToken(req);
+      if (token) {
+        try {
+          const decoded = jwt.verify(token, process.env.JWT_SECRET);
+          requesterId = decoded?._id ? String(decoded._id) : null;
+          requesterIsAdmin = requesterId ? await isAdminUser(requesterId) : false;
+        } catch (error) {
+          // Invalid or expired token: treat as anonymous.
+        }
+      }
+      const isOwner = requesterId !== null && requesterId === privateDocumentOwnerId;
+      if (!isOwner && !requesterIsAdmin) {
+        return res
+          .status(403)
+          .send("You are not authorized to view this file");
+      }
+    } else {
+      // Public profile pictures (avatars) stay viewable so ride counterparts
+      // can see each other. Unknown filenames are not served.
+      if (!(await isKnownPublicAvatar(safeName))) {
+        return res.status(404).send("File not found");
+      }
+    }
+
     await serveUploadedFile({
       res,
-      fileName,
+      fileName: safeName,
       localPaths: [
-        path.join(rootDir, "user-images", path.basename(fileName)),
-        path.join(rootDir, "driver-documents", path.basename(fileName)),
+        path.join(rootDir, "user-images", safeName),
+        path.join(rootDir, "driver-documents", safeName),
       ],
       s3Prefixes: ["user-images", "driver-documents"],
     });
@@ -406,7 +590,7 @@ export const getUserDetails = async (req, res) => {
       });
     }
 
-    const user = await User.findById(userId);
+    const user = await User.findById(userId).lean();
     if (!user) {
       return res.status(404).send({
         success: false,
@@ -414,10 +598,83 @@ export const getUserDetails = async (req, res) => {
       });
     }
 
+    const [
+      savedPlaces,
+      preferences,
+      recentRides,
+      recentMessages,
+      supportReports,
+      rideSummary,
+    ] = await Promise.all([
+      SavedPlace.find({ userId })
+        .sort({ type: 1, updatedAt: -1 })
+        .lean(),
+      UserPreference.findOne({ userId, actorRole: "passenger" }).lean(),
+      Ride.find({ passengerId: userId })
+        .select("_id reference status vehicleType pickup destination agreedPrice requestedAt startedAt endedAt updatedAt driverId")
+        .populate("driverId", "fullName firstName lastName phone vehicleType")
+        .sort({ updatedAt: -1, _id: -1 })
+        .limit(10)
+        .lean(),
+      RideMessage.find({ senderId: userId })
+        .select("_id rideId message text status createdAt updatedAt")
+        .sort({ createdAt: -1, _id: -1 })
+        .limit(10)
+        .lean(),
+      SupportReport.find({ userId, actorRole: "passenger" })
+        .select("_id rideId category description status createdAt updatedAt")
+        .sort({ createdAt: -1, _id: -1 })
+        .limit(10)
+        .lean(),
+      Ride.aggregate([
+        { $match: { passengerId: new mongoose.Types.ObjectId(userId) } },
+        {
+          $group: {
+            _id: "$passengerId",
+            total: { $sum: 1 },
+            completed: { $sum: { $cond: [{ $eq: ["$status", "completed"] }, 1, 0] } },
+            cancelled: { $sum: { $cond: [{ $in: ["$status", ["cancelled", "cancelled_by_user", "cancelled_by_driver", "cancelled_by_admin"]] }, 1, 0] } },
+            disputed: { $sum: { $cond: [{ $eq: ["$status", "disputed"] }, 1, 0] } },
+          },
+        },
+      ]),
+    ]);
+
+    const summary = rideSummary[0] || {};
+
     return res.status(200).send({
       success: true,
       message: "User details fetched successfully",
-      user,
+      user: {
+        ...user,
+        savedPlaces: savedPlaces.map((place) => ({
+          id: String(place._id),
+          type: place.type,
+          name: place.name,
+          address: place.address,
+          lat: place.lat,
+          long: place.long,
+          category: place.category || "",
+          updatedAt: place.updatedAt,
+        })),
+        preferences: preferences
+          ? {
+              language: preferences.language || "en",
+              notifications: preferences.notifications || {},
+              updatedAt: preferences.updatedAt,
+            }
+          : null,
+        rideSummary: {
+          total: Number(summary.total || 0),
+          completed: Number(summary.completed || 0),
+          cancelled: Number(summary.cancelled || 0),
+          disputed: Number(summary.disputed || 0),
+        },
+        recentRides,
+        recentMessages,
+        recentCalls,
+        supportReports,
+      },
     });
   } catch (error) {
     console.error("Error fetching user details:", error);
@@ -431,13 +688,92 @@ export const getUserDetails = async (req, res) => {
 
 export const dashBoardData = async (req, res) => {
   try {
-    const [totalUsers, totalDrivers, onlineDrivers, restrictedUsers] =
+    const now = new Date();
+    const startOfToday = new Date(now);
+    startOfToday.setHours(0, 0, 0, 0);
+    const settings = await PointsSettings.getEffective();
+    const lowBalanceThreshold = settings.lowBalanceThreshold;
+    const activeRideFilter = { status: { $in: ACTIVE_RIDE_STATUSES } };
+    const cancelledTodayFilter = {
+      status: { $in: ["cancelled", "cancelled_by_user", "cancelled_by_driver", "cancelled_by_admin"] },
+      $or: [
+        { endedAt: { $gte: startOfToday } },
+        { "cancellation.timestamp": { $gte: startOfToday } },
+        { updatedAt: { $gte: startOfToday } },
+      ],
+    };
+
+    const [
+      totalUsers,
+      totalDrivers,
+      onlineDrivers,
+      discoverableDrivers,
+      restrictedUsers,
+      restrictedDrivers,
+      pendingApproval1,
+      pendingApproval2,
+      activeReservations,
+      pendingTripOffers,
+      completedToday,
+      cancelledToday,
+      openDisputes,
+      stuckRides,
+      lowBalanceDrivers,
+      pendingPointPurchaseRequests,
+      unreadRideMessages,
+      openSupportReports,
+      recentReservations,
+    ] =
       await Promise.all([
         User.countDocuments(),
         Driver.countDocuments(),
         Driver.countDocuments(buildActiveDriverPresenceFilter()),
+        Driver.countDocuments(buildFreshAdminMarketplaceAvailabilityFilter({}, now)),
         User.countDocuments({ isRestricted: true }),
+        Driver.countDocuments({ isRestricted: true }),
+        Driver.countDocuments({ status: "pending" }),
+        Driver.countDocuments({ profileRequestStatus: "pending" }),
+        Ride.countDocuments(activeRideFilter),
+        TripOffer.countDocuments({ status: "pending", expiresAt: { $gt: now } }),
+        Ride.countDocuments({ status: "completed", endedAt: { $gte: startOfToday } }),
+        Ride.countDocuments(cancelledTodayFilter),
+        Ride.countDocuments({ status: "disputed" }),
+        Ride.countDocuments({
+          status: { $in: ACTIVE_RIDE_STATUSES },
+          updatedAt: { $lt: new Date(now.getTime() - 60 * 60 * 1000) },
+        }),
+        DriverPointsWallet.countDocuments({
+          $expr: {
+            $lt: [
+              { $add: ["$availableBonusPoints", "$availablePurchasedPoints"] },
+              lowBalanceThreshold,
+            ],
+          },
+        }),
+        PointPurchaseRequest.countDocuments({ status: { $in: ["pending", "contacted", "payment_pending", "payment_verified"] } }),
+        RideMessage.countDocuments({ status: { $ne: "read" } }),
+        SupportReport.countDocuments({ status: { $in: ["open", "reviewing"] } }),
+        Ride.find({})
+          .sort({ updatedAt: -1, _id: -1 })
+          .limit(6)
+          .select("reference status vehicleType pickup destination updatedAt requestedAt endedAt passengerId driverId")
+          .populate("passengerId", "fullName name phone")
+          .populate("driverId", "fullName firstName lastName phone vehicleType")
+          .lean(),
       ]);
+
+    const health = {
+      api: "operational",
+      database: mongoose.connection.readyState === 1 ? "operational" : "unavailable",
+      socketIo: global.io ? "operational" : "unavailable",
+      notifications: process.env.FIREBASE_SERVICE_ACCOUNT || process.env.FIREBASE_SERVICE_ACCOUNT_JSON
+        ? "configured"
+        : "not_configured",
+      storage: process.env.AWS_ACCESS_KEY_ID && process.env.S3_BUCKET
+        ? "configured"
+        : "not_configured",
+      generatedAt: now.toISOString(),
+    };
 
     return res.status(200).send({
       success: true,
@@ -446,7 +782,38 @@ export const dashBoardData = async (req, res) => {
         totalUsers,
         totalDrivers,
         onlineDrivers,
+        discoverableDrivers,
         restrictedUsers,
+        restrictedDrivers,
+        pendingApproval1,
+        pendingApproval2,
+        activeReservations,
+        pendingTripOffers,
+        completedToday,
+        cancelledToday,
+        openDisputes,
+        stuckRides,
+        lowBalanceDrivers,
+        pendingPointPurchaseRequests,
+        unreadRideMessages,
+        openSupportReports,
+        lowBalanceThreshold,
+        health,
+        recentReservations: recentReservations.map((ride) => ({
+          id: String(ride._id),
+          reference: ride.reference,
+          status: ride.status,
+          vehicleType: ride.vehicleType || "",
+          passengerName: ride.passengerId?.fullName || ride.passengerId?.name || "",
+          driverName:
+            ride.driverId?.fullName ||
+            [ride.driverId?.firstName, ride.driverId?.lastName].filter(Boolean).join(" "),
+          pickup: ride.pickup?.address || "",
+          destination: ride.destination?.address || "",
+          updatedAt: ride.updatedAt,
+          requestedAt: ride.requestedAt,
+          endedAt: ride.endedAt,
+        })),
       },
     });
   } catch (error) {

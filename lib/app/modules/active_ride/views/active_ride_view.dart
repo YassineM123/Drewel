@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:get/get.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 
@@ -8,6 +9,7 @@ import '../../../../common/colors.dart';
 import '../../../../common/drewel_app_bar.dart';
 import '../../../../common/drewel_osm_map.dart';
 import '../../../../common/drewel_web_map_fallback.dart';
+import '../../../../common/motion.dart';
 import '../../../../common/vehicle_assets.dart';
 import '../../../data/apis/api_models/active_ride_model.dart';
 import '../../communication/controllers/call_state_controller.dart';
@@ -478,12 +480,28 @@ class _RideActionSheet extends StatelessWidget {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: <Widget>[
-                          Text(
-                            rideStatusLabel(ride.rideStatus),
-                            style: Theme.of(context)
-                                .textTheme
-                                .titleMedium
-                                ?.copyWith(fontWeight: FontWeight.w700),
+                          AnimatedSwitcher(
+                            duration: MotionDuration.normal,
+                            switchInCurve: MotionCurve.enter,
+                            transitionBuilder: (child, animation) =>
+                                FadeTransition(
+                              opacity: animation,
+                              child: SlideTransition(
+                                position: Tween<Offset>(
+                                  begin: const Offset(0, 0.15),
+                                  end: Offset.zero,
+                                ).animate(animation),
+                                child: child,
+                              ),
+                            ),
+                            child: Text(
+                              rideStatusLabel(ride.rideStatus),
+                              key: ValueKey<RideStatus>(ride.rideStatus),
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .titleMedium
+                                  ?.copyWith(fontWeight: FontWeight.w700),
+                            ),
                           ),
                           Text(
                             controller.routePhase == 'destination'
@@ -506,14 +524,6 @@ class _RideActionSheet extends StatelessWidget {
                               : null,
                           icon: const Icon(Icons.message_rounded),
                         ),
-                        IconButton(
-                          tooltip: 'Call ride participant',
-                          onPressed: ride.canCommunicate &&
-                                  Get.isRegistered<CallStateController>()
-                              ? () => _callParticipant(context)
-                              : null,
-                          icon: const Icon(Icons.call_rounded),
-                        ),
                       ],
                     ),
                   ],
@@ -522,21 +532,24 @@ class _RideActionSheet extends StatelessWidget {
                     ride.rideStatus == RideStatus.driverArrived &&
                     ride.pickupPin?.isNotEmpty == true) ...<Widget>[
                   const SizedBox(height: 10),
-                  Semantics(
-                    label: 'Pickup PIN ${ride.pickupPin}',
-                    child: Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: primaryColor.withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: Text(
-                        'Pickup PIN: ${ride.pickupPin}',
-                        textAlign: TextAlign.center,
-                        style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                              fontWeight: FontWeight.w800,
-                              letterSpacing: 0,
-                            ),
+                  FadeSlideIn(
+                    child: Semantics(
+                      label: 'Pickup PIN ${ride.pickupPin}',
+                      child: Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: primaryColor.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Text(
+                          'Pickup PIN: ${ride.pickupPin}',
+                          textAlign: TextAlign.center,
+                          style:
+                              Theme.of(context).textTheme.titleLarge?.copyWith(
+                                    fontWeight: FontWeight.w800,
+                                    letterSpacing: 0,
+                                  ),
+                        ),
                       ),
                     ),
                   ),
@@ -545,20 +558,26 @@ class _RideActionSheet extends StatelessWidget {
                   const SizedBox(height: 12),
                   SizedBox(
                     height: 48,
-                    child: FilledButton(
-                      onPressed: controller.isActionLoading.value ||
+                    child: AnimatedPressable(
+                      onTap: controller.isActionLoading.value ||
                               controller.isOffline.value
                           ? null
                           : () => _performAction(context, ride.rideStatus),
-                      child: controller.isActionLoading.value
-                          ? const SizedBox.square(
-                              dimension: 20,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: Colors.white,
-                              ),
-                            )
-                          : Text(action),
+                      child: FilledButton(
+                        onPressed: controller.isActionLoading.value ||
+                                controller.isOffline.value
+                            ? null
+                            : () => _performAction(context, ride.rideStatus),
+                        child: controller.isActionLoading.value
+                            ? const SizedBox.square(
+                                dimension: 20,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: Colors.white,
+                                ),
+                              )
+                            : Text(action),
+                      ),
                     ),
                   ),
                 ] else if (ride.rideStatus ==
@@ -586,19 +605,11 @@ class _RideActionSheet extends StatelessWidget {
     });
   }
 
-  Future<void> _callParticipant(BuildContext context) async {
-    final CallStateController communication = Get.find<CallStateController>();
-    final String name =
-        communication.counterpart?.firstName ?? 'ride participant';
-    if (await communication.confirmDrewelCall(name)) {
-      await communication.initiateCall();
-    }
-  }
-
   Future<void> _performAction(
     BuildContext context,
     RideStatus status,
   ) async {
+    HapticFeedback.lightImpact();
     final ActiveRideController controller = Get.find<ActiveRideController>();
     String? pin;
     if (status == RideStatus.driverArrived) {
@@ -610,6 +621,7 @@ class _RideActionSheet extends StatelessWidget {
     }
     final bool success = await controller.performPrimaryAction(pickupPin: pin);
     if (!context.mounted) return;
+    if (success) HapticFeedback.mediumImpact();
     if (success && status == RideStatus.inProgress) {
       final ActiveRideModel? completedRide = controller.lastCompletedRide.value;
       if (completedRide != null &&

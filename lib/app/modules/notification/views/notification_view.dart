@@ -85,9 +85,7 @@ class NotificationView extends GetView<CallStateController> {
                                   : 'You are all caught up',
                               style: TextStyle(
                                 fontSize: 12.px,
-                                color: unread > 0
-                                    ? primaryColor
-                                    : text2Color,
+                                color: unread > 0 ? primaryColor : text2Color,
                                 fontWeight: FontWeight.w600,
                               ),
                             );
@@ -226,7 +224,9 @@ class _FilterChips extends StatelessWidget {
                 color: isActive ? primaryColor : primary3Color,
                 borderRadius: BorderRadius.circular(20.px),
                 border: Border.all(
-                  color: isActive ? primaryColor : primaryColor.withValues(alpha: 0.3),
+                  color: isActive
+                      ? primaryColor
+                      : primaryColor.withValues(alpha: 0.3),
                 ),
               ),
               child: Text(
@@ -394,16 +394,18 @@ class _NotificationTile extends StatelessWidget {
         'RIDE_PASSENGER_CANCELLED' =>
           Icons.cancel_rounded,
         'RIDE_DISPUTED' => Icons.flag_rounded,
-        'CALL_MISSED' || 'MISSED_CALL' => Icons.call_missed_rounded,
         'DRIVER_APPROVED' => Icons.verified_rounded,
         'DRIVER_REJECTED' => Icons.gpp_bad_rounded,
-        'TRIP_OFFER_RECEIVED' || 'TRIP_OFFER_ACCEPTED' || 'TRIP_OFFER_UPDATED' =>
+        'TRIP_OFFER_RECEIVED' ||
+        'TRIP_OFFER_ACCEPTED' ||
+        'TRIP_OFFER_UPDATED' =>
           Icons.local_offer_rounded,
-        String type when type.startsWith('POINTS') ||
-            type.startsWith('OFFER_POINTS') ||
-            type.startsWith('RIDE_POINTS') ||
-            type.startsWith('WELCOME') ||
-            type == 'POINT_PURCHASE_REQUEST_UPDATED' =>
+        String type
+            when type.startsWith('POINTS') ||
+                type.startsWith('OFFER_POINTS') ||
+                type.startsWith('RIDE_POINTS') ||
+                type.startsWith('WELCOME') ||
+                type == 'POINT_PURCHASE_REQUEST_UPDATED' =>
           Icons.stars_rounded,
         _ => Icons.notifications_rounded,
       };

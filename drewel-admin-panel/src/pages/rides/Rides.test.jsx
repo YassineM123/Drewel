@@ -1,6 +1,7 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { listAdminRides } from "../../utils/ridesAdminApi";
 import Rides from "./Rides";
 
@@ -27,6 +28,12 @@ describe("Admin ride list", () => {
     });
   });
 
+  afterEach(() => {
+    cleanup();
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
   it("renders lifecycle and participant evidence", async () => {
     render(<MemoryRouter><Rides /></MemoryRouter>);
     expect(await screen.findByText("Assigned User")).toBeInTheDocument();
@@ -42,6 +49,38 @@ describe("Admin ride list", () => {
       status: "active",
       page: 1,
       limit: 20,
+      sort: "updatedAt",
+      dir: "desc",
     }));
+  });
+
+  it("supports locked operational views without duplicating ride logic", async () => {
+    render(<MemoryRouter><Rides initialFilter="stuck" lockedFilter /></MemoryRouter>);
+    expect(await screen.findByText("Stuck Rides")).toBeInTheDocument();
+    await waitFor(() => expect(listAdminRides).toHaveBeenCalled());
+    expect(listAdminRides.mock.calls[0][0]).toEqual(expect.objectContaining({
+      status: "stuck",
+    }));
+    expect(screen.queryByRole("button", { name: "Active" })).not.toBeInTheDocument();
+  });
+
+  it("exports the loaded filtered records as CSV", async () => {
+    const createObjectURL = vi.fn(() => "blob:reservations");
+    const revokeObjectURL = vi.fn();
+    const click = vi.fn();
+    const originalCreateElement = document.createElement.bind(document);
+    vi.stubGlobal("URL", { createObjectURL, revokeObjectURL });
+    vi.spyOn(document, "createElement").mockImplementation((tagName) => {
+      const element = originalCreateElement(tagName);
+      if (tagName === "a") element.click = click;
+      return element;
+    });
+
+    render(<MemoryRouter><Rides /></MemoryRouter>);
+    await screen.findByText("Assigned User");
+    await userEvent.click(screen.getByRole("button", { name: "Export CSV" }));
+    expect(createObjectURL).toHaveBeenCalled();
+    expect(click).toHaveBeenCalled();
+    expect(revokeObjectURL).toHaveBeenCalledWith("blob:reservations");
   });
 });

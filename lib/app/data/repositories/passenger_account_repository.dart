@@ -156,17 +156,6 @@ class PassengerAccountRepository {
         .toList(growable: false);
   }
 
-  Future<List<PassengerCallModel>> listCalls() async {
-    final Map<String, dynamic> response =
-        await _api.get('${ApiUrlConstants.baseUrl}calls');
-    final List<dynamic> raw = response['calls'] as List? ?? const <dynamic>[];
-    return raw
-        .whereType<Map>()
-        .map((Map item) =>
-            PassengerCallModel.fromJson(Map<String, dynamic>.from(item)))
-        .toList(growable: false);
-  }
-
   Future<void> reportProblem({
     required String category,
     String? rideId,
@@ -183,9 +172,22 @@ class PassengerAccountRepository {
   }
 
   Future<LegalContentModel> legal(String type) async {
-    final Map<String, dynamic> response =
-        await _api.get('${ApiUrlConstants.baseUrl}account/legal/$type');
-    final dynamic raw = response['legal'] ?? response['data'];
-    return LegalContentModel.fromJson(Map<String, dynamic>.from(raw as Map));
+    try {
+      final Map<String, dynamic> response =
+          await _api.get('${ApiUrlConstants.baseUrl}account/legal/$type');
+      final dynamic raw = response['legal'] ?? response['data'];
+      final LegalContentModel legal =
+          LegalContentModel.fromJson(Map<String, dynamic>.from(raw as Map));
+      return legal.body.trim().isEmpty
+          ? LegalContentModel.fallback(type)
+          : legal;
+    } on CommunicationApiException catch (error) {
+      if (error.statusCode == 404 ||
+          error.code == 'API_ROUTE_NOT_FOUND' ||
+          error.message.contains('Cannot GET')) {
+        return LegalContentModel.fallback(type);
+      }
+      rethrow;
+    }
   }
 }

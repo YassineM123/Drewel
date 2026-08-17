@@ -458,7 +458,7 @@ class UserHomeController extends GetxController
 
     // On Flutter web the Dart controller can be delivered before the platform
     // view is registered in google_maps_flutter_web. Waiting for the frame that
-    // built the view prevents calls against an unregistered map id.
+    // built the view prevents operations against an unregistered map id.
     await WidgetsBinding.instance.endOfFrame;
     if (!_canUpdateView || xController != mapController) return;
 

@@ -75,18 +75,6 @@ class MainActivity : FlutterActivity() {
                 vibrationPattern = longArrayOf(0, 60, 50, 60)
             },
             NotificationChannel(
-                "drewel_calls",
-                "Calls",
-                NotificationManager.IMPORTANCE_HIGH
-            ).apply {
-                description = "Incoming Drewel voice calls."
-                setShowBadge(true)
-                enableLights(true)
-                setSound(soundUri("drewel_call"), audioAttributes())
-                enableVibration(true)
-                vibrationPattern = longArrayOf(0, 1500, 500, 1500)
-            },
-            NotificationChannel(
                 "drewel_system",
                 "System notifications",
                 NotificationManager.IMPORTANCE_LOW

@@ -8,7 +8,7 @@ const rideMessageSchema = new mongoose.Schema(
     text: { type: String, required: true, trim: true, maxlength: 2000 },
     messageType: {
       type: String,
-      enum: ["text", "trip_request"],
+      enum: ["text"],
       default: "text",
       index: true,
     },

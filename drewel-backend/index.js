@@ -14,7 +14,6 @@ import groupRoutes from "./src/routes/groupRoutes.js";
 import driverRoutes from "./src/routes/driverRoutes.js";
 import adminRoute from "./src/routes/adminRoute.js";
 import bannerRoute from "./src/routes/bannerRoute.js";
-import callRoutes from "./src/routes/callRoutes.js";
 import rideRoutes from "./src/routes/rideRoutes.js";
 import conversationRoutes from "./src/routes/conversationRoutes.js";
 import driverPointsRoutes from "./src/routes/driverPointsRoutes.js";
@@ -27,7 +26,6 @@ import {
   normalizeAssetResponses,
   validatePublicAssetConfig,
 } from "./src/utils/publicAssets.js";
-import { startCallExpiryWatchdog } from "./src/jobs/callExpiryJob.js";
 import { startPointsJobs } from "./src/jobs/pointsJobs.js";
 import { startDriverPresenceWatchdog } from "./src/jobs/driverPresenceJob.js";
 
@@ -109,7 +107,6 @@ app.use("/api/driver", driverRoutes);
 app.use("/api/admin/points", adminPointsRoutes);
 app.use("/api/admin", adminRoute);
 app.use("/api/banner", bannerRoute);
-app.use("/api/calls", callRoutes);
 app.use("/api/rides", rideRoutes);
 app.use("/api/conversations", conversationRoutes);
 app.use("/api/trip-offers", tripOfferRoutes);
@@ -154,7 +151,6 @@ connectDB()
   .then(async () => {
     await bootstrapLocalAdmin();
     server.listen(PORT, HOST, () => {
-      startCallExpiryWatchdog();
       startPointsJobs();
       startDriverPresenceWatchdog();
       console.log("server running at " + HOST + ":" + PORT);

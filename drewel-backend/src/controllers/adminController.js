@@ -5,6 +5,16 @@ import bcrypt from "bcryptjs";
 import jwt from 'jsonwebtoken';
 import { buildActiveDriverPresenceFilter } from "../services/driverPresenceService.js";
 import { dispatchNotification } from "../services/notificationService.js";
+import { buildFreshAdminMarketplaceAvailabilityFilter } from "../utils/availableDrivers.js";
+import {
+  getDriverLocationFutureSkewMs,
+  getDriverLocationMaxAgeMs,
+  getServiceAreaLocationMaxAccuracyM,
+} from "../utils/dubaiLocation.js";
+import DriverPointsWallet from "../models/DriverPointsWallet.js";
+import Ride, { ACTIVE_RIDE_STATUSES } from "../models/Ride.js";
+import TripOffer from "../models/TripOffer.js";
+import RequestAudit from "../models/RequestAudit.js";
 
 const deriveLegacyStatus = (driver) => {
   const hasDocs =
@@ -54,6 +64,223 @@ const applyDriverLogFallbacks = (driver, driverLog) => {
   driver.driverLogs = driverLog;
   return driver;
 };
+
+const ADMIN_DRIVER_PRESENCE_FIELDS =
+  "firstName lastName fullName phone whatsappNumber isOnline isApproved isRestricted isDeleted status profileRequestStatus lat long heading speed currentLocation currentServiceArea locationAccuracyM activeRideId vehicleType vehicleModel registration locationUpdatedAt availabilityStatus presenceStatus presenceLeaseExpiresAt presenceLastHeartbeatAt presenceVersion";
+
+const hasValidMarketplacePoint = (driver) => {
+  const coordinates = driver.currentLocation?.coordinates;
+  return (
+    driver.currentLocation?.type === "Point" &&
+    Array.isArray(coordinates) &&
+    coordinates.length === 2 &&
+    Number.isFinite(Number(coordinates[0])) &&
+    Number.isFinite(Number(coordinates[1]))
+  );
+};
+
+const discoverabilityReasonsFor = (driver, now = new Date()) => {
+  const reasons = [];
+  const status = String(driver.status || "").trim();
+  const profileStatus = String(driver.profileRequestStatus || "").trim();
+  const locationUpdatedAt = driver.locationUpdatedAt
+    ? new Date(driver.locationUpdatedAt)
+    : null;
+  const locationTime = locationUpdatedAt?.getTime();
+  const maxAgeMs = getDriverLocationMaxAgeMs();
+  const futureSkewMs = getDriverLocationFutureSkewMs();
+  const serviceArea = driver.currentServiceArea || null;
+  const accuracyM = Number(driver.locationAccuracyM);
+  const maxAccuracyM = getServiceAreaLocationMaxAccuracyM(serviceArea);
+
+  if (driver.isApproved !== true) reasons.push("not_approved");
+  if (driver.isRestricted === true) reasons.push("restricted");
+  if (driver.isDeleted === true) reasons.push("deleted");
+  if (!(status === "completed" || (!status && !profileStatus))) {
+    reasons.push("profile_incomplete");
+  }
+  if (driver.isOnline !== true) reasons.push("legacy_online_flag_off");
+  if (driver.availabilityStatus !== "Online") reasons.push("not_available");
+  if (driver.activeRideId) reasons.push("active_ride");
+  if (!hasValidMarketplacePoint(driver)) reasons.push("missing_current_location");
+  if (!Number.isFinite(locationTime)) {
+    reasons.push("missing_location_time");
+  } else if (locationTime < now.getTime() - maxAgeMs) {
+    reasons.push("stale_gps");
+  } else if (locationTime > now.getTime() + futureSkewMs) {
+    reasons.push("future_gps");
+  }
+  if (!Number.isFinite(accuracyM) || accuracyM < 0) {
+    reasons.push("missing_accuracy");
+  } else if (accuracyM > maxAccuracyM) {
+    reasons.push("low_accuracy");
+  }
+  if (!serviceArea) reasons.push("missing_service_area");
+
+  return [...new Set(reasons)];
+};
+
+const enrichAdminDriverPresence = async (drivers, now = new Date()) => {
+  const driverIds = drivers.map((driver) => driver._id).filter(Boolean);
+  const discoverableDrivers = driverIds.length
+    ? await Driver.find({
+        ...buildFreshAdminMarketplaceAvailabilityFilter({}, now),
+        _id: { $in: driverIds },
+      })
+        .select("_id")
+        .lean()
+    : [];
+  const discoverableIds = new Set(
+    discoverableDrivers.map((driver) => String(driver._id))
+  );
+
+  return drivers.map((driver) => {
+    const reasons = discoverabilityReasonsFor(driver, now);
+    const locationUpdatedAt = driver.locationUpdatedAt
+      ? new Date(driver.locationUpdatedAt)
+      : null;
+    const locationAgeSeconds = Number.isFinite(locationUpdatedAt?.getTime())
+      ? Math.max(0, Math.round((now.getTime() - locationUpdatedAt.getTime()) / 1000))
+      : null;
+    return {
+      ...driver,
+      fullName:
+        driver.fullName ||
+        [driver.firstName, driver.lastName].filter(Boolean).join(" ").trim(),
+      status: deriveLegacyStatus(driver),
+      isDiscoverable: discoverableIds.has(String(driver._id)),
+      discoverabilityReasons: reasons,
+      locationAgeSeconds,
+      locationAccuracyM:
+        Number.isFinite(Number(driver.locationAccuracyM))
+          ? Number(driver.locationAccuracyM)
+          : null,
+    };
+  });
+};
+
+const documentAvailability = (driver) => {
+  const fields = [
+    "licenseCompanyUrl",
+    "carLicenseFrontUrl",
+    "carLicenseBackUrl",
+    "drivingLicenseFrontUrl",
+    "drivingLicenseBackUrl",
+    "idProofFrontUrl",
+    "idProofBackUrl",
+    "passportCopyUrl",
+    "profileImageUrl",
+  ];
+  const available = fields.filter((field) => Boolean(driver[field])).length;
+  return {
+    available,
+    total: fields.length,
+    missing: fields.length - available,
+    complete: available === fields.length,
+  };
+};
+
+const walletDto = (wallet) => {
+  if (!wallet) {
+    return {
+      availablePoints: 0,
+      reservedPoints: 0,
+      totalPurchased: 0,
+      totalEarnedBonus: 0,
+      totalConsumed: 0,
+    };
+  }
+  const value = typeof wallet.toObject === "function"
+    ? wallet.toObject({ virtuals: true })
+    : wallet;
+  return {
+    availablePoints:
+      Number(value.availablePoints) ||
+      Number(value.availableBonusPoints || 0) + Number(value.availablePurchasedPoints || 0),
+    reservedPoints:
+      Number(value.reservedPoints) ||
+      Number(value.reservedBonusPoints || 0) + Number(value.reservedPurchasedPoints || 0),
+    totalPurchased: Number(value.totalPurchased || 0),
+    totalEarnedBonus: Number(value.totalEarnedBonus || 0),
+    totalConsumed: Number(value.totalConsumed || 0),
+    totalRefunded: Number(value.totalRefunded || 0),
+  };
+};
+
+const lastDriverActivity = (driver) => {
+  const times = [
+    driver.updatedAt,
+    driver.presenceLastHeartbeatAt,
+    driver.locationUpdatedAt,
+  ]
+    .map((value) => new Date(value || 0).getTime())
+    .filter((value) => Number.isFinite(value) && value > 0);
+  return times.length ? new Date(Math.max(...times)) : null;
+};
+
+const enrichDriverOperations = async (drivers) => {
+  const normalized = await enrichAdminDriverPresence(
+    drivers.map((driver) => (typeof driver.toObject === "function" ? driver.toObject() : driver))
+  );
+  const driverIds = normalized.map((driver) => driver._id).filter(Boolean);
+  const [
+    wallets,
+    activeRides,
+    rideCounts,
+    offerCounts,
+  ] = await Promise.all([
+    DriverPointsWallet.find({ driverId: { $in: driverIds } }).lean({ virtuals: true }),
+    Ride.find({ driverId: { $in: driverIds }, status: { $in: ACTIVE_RIDE_STATUSES } })
+      .select("_id driverId reference status vehicleType requestedAt updatedAt")
+      .sort({ updatedAt: -1 })
+      .lean(),
+    Ride.aggregate([
+      { $match: { driverId: { $in: driverIds } } },
+      { $group: { _id: "$driverId", total: { $sum: 1 }, completed: { $sum: { $cond: [{ $eq: ["$status", "completed"] }, 1, 0] } } } },
+    ]),
+    TripOffer.aggregate([
+      { $match: { driverId: { $in: driverIds } } },
+      { $group: { _id: "$driverId", total: { $sum: 1 }, pending: { $sum: { $cond: [{ $eq: ["$status", "pending"] }, 1, 0] } } } },
+    ]),
+  ]);
+
+  const walletsByDriver = new Map(wallets.map((wallet) => [String(wallet.driverId), wallet]));
+  const activeRideByDriver = new Map(activeRides.map((ride) => [String(ride.driverId), ride]));
+  const rideCountsByDriver = new Map(rideCounts.map((item) => [String(item._id), item]));
+  const offerCountsByDriver = new Map(offerCounts.map((item) => [String(item._id), item]));
+
+  return normalized.map((driver) => {
+    const driverId = String(driver._id);
+    const rideSummary = rideCountsByDriver.get(driverId) || {};
+    const offerSummary = offerCountsByDriver.get(driverId) || {};
+    const activeRide = activeRideByDriver.get(driverId) || null;
+    return {
+      ...driver,
+      documentSummary: documentAvailability(driver),
+      pointsWallet: walletDto(walletsByDriver.get(driverId)),
+      rideSummary: {
+        total: Number(rideSummary.total || 0),
+        completed: Number(rideSummary.completed || 0),
+        activeRide: activeRide
+          ? {
+              id: String(activeRide._id),
+              reference: activeRide.reference,
+              status: activeRide.status,
+              vehicleType: activeRide.vehicleType || "",
+              updatedAt: activeRide.updatedAt,
+            }
+          : null,
+      },
+      tripOfferSummary: {
+        total: Number(offerSummary.total || 0),
+        pending: Number(offerSummary.pending || 0),
+      },
+      lastActivityAt: lastDriverActivity(driver),
+    };
+  });
+};
+
+const escapeRegex = (value) => String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 export const registerAdmin = async (req, res) => {
   try {
     const { fullName, email, password } = req.body || {};
@@ -159,22 +386,15 @@ export const loginAdmin = async (req, res) => {
 
 export const getOnlineDrivers = async (_req, res) => {
   try {
+    const now = new Date();
     const drivers = await Driver.find({
       ...buildActiveDriverPresenceFilter(),
     })
-      .select(
-        "firstName lastName fullName phone whatsappNumber isOnline isApproved status lat long heading speed vehicleType vehicleModel registration locationUpdatedAt availabilityStatus presenceStatus presenceLeaseExpiresAt presenceLastHeartbeatAt presenceVersion"
-      )
+      .select(ADMIN_DRIVER_PRESENCE_FIELDS)
       .sort({ presenceLastHeartbeatAt: -1, _id: 1 })
       .lean();
 
-    const normalized = drivers.map((driver) => ({
-      ...driver,
-      fullName:
-        driver.fullName ||
-        [driver.firstName, driver.lastName].filter(Boolean).join(" ").trim(),
-      status: deriveLegacyStatus(driver),
-    }));
+    const normalized = await enrichAdminDriverPresence(drivers, now);
 
     return res.status(200).json({
       success: true,
@@ -192,6 +412,7 @@ export const getOnlineDrivers = async (_req, res) => {
 
 export const getDriversWithLocation = async (_req, res) => {
   try {
+    const now = new Date();
     const drivers = await Driver.find({
       isApproved: true,
       isDeleted: { $ne: true },
@@ -199,19 +420,11 @@ export const getDriversWithLocation = async (_req, res) => {
       lat: { $ne: 0 },
       long: { $ne: 0 },
     })
-      .select(
-        "firstName lastName fullName phone whatsappNumber isOnline isApproved status lat long heading speed vehicleType vehicleModel registration locationUpdatedAt availabilityStatus presenceStatus presenceLeaseExpiresAt presenceLastHeartbeatAt presenceVersion"
-      )
+      .select(ADMIN_DRIVER_PRESENCE_FIELDS)
       .sort({ locationUpdatedAt: -1, _id: 1 })
       .lean();
 
-    const normalized = drivers.map((driver) => ({
-      ...driver,
-      fullName:
-        driver.fullName ||
-        [driver.firstName, driver.lastName].filter(Boolean).join(" ").trim(),
-      status: deriveLegacyStatus(driver),
-    }));
+    const normalized = await enrichAdminDriverPresence(drivers, now);
 
     return res.status(200).json({
       success: true,
@@ -229,22 +442,81 @@ export const getDriversWithLocation = async (_req, res) => {
 
 export const getDriversForReview = async (req, res) => {
   try {
-    const { status } = req.query || {};
+    const {
+      status,
+      search,
+      availability,
+      discoverability,
+      page = 1,
+      limit = 20,
+      sort = "updatedAt",
+      dir = "desc",
+    } = req.query || {};
     const filter = {};
     if (status && ["pending", "approved", "rejected", "completed"].includes(status)) {
       filter.status = status;
     }
+    if (availability && ["Online", "Busy", "Offline"].includes(availability)) {
+      filter.availabilityStatus = availability;
+    }
+    const term = String(search || "").trim();
+    if (term) {
+      const regex = new RegExp(escapeRegex(term), "i");
+      filter.$or = [
+        { firstName: regex },
+        { lastName: regex },
+        { fullName: regex },
+        { phone: regex },
+        { whatsappNumber: regex },
+        { vehicleType: regex },
+        { vehicleModel: regex },
+        { registration: regex },
+      ];
+    }
 
-    const drivers = await Driver.find(filter).sort({ basicRequestSubmittedAt: -1, createdAt: -1 });
-    const normalized = drivers.map((driver) => {
-      const data = driver.toObject();
-      data.status = deriveLegacyStatus(data);
-      return data;
-    });
+    const pageNumber = Math.max(1, Math.trunc(Number(page) || 1));
+    const limitNumber = Math.min(100, Math.max(1, Math.trunc(Number(limit) || 20)));
+    const sortFields = new Set([
+      "updatedAt",
+      "createdAt",
+      "basicRequestSubmittedAt",
+      "status",
+      "availabilityStatus",
+      "locationUpdatedAt",
+      "presenceLastHeartbeatAt",
+    ]);
+    if (!sortFields.has(String(sort))) {
+      return res.status(400).json({
+        success: false,
+        code: "INVALID_DRIVER_SORT",
+        message: "Invalid driver sort field",
+      });
+    }
+    const sortDir = String(dir).toLowerCase() === "asc" ? 1 : -1;
+
+    const [drivers, total] = await Promise.all([
+      Driver.find(filter)
+        .sort({ [sort]: sortDir, _id: sortDir })
+        .skip((pageNumber - 1) * limitNumber)
+        .limit(limitNumber),
+      Driver.countDocuments(filter),
+    ]);
+    let normalized = await enrichDriverOperations(drivers);
+    if (discoverability === "discoverable") {
+      normalized = normalized.filter((driver) => driver.isDiscoverable);
+    } else if (discoverability === "blocked") {
+      normalized = normalized.filter((driver) => !driver.isDiscoverable);
+    }
     return res.status(200).json({
       success: true,
       message: "Driver list fetched successfully",
       drivers: normalized,
+      pagination: {
+        page: pageNumber,
+        limit: limitNumber,
+        total,
+        totalPages: Math.max(1, Math.ceil(total / limitNumber)),
+      },
     });
   } catch (error) {
     return res.status(500).json({
@@ -271,11 +543,39 @@ export const getDriverReviewDetails = async (req, res) => {
     const driverLog =
       data.driverLogs || (await DriverLogs.findOne({ driverId: driver._id }).lean());
     applyDriverLogFallbacks(data, driverLog);
-    data.status = deriveLegacyStatus(data);
+    const [enriched] = await enrichDriverOperations([data]);
+    const driverId = driver._id;
+    const [
+      recentRides,
+      recentTripOffers,
+      requestHistory,
+    ] = await Promise.all([
+      Ride.find({ driverId })
+        .select("_id reference status pickup destination vehicleType agreedPrice requestedAt startedAt endedAt updatedAt")
+        .sort({ updatedAt: -1, _id: -1 })
+        .limit(10)
+        .lean(),
+      TripOffer.find({ driverId })
+        .select("_id rideId amount price status expiresAt acceptedAt declinedAt createdAt updatedAt")
+        .sort({ createdAt: -1, _id: -1 })
+        .limit(10)
+        .lean(),
+      RequestAudit.find({ driverId })
+        .select("_id action oldStatus newStatus requestStage actorType actorName actorEmail reason occurredAt createdAt")
+        .sort({ occurredAt: -1, _id: -1 })
+        .limit(25)
+        .lean(),
+    ]);
+    const responseDriver = {
+      ...enriched,
+      recentRides,
+      recentTripOffers,
+      requestHistory,
+    };
     return res.status(200).json({
       success: true,
       message: "Driver details fetched successfully",
-      driver: data,
+      driver: responseDriver,
     });
   } catch (error) {
     return res.status(500).json({

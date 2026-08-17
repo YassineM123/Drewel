@@ -18,8 +18,6 @@ import {
   touchConversationWithMessage,
 } from "../services/conversationService.js";
 import RideConversation from "../models/RideConversation.js";
-import { endActiveCallsForRide, toCallDto } from "../services/callSessionService.js";
-import CallSession from "../models/CallSession.js";
 import User from "../models/User.js";
 import RideSafetyAction from "../models/RideSafetyAction.js";
 import RideAudit from "../models/RideAudit.js";
@@ -339,54 +337,6 @@ const parseMissionPoint = (value, field) => {
     );
   }
   return { lat, long, address };
-};
-
-const parseTripRequestMetadata = (body = {}) => {
-  const pickup = parseMissionPoint(body.pickup, "pickup");
-  const destination = parseMissionPoint(body.destination, "destination");
-  const proposedPrice =
-    body.proposedPrice === undefined || body.proposedPrice === null || body.proposedPrice === ""
-      ? null
-      : Number(body.proposedPrice);
-  if (proposedPrice !== null && (!Number.isFinite(proposedPrice) || proposedPrice < 0 || proposedPrice > 1_000_000_000)) {
-    throw new CommunicationPolicyError("proposedPrice is invalid", 400, "INVALID_TRIP_REQUEST");
-  }
-  const currency = String(body.currency || "AED").trim().toUpperCase();
-  if (!/^[A-Z]{3}$/.test(currency)) {
-    throw new CommunicationPolicyError("currency is invalid", 400, "INVALID_TRIP_REQUEST");
-  }
-  const note = String(body.note || "").trim().slice(0, 500);
-  return { pickup, destination, proposedPrice, currency, note };
-};
-
-const cancelSupersededTripRequests = async ({ rideId, latestMessage, now = new Date() }) => {
-  if (!latestMessage) return;
-  await RideMessage.updateMany(
-    {
-      rideId,
-      _id: { $ne: latestMessage._id },
-      messageType: "trip_request",
-      "metadata.tripRequestStatus": { $ne: "cancelled" },
-    },
-    [
-      {
-        $set: {
-          metadata: {
-            $mergeObjects: [
-              { $ifNull: ["$metadata", {}] },
-              {
-                tripRequestStatus: "cancelled",
-                cancellationReason: "superseded",
-                cancelledAt: now,
-                supersededByMessageId: String(latestMessage._id),
-                supersededByClientMessageId: latestMessage.clientMessageId,
-              },
-            ],
-          },
-        },
-      },
-    ]
-  );
 };
 
 export const confirmMission = async (req, res) => {
@@ -777,15 +727,6 @@ export const postRideLocation = async (req, res) => {
   }
 };
 
-export const listRideCalls = async (req, res) => {
-  try {
-    const principal = await resolvePrincipal(req.user?._id);
-    const { ride } = await assertRideParticipant(principal, req.params.rideId);
-    const calls = await CallSession.find({ rideId: ride._id }).sort({ createdAt: -1 }).limit(100);
-    return res.json({ success: true, calls: calls.map(toCallDto) });
-  } catch (error) { return sendError(res, error); }
-};
-
 export const listRideMessages = async (req, res) => {
   try {
     const principal = await resolvePrincipal(req.user?._id);
@@ -796,27 +737,10 @@ export const listRideMessages = async (req, res) => {
       if (!mongoose.isValidObjectId(req.query.before)) throw new CommunicationPolicyError("Invalid message cursor", 400, "INVALID_MESSAGE_CURSOR");
       filter._id = { $lt: req.query.before };
     }
-    const routeMetadata = [ride.pickup?.lat, ride.pickup?.long, ride.destination?.lat, ride.destination?.long]
-      .every(Number.isFinite)
-      ? { pickup: ride.pickup, destination: ride.destination }
-      : null;
     const messages = await RideMessage.find(filter).sort({ _id: -1 }).limit(limit).lean();
     return res.json({
       success: true,
-      messages: messages.reverse().map((message) => {
-        if (message.messageType !== "trip_request" || !routeMetadata) return message;
-        const metadata = message.metadata && typeof message.metadata === "object"
-          ? { ...message.metadata }
-          : {};
-        return {
-          ...message,
-          metadata: {
-            ...metadata,
-            pickup: metadata.pickup || routeMetadata.pickup,
-            destination: metadata.destination || routeMetadata.destination,
-          },
-        };
-      }),
+      messages: messages.reverse(),
     });
   } catch (error) { return sendError(res, error); }
 };
@@ -831,7 +755,7 @@ export const sendRideMessage = async (req, res) => {
     // location here made valid chats fail whenever the driver was stationary,
     // backgrounded, or temporarily offline.
     const messageType = String(req.body?.messageType || "text").trim().toLowerCase();
-    if (!["text", "trip_request"].includes(messageType)) {
+    if (messageType !== "text") {
       throw new CommunicationPolicyError("Unsupported message type", 400, "INVALID_MESSAGE_TYPE");
     }
     const text = String(req.body?.text || "").trim();
@@ -839,22 +763,7 @@ export const sendRideMessage = async (req, res) => {
     if (!text || text.length > 2000 || !clientMessageId || clientMessageId.length > 100) {
       throw new CommunicationPolicyError("text and clientMessageId are required", 400, "INVALID_MESSAGE");
     }
-    let metadata = null;
-    if (messageType === "trip_request") {
-      if (participantRole !== "passenger") {
-        throw new CommunicationPolicyError("Only passengers can send trip requests", 403, "PASSENGER_REQUIRED");
-      }
-      if (ride.status !== "contacting") {
-        throw new CommunicationPolicyError("Trip requests are only available while contacting", 409, "TRIP_REQUEST_CLOSED");
-      }
-      metadata = {
-        ...parseTripRequestMetadata(req.body?.metadata || {}),
-        tripRequestStatus: "active",
-      };
-      ride.pickup = metadata.pickup;
-      ride.destination = metadata.destination;
-      await ride.save();
-    }
+    const metadata = null;
     let message;
     let created = true;
     try {
@@ -863,9 +772,6 @@ export const sendRideMessage = async (req, res) => {
       if (error?.code !== 11000) throw error;
       created = false;
       message = await RideMessage.findOne({ rideId: ride._id, senderId: principal.id, clientMessageId });
-    }
-    if (created && messageType === "trip_request") {
-      await cancelSupersededTripRequests({ rideId: ride._id, latestMessage: message });
     }
     const messageEvent = {
       rideId: String(ride._id),
@@ -962,11 +868,9 @@ export const createSafetyAction = (type) => async (req, res) => {
         { _id: ride._id, communicationBlockedAt: null },
         { $set: { communicationBlockedAt: new Date(), communicationBlockedBy: principal.id } }
       );
-      await endActiveCallsForRide(ride._id, "participant_blocked");
       io.to(String(ride.passengerId)).to(String(ride.driverId)).emit("ride:state", { rideId: String(ride._id), blocked: true, contactAllowed: false });
     }
     if (type === "report") {
-      await CallSession.findOneAndUpdate({ rideId: ride._id }, { $set: { reported: true } }, { sort: { createdAt: -1 } });
       if (ride.status === "in_progress") {
         const disputed = await Ride.findOneAndUpdate(
           { _id: ride._id, status: "in_progress" },

@@ -33,6 +33,13 @@ class StringConstants {
   static const String chooseImageFromTheOptionsBelow =
       'Choose image from the options below';
   static const String iAgreeToThe = 'I agree to the ';
+  static const String termsOfService = 'Terms of Service';
+  static const String privacyPolicy = 'Privacy Policy';
+  static const String ageConsentPrefix =
+      'I am 18 years of age or older and I agree to the ';
+  static const String ageConsentSuffix = '.';
+  static const String consentRequired =
+      'Please accept the Terms of Service and Privacy Policy to continue.';
   static const String forgotYourPassword = 'Forgot your password?';
   static const String doNotHaveAnAccount = 'Don\'t have an account? ';
   static const String alreadyHaveAnAccount = 'Already have an account? ';

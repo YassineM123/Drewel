@@ -13,41 +13,32 @@ import '../../../data/apis/api_constants/api_key_constants.dart';
 import '../../../data/apis/api_constants/api_url_constants.dart';
 import '../../../data/apis/api_models/active_ride_model.dart';
 import '../../../data/apis/api_models/app_notification_model.dart';
-import '../../../data/apis/api_models/call_session_model.dart';
 import '../../../data/apis/api_models/ride_conversation_model.dart';
 import '../../../data/apis/communication_api_client.dart';
 import '../../../data/repositories/active_ride_repository.dart';
-import '../../../data/repositories/call_repository.dart';
 import '../../../data/repositories/conversation_repository.dart';
 import '../../../data/repositories/notification_repository.dart';
 import '../../../data/repositories/ride_message_repository.dart';
-import '../../../data/services/agora_call_service.dart';
 import '../../../routes/app_pages.dart';
 import '../widgets/safety_dialog.dart';
 
 class CallStateController extends GetxService with WidgetsBindingObserver {
   CallStateController({
     required ActiveRideRepository activeRideRepository,
-    required this.callRepository,
     required this.messageRepository,
     required this.conversationRepository,
     required this.notificationRepository,
-    required AgoraCallService agoraService,
     SocketService? socketService,
   })  : _activeRideRepository = activeRideRepository,
-        _agoraService = agoraService,
         _socketService = socketService ?? SocketService();
 
   final ActiveRideRepository _activeRideRepository;
-  final CallRepository callRepository;
   final RideMessageRepository messageRepository;
   final ConversationRepository conversationRepository;
   final NotificationRepository notificationRepository;
-  final AgoraCallService _agoraService;
   final SocketService _socketService;
 
   final Rxn<ActiveRideModel> activeRide = Rxn<ActiveRideModel>();
-  final Rxn<CallSessionModel> currentCall = Rxn<CallSessionModel>();
   final Rxn<ActiveRideModel> pendingRide = Rxn<ActiveRideModel>();
   final RxInt conversationUnread = 0.obs;
   final RxInt notificationUnread = 0.obs;
@@ -56,11 +47,7 @@ class CallStateController extends GetxService with WidgetsBindingObserver {
   final Rxn<NotificationFilter> notificationFilter = Rxn<NotificationFilter>();
   final RxBool notificationsHasMore = false.obs;
   final RxBool notificationsLoading = false.obs;
-  final Rx<AgoraConnectionState> connectionState =
-      AgoraConnectionState.idle.obs;
   final RxBool isBusy = false.obs;
-  final RxBool isMuted = false.obs;
-  final RxBool isSpeakerEnabled = false.obs;
   final RxString contactingDriverId = ''.obs;
   final RxString userFacingError = ''.obs;
 
@@ -68,12 +55,7 @@ class CallStateController extends GetxService with WidgetsBindingObserver {
       Get.isRegistered<NotificationSoundService>()
           ? Get.find<NotificationSoundService>()
           : null;
-  StreamSubscription<AgoraConnectionState>? _connectionSubscription;
-  Timer? _durationTimer;
-  Timer? _outgoingPollTimer;
-  bool _pollInFlight = false;
-  bool _connectedAcknowledged = false;
-  final RxInt connectedSeconds = 0.obs;
+
   String _role = 'user';
   String _selfId = '';
   String _sessionToken = '';
@@ -89,7 +71,7 @@ class CallStateController extends GetxService with WidgetsBindingObserver {
       return 'Ride requested. Waiting for the driver to respond.';
     }
     if (activeRide.value == null) {
-      return 'Message and Call become available after a driver is assigned.';
+      return 'Messages become available after a driver is assigned.';
     }
     return 'Secure communication is unavailable for this ride status.';
   }
@@ -146,45 +128,6 @@ class CallStateController extends GetxService with WidgetsBindingObserver {
     }
   }
 
-  Future<void> initiateDriverCall(String driverId) async {
-    final ActiveRideModel? contact = await _createOrGetDriverContact(driverId);
-    if (contact != null) {
-      await initiateCall();
-    } else {
-      _showContactError();
-    }
-  }
-
-  Future<bool> confirmDrewelCall(String displayName) async {
-    final BuildContext? context = Get.context;
-    final bool arabic = context != null &&
-        Localizations.localeOf(context).languageCode.toLowerCase() == 'ar';
-    final String name = displayName.trim().isEmpty
-        ? (arabic ? 'السائق' : 'Driver')
-        : displayName.trim();
-    return await Get.dialog<bool>(
-          AlertDialog(
-            title: Text(arabic ? 'مكالمة عبر Drewel' : 'Drewel call'),
-            content: Text(
-              arabic
-                  ? 'هل تريد الاتصال بـ $name عبر Drewel؟'
-                  : 'Call $name through Drewel?',
-            ),
-            actions: <Widget>[
-              TextButton(
-                onPressed: () => Get.back<bool>(result: false),
-                child: Text(arabic ? 'إلغاء' : 'Cancel'),
-              ),
-              FilledButton(
-                onPressed: () => Get.back<bool>(result: true),
-                child: Text(arabic ? 'اتصال' : 'Call'),
-              ),
-            ],
-          ),
-        ) ??
-        false;
-  }
-
   void _showContactError() {
     final String message = userFacingError.value.trim();
     if (message.isEmpty) return;
@@ -237,7 +180,6 @@ class CallStateController extends GetxService with WidgetsBindingObserver {
   Future<void> onInit() async {
     super.onInit();
     WidgetsBinding.instance.addObserver(this);
-    _agoraService.setTokenRenewalHandler(_renewAgoraToken);
     _wirePushService();
     await configureSession();
     await refreshActiveRide();
@@ -270,8 +212,6 @@ class CallStateController extends GetxService with WidgetsBindingObserver {
     if (state == AppLifecycleState.hidden ||
         state == AppLifecycleState.paused ||
         state == AppLifecycleState.detached) {
-      // Never leave a ringtone or chime running while the app is not visible.
-      unawaited(_soundsService?.stopCallSound());
       _socketService.disconnect();
       return;
     }
@@ -284,42 +224,20 @@ class CallStateController extends GetxService with WidgetsBindingObserver {
     }
   }
 
-  Future<void> _renewAgoraToken() async {
-    final CallSessionModel? call = currentCall.value;
-    if (call == null || !call.status.isActive) return;
-    try {
-      final AgoraCredentialsModel credentials =
-          await callRepository.getToken(call.id);
-      currentCall.value = call.copyWith(credentials: credentials);
-      await _agoraService.renewToken(credentials);
-    } on CommunicationApiException catch (error) {
-      userFacingError.value = error.message;
-    }
-  }
-
   Future<void> configureSession() async {
     final SharedPreferences preferences = await SharedPreferences.getInstance();
     _role = preferences.getString(ApiKeyConstants.type) ?? 'user';
     _selfId = preferences.getString(ApiKeyConstants.userId) ?? '';
     final String token = preferences.getString(ApiKeyConstants.token) ?? '';
-    _connectionSubscription ??= _agoraService.connectionStates.listen((state) {
-      connectionState.value = state;
-      if (state == AgoraConnectionState.connected) {
-        if (_durationTimer == null) _startDurationTimer();
-        _acknowledgeConnected();
-      }
-    });
     if (token.isNotEmpty && token != _sessionToken) {
       _socketService.disconnect();
       _sessionToken = token;
       unawaited(_registerPushTokenOnce(token));
       _socketService.connect(ApiUrlConstants.socketUrl, token);
-      _socketService.off('call:state');
       _socketService.off('ride:state');
       _socketService.off('driver:contact');
       _socketService.off('conversation:updated');
       _socketService.off('notification:new');
-      _socketService.on('call:state', _handleCallStateEvent);
       _socketService.on('ride:state', (_) => refreshActiveRide());
       _socketService.on('driver:contact', _handleDriverContact);
       _socketService.on('conversation:updated', _handleConversationUpdated);
@@ -541,302 +459,6 @@ class CallStateController extends GetxService with WidgetsBindingObserver {
     await DeepLinkService.instance.handle(link);
   }
 
-  Future<void> _handleCallStateEvent(dynamic data) async {
-    if (_socketEventInFlight || data is! Map) return;
-    final String callId = (data['callId'] ?? '').toString();
-    if (callId.isEmpty) return;
-    _socketEventInFlight = true;
-    try {
-      final CallSessionModel latest = await callRepository.getCall(callId);
-      if (latest.status == CallSessionStatus.ringing &&
-          latest.receiverId == _selfId) {
-        await showIncomingCall(latest);
-        return;
-      }
-      if (currentCall.value?.id != latest.id) return;
-      currentCall.value =
-          currentCall.value?.mergeRuntimeState(latest) ?? latest;
-      if (latest.status == CallSessionStatus.accepted &&
-          Get.currentRoute == Routes.OUTGOING_CALL) {
-        await connectOutgoingWhenAccepted();
-      } else if (!latest.status.isActive) {
-        await _terminateLocalCall();
-        if (Get.currentRoute == Routes.ACTIVE_CALL ||
-            Get.currentRoute == Routes.INCOMING_CALL ||
-            Get.currentRoute == Routes.OUTGOING_CALL) {
-          Get.back<void>();
-        }
-      }
-    } on CommunicationApiException catch (error) {
-      userFacingError.value = error.message;
-    } finally {
-      _socketEventInFlight = false;
-    }
-  }
-
-  Future<void> refreshActiveRide() async {
-    await configureSession();
-    try {
-      activeRide.value = await _activeRideRepository.getActiveRide();
-      if (activeRide.value?.canCommunicate != true) {
-        await _terminateLocalCall();
-      }
-    } catch (error) {
-      debugPrint('Active ride refresh failed: ${error.runtimeType}');
-      activeRide.value = null;
-    }
-  }
-
-  Future<void> initiateCall() async {
-    if (isBusy.value || currentCall.value?.status.isActive == true) return;
-    final ActiveRideModel? ride = activeRide.value;
-    if (ride == null || !ride.canCommunicate) {
-      userFacingError.value = unavailableReason;
-      return;
-    }
-    isBusy.value = true;
-    userFacingError.value = '';
-    try {
-      await _agoraService.ensureMicrophonePermission();
-      final CallSessionModel call = await callRepository.initiate(ride.id);
-      currentCall.value = call;
-      _startOutgoingPolling();
-      isBusy.value = false;
-      Get.toNamed(Routes.OUTGOING_CALL);
-    } on MicrophonePermissionDenied {
-      userFacingError.value =
-          'Microphone access is required for secure Drewel calls.';
-    } on CommunicationApiException catch (error) {
-      userFacingError.value = error.message;
-    } finally {
-      isBusy.value = false;
-    }
-  }
-
-  Future<void> showIncomingCall(CallSessionModel call) async {
-    if (!hasAuthorizedRide || call.rideId != activeRide.value?.id) {
-      await refreshActiveRide();
-    }
-    if (!hasAuthorizedRide || call.rideId != activeRide.value?.id) return;
-    currentCall.value = call;
-    // Start the looping ringtone before navigating. Duplicate ringing events
-    // for the same call id are ignored internally.
-    await _soundsService?.playIncomingCall(callId: call.id);
-    if (Get.currentRoute != Routes.INCOMING_CALL) {
-      await Get.toNamed(Routes.INCOMING_CALL);
-    }
-  }
-
-  Future<void> acceptCall() async {
-    final CallSessionModel? current = currentCall.value;
-    if (current == null || isBusy.value || !hasAuthorizedRide) return;
-    isBusy.value = true;
-    try {
-      await _agoraService.ensureMicrophonePermission();
-      // Answering means the ringtone must vanish immediately.
-      await _soundsService?.stopCallSound(callId: current.id);
-      CallSessionModel accepted = await callRepository.accept(current.id);
-      final AgoraCredentialsModel credentials =
-          accepted.credentials ?? await callRepository.getToken(current.id);
-      accepted = accepted.copyWith(credentials: credentials);
-      currentCall.value = accepted;
-      try {
-        await _agoraService.join(credentials);
-      } catch (_) {
-        await callRepository.end(current.id);
-        await _terminateLocalCall();
-        userFacingError.value =
-            'The secure call could not connect. Please retry.';
-        return;
-      }
-      isBusy.value = false;
-      Get.offNamed(Routes.ACTIVE_CALL);
-    } on MicrophonePermissionDenied {
-      userFacingError.value =
-          'Microphone access is required for secure Drewel calls.';
-    } on CommunicationApiException catch (error) {
-      userFacingError.value = error.message;
-    } finally {
-      isBusy.value = false;
-    }
-  }
-
-  Future<void> connectOutgoingWhenAccepted() async {
-    final CallSessionModel? current = currentCall.value;
-    if (current == null || current.status != CallSessionStatus.accepted) return;
-    try {
-      final AgoraCredentialsModel credentials =
-          current.credentials ?? await callRepository.getToken(current.id);
-      currentCall.value = current.copyWith(credentials: credentials);
-      await _agoraService.join(credentials);
-      isBusy.value = false;
-      Get.offNamed(Routes.ACTIVE_CALL);
-    } on MicrophonePermissionDenied {
-      await callRepository.end(current.id);
-      await _terminateLocalCall();
-      userFacingError.value =
-          'Microphone access is required for secure Drewel calls.';
-      if (Get.currentRoute == Routes.OUTGOING_CALL) Get.back<void>();
-    } catch (_) {
-      await callRepository.end(current.id);
-      await _terminateLocalCall();
-      userFacingError.value =
-          'The secure call could not connect. Please retry.';
-      if (Get.currentRoute == Routes.OUTGOING_CALL) Get.back<void>();
-    }
-  }
-
-  void _startOutgoingPolling() {
-    _outgoingPollTimer?.cancel();
-    _outgoingPollTimer = Timer.periodic(
-      const Duration(seconds: 2),
-      (_) => _pollOutgoingCall(),
-    );
-    _pollOutgoingCall();
-  }
-
-  Future<void> _pollOutgoingCall() async {
-    final CallSessionModel? local = currentCall.value;
-    if (local == null ||
-        _pollInFlight ||
-        (local.status != CallSessionStatus.initiating &&
-            local.status != CallSessionStatus.ringing)) {
-      return;
-    }
-    _pollInFlight = true;
-    try {
-      final CallSessionModel latest = await callRepository.getCall(local.id);
-      if (currentCall.value?.id != latest.id) return;
-      currentCall.value =
-          currentCall.value?.mergeRuntimeState(latest) ?? latest;
-      if (latest.status == CallSessionStatus.accepted) {
-        _outgoingPollTimer?.cancel();
-        await connectOutgoingWhenAccepted();
-      } else if (!latest.status.isActive) {
-        _outgoingPollTimer?.cancel();
-        userFacingError.value = switch (latest.status) {
-          CallSessionStatus.declined => 'The call was declined.',
-          CallSessionStatus.missed => 'The call was not answered.',
-          _ => 'The call ended.',
-        };
-        await _terminateLocalCall();
-        if (Get.currentRoute == Routes.OUTGOING_CALL) Get.back<void>();
-      }
-    } on CommunicationApiException catch (error) {
-      userFacingError.value = error.message;
-    } finally {
-      _pollInFlight = false;
-    }
-  }
-
-  Future<void> _acknowledgeConnected() async {
-    final CallSessionModel? call = currentCall.value;
-    if (call == null || _connectedAcknowledged) return;
-    _connectedAcknowledged = true;
-    try {
-      final CallSessionModel connected =
-          await callRepository.connected(call.id);
-      currentCall.value = call.mergeRuntimeState(connected);
-    } on CommunicationApiException catch (error) {
-      _connectedAcknowledged = false;
-      userFacingError.value = error.message;
-    }
-  }
-
-  Future<void> declineCall() => _finishRemoteAction(callRepository.decline);
-  Future<void> cancelCall() => _cancelOutgoingCall();
-  Future<void> endCall() => _finishRemoteAction(callRepository.end);
-
-  Future<void> _cancelOutgoingCall() async {
-    final CallSessionModel? call = currentCall.value;
-    if (call == null || isBusy.value) return;
-    if (call.status == CallSessionStatus.accepted ||
-        call.status == CallSessionStatus.connected) {
-      await _finishRemoteAction(callRepository.end);
-      return;
-    }
-    isBusy.value = true;
-    bool shouldClose = false;
-    try {
-      final CallSessionModel latest = await callRepository.cancel(call.id);
-      currentCall.value = call.mergeRuntimeState(latest);
-      shouldClose = true;
-    } on CommunicationApiException catch (error) {
-      if (error.code == 'INVALID_CALL_STATE' || error.statusCode == 409) {
-        shouldClose = await _resolveCancelRace(call);
-      } else {
-        userFacingError.value = error.message;
-      }
-    } finally {
-      isBusy.value = false;
-    }
-    if (shouldClose) {
-      await _closeCallRoute();
-    }
-  }
-
-  Future<bool> _resolveCancelRace(CallSessionModel call) async {
-    try {
-      final CallSessionModel latest = await callRepository.getCall(call.id);
-      currentCall.value = call.mergeRuntimeState(latest);
-      if (latest.status == CallSessionStatus.accepted ||
-          latest.status == CallSessionStatus.connected) {
-        final CallSessionModel ended = await callRepository.end(call.id);
-        currentCall.value = latest.mergeRuntimeState(ended);
-        return true;
-      }
-      if (!latest.status.isActive) return true;
-      userFacingError.value = 'The call state changed. Please try again.';
-      return false;
-    } on CommunicationApiException catch (error) {
-      userFacingError.value = error.message;
-      return false;
-    }
-  }
-
-  Future<void> _finishRemoteAction(
-    Future<CallSessionModel> Function(String callId) action,
-  ) async {
-    final CallSessionModel? call = currentCall.value;
-    if (call == null || isBusy.value) return;
-    isBusy.value = true;
-    bool succeeded = false;
-    try {
-      final CallSessionModel latest = await action(call.id);
-      currentCall.value = call.mergeRuntimeState(latest);
-      succeeded = true;
-    } on CommunicationApiException catch (error) {
-      userFacingError.value = error.message;
-    } finally {
-      isBusy.value = false;
-    }
-    if (succeeded) {
-      await _closeCallRoute();
-    }
-  }
-
-  Future<void> _closeCallRoute() async {
-    await _soundsService?.stopCallSound();
-    await _terminateLocalCall();
-    if (Get.currentRoute == Routes.ACTIVE_CALL ||
-        Get.currentRoute == Routes.INCOMING_CALL ||
-        Get.currentRoute == Routes.OUTGOING_CALL) {
-      Get.back<void>();
-    }
-  }
-
-  Future<void> toggleMute() async {
-    if (currentCall.value == null) return;
-    isMuted.toggle();
-    await _agoraService.setMuted(isMuted.value);
-  }
-
-  Future<void> toggleSpeaker() async {
-    if (currentCall.value == null) return;
-    isSpeakerEnabled.toggle();
-    await _agoraService.setSpeakerEnabled(isSpeakerEnabled.value);
-  }
-
   void openRideChat() {
     if (!hasAuthorizedRide) {
       userFacingError.value = unavailableReason;
@@ -866,7 +488,6 @@ class CallStateController extends GetxService with WidgetsBindingObserver {
     if (ride == null || reason.trim().isEmpty) return false;
     try {
       await _activeRideRepository.block(ride.id, reason.trim());
-      await _terminateLocalCall();
       await refreshActiveRide();
       return true;
     } on CommunicationApiException catch (error) {
@@ -875,48 +496,15 @@ class CallStateController extends GetxService with WidgetsBindingObserver {
     }
   }
 
-  void _startDurationTimer() {
-    _durationTimer?.cancel();
-    connectedSeconds.value = 0;
-    _durationTimer = Timer.periodic(
-      const Duration(seconds: 1),
-      (_) => connectedSeconds.value++,
-    );
-  }
-
-  Future<void> _terminateLocalCall() async {
-    // The call is gone — the ringtone must not survive it.
-    await _soundsService?.stopCallSound();
-    _outgoingPollTimer?.cancel();
-    _outgoingPollTimer = null;
-    _pollInFlight = false;
-    _connectedAcknowledged = false;
-    _durationTimer?.cancel();
-    _durationTimer = null;
-    connectedSeconds.value = 0;
-    isMuted.value = false;
-    isSpeakerEnabled.value = false;
-    await _agoraService.leave();
-    currentCall.value = null;
-  }
 
   @override
   void onClose() {
     WidgetsBinding.instance.removeObserver(this);
-    _durationTimer?.cancel();
-    _outgoingPollTimer?.cancel();
-    _connectionSubscription?.cancel();
     _socketService.disconnect();
-    _agoraService.dispose();
     super.onClose();
   }
 
   Future<void> disposeForLogout() async {
-    _durationTimer?.cancel();
-    _durationTimer = null;
-    _outgoingPollTimer?.cancel();
-    _outgoingPollTimer = null;
-    await _terminateLocalCall();
     activeRide.value = null;
     notifications.clear();
     notificationUnread.value = 0;
@@ -933,11 +521,9 @@ class CommunicationBinding extends Bindings {
     Get.put<CallStateController>(
       CallStateController(
         activeRideRepository: ActiveRideRepository(api),
-        callRepository: CallRepository(api),
         conversationRepository: ConversationRepository(api),
         messageRepository: RideMessageRepository(api),
         notificationRepository: NotificationRepository(api),
-        agoraService: AgoraCallService(),
       ),
       permanent: true,
     );

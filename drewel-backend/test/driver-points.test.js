@@ -7,7 +7,6 @@ import Driver from "../src/models/Driver.js";
 import User from "../src/models/User.js";
 import Admin from "../src/models/Admin.js";
 import Ride from "../src/models/Ride.js";
-import RideMessage from "../src/models/RideMessage.js";
 import DriverPointsWallet from "../src/models/DriverPointsWallet.js";
 import PointTransaction from "../src/models/PointTransaction.js";
 import TripOffer from "../src/models/TripOffer.js";
@@ -253,21 +252,6 @@ test(
       status: "contacting",
       reference: "POINTS-22",
     });
-    await RideMessage.create({
-      rideId: contact._id,
-      senderId: passenger._id,
-      senderRole: "passenger",
-      text: "Trip request: 45 TND",
-      clientMessageId: "trip-request-22",
-      messageType: "trip_request",
-      metadata: {
-        pickup: { lat: 36.8, long: 10.18, address: "Passenger pickup" },
-        destination: { lat: 36.81, long: 10.2, address: "Passenger destination" },
-        proposedPrice: 45,
-        currency: "TND",
-      },
-    });
-
     const created = await createTripOffer(
       offerPayload({ driver, contact, suffix: "00000022" })
     );
@@ -277,47 +261,6 @@ test(
     assert.equal(created.offer.destination.address, "Passenger destination");
     assert.equal(reloadedContact.pickup.address, "Passenger pickup");
     assert.equal(reloadedContact.destination.address, "Passenger destination");
-  }
-);
-
-test(
-  "offer route must match the latest passenger trip request",
-  { skip: !integrationEnabled },
-  async () => {
-    const [driver, passenger] = await Promise.all([
-      Driver.create(driverData(23)),
-      User.create({ phone: "55000023", countryCode: "+216", isVerified: true }),
-    ]);
-    await DriverPointsWallet.create({
-      driverId: driver._id,
-      availableBonusPoints: 100,
-      totalEarnedBonus: 100,
-    });
-    const contact = await Ride.create({
-      passengerId: passenger._id,
-      driverId: driver._id,
-      status: "contacting",
-      reference: "POINTS-23",
-    });
-    await RideMessage.create({
-      rideId: contact._id,
-      senderId: passenger._id,
-      senderRole: "passenger",
-      text: "Trip request: 45 TND",
-      clientMessageId: "trip-request-23",
-      messageType: "trip_request",
-      metadata: {
-        pickup: { lat: 35, long: 10, address: "Different pickup" },
-        destination: { lat: 35.1, long: 10.1, address: "Different destination" },
-        proposedPrice: 45,
-        currency: "TND",
-      },
-    });
-
-    await assert.rejects(
-      createTripOffer(offerPayload({ driver, contact, suffix: "00000023" })),
-      (error) => error.code === "ROUTE_REQUEST_REQUIRED"
-    );
   }
 );
 
