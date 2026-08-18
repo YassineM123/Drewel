@@ -3,9 +3,9 @@ import { compactParams, dateRangeParams, toPagination } from "../query";
 
 /**
  * Secure-call metadata — GET /api/admin/secure-calls
- * Backend aggregates call-related communication events (contact created,
- * communication denied/blocked, ride reported) from the append-only
- * CommunicationAudit trail.
+ * Backend returns CallLog metadata (call id, ride id, participants, timing,
+ * duration, status, failure reason, provider reference). Recording status is
+ * surfaced only as a boolean — recording URLs are never projected.
  */
 export const getSecureCalls = async (params, signal) => {
   const data = await apiClient.get("/admin/secure-calls", {
@@ -13,14 +13,13 @@ export const getSecureCalls = async (params, signal) => {
       page: params?.page,
       limit: params?.limit,
       rideId: params?.rideId,
-      action: params?.action,
-      outcome: params?.outcome,
+      status: params?.status,
       ...dateRangeParams(params),
     }),
     signal,
   });
   return {
-    events: data.events || data.items || [],
+    events: data.items || data.events || [],
     summary: data.summary || {},
     pagination: toPagination(data),
   };

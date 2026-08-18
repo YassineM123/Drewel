@@ -1,92 +1,72 @@
 import { useCallback, useEffect, useState } from "react";
 import Swal from "sweetalert2";
-import { API_URL, apiClient } from "../utils/api";
+import {
+  Image, Plus, Pencil, Trash2, Eye, EyeOff, Calendar, BarChart3,
+  ShieldCheck, AlertTriangle, X,
+} from "lucide-react";
+import {
+  addBanner,
+  bannersErrorMessage,
+  deleteBanner,
+  getBanners,
+  getContentAudits,
+  toggleBannerStatus,
+  updateBanner,
+} from "../api/domains/banners";
 import SafeImage from "../components/SafeImage";
 
-const baseURL = API_URL; // Centralized API URL
 const MAX_IMAGE_SIZE = 5 * 1024 * 1024;
 const ACCEPTED_IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif"];
+const PLACEMENTS = ["home", "splash", "ride", "checkout", "promo"];
 
-const getErrorMessage = (error, fallback) =>
-  error?.response?.data?.message || error?.message || fallback;
+const fmtDate = (iso) => {
+  if (!iso) return "—";
+  return new Date(iso).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
+};
 
-function Sponsor() {
-  const [banners, setBanners] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [modalOpen, setModalOpen] = useState(false);
-  const [editMode, setEditMode] = useState(false);
-  const [formLoading, setFormLoading] = useState(false);
-  const [selectedBanner, setSelectedBanner] = useState(null);
+const dateValue = (iso) => (iso ? new Date(iso).toISOString().slice(0, 10) : "");
+
+function StatusPill({ active }) {
+  return active ? (
+    <span className="inline-flex items-center gap-1 text-[10px] font-bold text-green-700 bg-green-50 border border-green-200 px-2 py-0.5 rounded-full">
+      <Eye size={10} /> Active
+    </span>
+  ) : (
+    <span className="inline-flex items-center gap-1 text-[10px] font-bold text-slate-500 bg-slate-100 border border-slate-200 px-2 py-0.5 rounded-full">
+      <EyeOff size={10} /> Inactive
+    </span>
+  );
+}
+
+function BannerForm({ banner, onCancel, onSaved, onToast }) {
+  const [title, setTitle] = useState(banner?.title || "");
+  const [placement, setPlacement] = useState(banner?.placement || "home");
+  const [active, setActive] = useState(banner?.active ?? true);
+  const [startDate, setStartDate] = useState(dateValue(banner?.startDate));
+  const [endDate, setEndDate] = useState(dateValue(banner?.endDate));
   const [image, setImage] = useState(null);
-  const [preview, setPreview] = useState(null);
-  const [loadError, setLoadError] = useState("");
+  const [preview, setPreview] = useState(banner?.imageUrl || null);
   const [formError, setFormError] = useState("");
+  const [saving, setSaving] = useState(false);
 
-  // Fetch all banners
-  const fetchBanners = useCallback(async () => {
-    setLoading(true);
-    setLoadError("");
-    try {
-      const res = await apiClient.get(`${baseURL}/banner/get-all`);
-      if (!res.data?.success || !Array.isArray(res.data?.banners)) {
-        throw new Error(res.data?.message || "The server returned an invalid banner list.");
-      }
-      setBanners(res.data.banners);
-    } catch (error) {
-      setLoadError(getErrorMessage(error, "Failed to fetch banners."));
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    void fetchBanners();
-  }, [fetchBanners]);
-
-  // Open modal for create or edit
-  const openModal = (banner = null) => {
-    setEditMode(!!banner);
-    setSelectedBanner(banner);
-    setImage(null);
-    setPreview(banner?.imageUrl || null);
-    setFormError("");
-    setModalOpen(true);
-  };
-
-  const closeModal = () => {
-    setModalOpen(false);
-    setSelectedBanner(null);
-    setImage(null);
-    setPreview(null);
-    setFormError("");
-    setEditMode(false);
-  };
-
-  // Handle image input
   const handleImageChange = (e) => {
     const file = e.target.files[0];
     setFormError("");
-
     if (!file) {
       setImage(null);
-      setPreview(selectedBanner?.imageUrl || null);
+      setPreview(banner?.imageUrl || null);
       return;
     }
     if (!ACCEPTED_IMAGE_TYPES.includes(file.type)) {
       e.target.value = "";
-      setImage(null);
-      setPreview(selectedBanner?.imageUrl || null);
       setFormError("Choose a JPG, PNG, WebP, or GIF image.");
       return;
     }
     if (file.size > MAX_IMAGE_SIZE) {
       e.target.value = "";
-      setImage(null);
-      setPreview(selectedBanner?.imageUrl || null);
       setFormError("The image must be 5 MB or smaller.");
       return;
     }
-
     setImage(file);
     const reader = new FileReader();
     reader.onload = (ev) => setPreview(ev.target.result);
@@ -94,195 +74,357 @@ function Sponsor() {
     reader.readAsDataURL(file);
   };
 
-  // Create or update banner
-  const handleFormSubmit = async (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     setFormError("");
-    if (!editMode && !image) {
+    if (!banner && !image) {
       setFormError("Please select a banner image.");
       return;
     }
-    setFormLoading(true);
+    if (startDate && endDate && startDate > endDate) {
+      setFormError("Start date must not be after end date.");
+      return;
+    }
+    setSaving(true);
     try {
       const formData = new FormData();
+      formData.append("title", title);
+      formData.append("placement", placement);
+      formData.append("active", String(active));
+      if (startDate) formData.append("startDate", startDate);
+      if (endDate) formData.append("endDate", endDate);
       if (image) formData.append("image", image);
-      let res;
-      if (editMode && selectedBanner) {
-        res = await apiClient.put(
-          `${baseURL}/banner/update/${selectedBanner._id}`,
-          formData
-        );
-      } else {
-        res = await apiClient.post(
-          `${baseURL}/banner/add-banner`,
-          formData
-        );
-      }
-      if (res.data.success) {
-        Swal.fire({ icon: "success", title: editMode ? "Banner Updated!" : "Banner Created!" });
-        closeModal();
-        await fetchBanners();
-      } else {
-        setFormError(res.data?.message || "Operation failed.");
-      }
-    } catch (error) {
-      setFormError(getErrorMessage(error, "Operation failed."));
-    } finally {
-      setFormLoading(false);
-    }
-  };
 
-  // Delete banner
-  const handleDelete = async (banner) => {
-    const confirm = await Swal.fire({
-      title: "Are you sure?",
-      text: "This will delete the banner.",
-      icon: "warning",
-      showCancelButton: true,
-      confirmButtonText: "Yes, delete it!",
-    });
-    if (!confirm.isConfirmed) return;
-    try {
-      const res = await apiClient.delete(`${baseURL}/banner/delete/${banner._id}`);
-      if (res.data.success) {
-        Swal.fire({ icon: "success", title: "Deleted!" });
-        await fetchBanners();
+      if (banner) {
+        await updateBanner(banner._id, formData);
+        onToast("Banner updated and audited.");
       } else {
-        Swal.fire({ icon: "error", title: "Failed", text: res.data.message || "Delete failed." });
+        await addBanner(formData);
+        onToast("Banner created and audited.");
       }
+      onSaved();
     } catch (error) {
-      Swal.fire({ icon: "error", title: "Error", text: error?.response?.data?.message || "Delete failed." });
+      setFormError(bannersErrorMessage(error, "Operation failed."));
+    } finally {
+      setSaving(false);
     }
   };
 
   return (
-    <main className="app-content">
-      <div className="app-title tile p-3 d-flex justify-content-between align-items-center">
-        <div>
-          <span className="points-eyebrow">Content</span>
-          <h1>Sponsor Banners</h1>
-          <p>Manage production banner images used across Drewel apps.</p>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onCancel}>
+      <div className="relative bg-white rounded-[16px] shadow-2xl w-full max-w-md max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+        <button type="button" onClick={onCancel}
+          className="absolute top-3 right-3 w-8 h-8 flex items-center justify-center rounded-full bg-slate-100 text-slate-500 hover:bg-slate-200 transition-colors"
+          aria-label="Close">
+          <X size={14} />
+        </button>
+        <div className="p-6 border-b border-slate-100">
+          <h3 className="text-base font-bold text-slate-900">{banner ? "Edit Banner" : "Create Banner"}</h3>
+          <p className="text-xs text-slate-400 mt-0.5">Changes are confirmed and written to the audit log.</p>
         </div>
-        <button
-          className="btn btn-primary"
-          onClick={() => openModal()}
-        >
-          + Create Banner
+        <form onSubmit={handleSubmit} className="p-6 flex flex-col gap-4">
+          <div className="flex flex-col gap-1.5">
+            <label className="text-sm font-medium text-slate-700">Title</label>
+            <input value={title} onChange={(e) => setTitle(e.target.value)} maxLength={120}
+              placeholder="Banner title"
+              className="w-full h-10 bg-white border border-slate-200 rounded-[10px] px-3 text-sm text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-red-700/20 focus:border-red-400 transition-all" />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div className="flex flex-col gap-1.5">
+              <label className="text-sm font-medium text-slate-700">Placement</label>
+              <select value={placement} onChange={(e) => setPlacement(e.target.value)}
+                className="h-10 bg-white border border-slate-200 rounded-[10px] px-3 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-red-700/20 focus:border-red-400 transition-all">
+                {PLACEMENTS.map((p) => <option key={p} value={p}>{p.charAt(0).toUpperCase() + p.slice(1)}</option>)}
+              </select>
+            </div>
+            <div className="flex flex-col gap-1.5 justify-end">
+              <label className="flex items-center gap-2 text-sm font-medium text-slate-700 pb-2 cursor-pointer">
+                <input type="checkbox" checked={active} onChange={(e) => setActive(e.target.checked)}
+                  className="w-3.5 h-3.5 accent-[#BE1B2C]" />
+                Active
+              </label>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div className="flex flex-col gap-1.5">
+              <label className="text-sm font-medium text-slate-700">Start date</label>
+              <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)}
+                className="h-10 bg-white border border-slate-200 rounded-[10px] px-3 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-red-700/20 focus:border-red-400 transition-all" />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <label className="text-sm font-medium text-slate-700">End date</label>
+              <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)}
+                className="h-10 bg-white border border-slate-200 rounded-[10px] px-3 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-red-700/20 focus:border-red-400 transition-all" />
+            </div>
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <label className="text-sm font-medium text-slate-700">Banner image</label>
+            <input type="file" accept={ACCEPTED_IMAGE_TYPES.join(",")} onChange={handleImageChange}
+              className="block w-full border border-gray-300 rounded-[10px] px-3 py-2 bg-white cursor-pointer focus:outline-none focus:ring-2 focus:ring-red-700/20" />
+            {preview && (
+              <SafeImage src={preview} alt="Banner preview" fallbackLabel="Banner preview unavailable"
+                className="w-full max-h-44 object-cover rounded-[10px] mt-1 border border-gray-200" />
+            )}
+            <small className="text-xs text-slate-400">JPG, PNG, WebP, or GIF. Maximum 5 MB.</small>
+          </div>
+
+          {formError && <div className="bg-red-50 border border-red-200 rounded-[10px] px-3 py-2 text-xs text-red-700" role="alert">{formError}</div>}
+
+          <div className="flex justify-end gap-3">
+            <button type="button" onClick={onCancel}
+              className="h-9 inline-flex items-center gap-2 px-3.5 rounded-[10px] border border-slate-200 bg-white text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-all">
+              Cancel
+            </button>
+            <button type="submit" disabled={saving}
+              className="h-9 inline-flex items-center gap-2 px-3.5 rounded-[10px] bg-[#BE1B2C] text-xs font-semibold text-white hover:bg-[#A31725] disabled:opacity-60 transition-all">
+              {saving ? <span className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <Plus size={13} />}
+              {banner ? "Update Banner" : "Create Banner"}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+export default function Sponsor() {
+  const [banners, setBanners] = useState([]);
+  const [audits, setAudits] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
+  const [modal, setModal] = useState(null);
+  const [toast, setToast] = useState(null);
+
+  const fetchBanners = useCallback(async () => {
+    setLoading(true);
+    setLoadError("");
+    try {
+      setBanners(await getBanners());
+    } catch (error) {
+      setLoadError(bannersErrorMessage(error, "Failed to fetch banners."));
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  const fetchAudits = useCallback(async () => {
+    try {
+      const result = await getContentAudits({ entityType: "banner", page: 1, limit: 8 });
+      setAudits(result.items || []);
+    } catch {
+      setAudits([]);
+    }
+  }, []);
+
+  useEffect(() => { void fetchBanners(); void fetchAudits(); }, [fetchBanners, fetchAudits]);
+
+  const handleToggle = async (banner) => {
+    const next = !banner.active;
+    const confirm = await Swal.fire({
+      title: next ? "Activate banner?" : "Deactivate banner?",
+      text: next
+        ? `"${banner.title || "Untitled"}" will become visible in the app.`
+        : `"${banner.title || "Untitled"}" will be hidden from the app.`,
+      icon: "question",
+      showCancelButton: true,
+      confirmButtonText: next ? "Yes, activate" : "Yes, deactivate",
+      cancelButtonText: "Cancel",
+    });
+    if (!confirm.isConfirmed) return;
+    try {
+      await toggleBannerStatus(banner._id, next);
+      setToast({ message: next ? "Banner activated." : "Banner deactivated.", type: "success" });
+      void fetchBanners();
+      void fetchAudits();
+    } catch (error) {
+      setToast({ message: bannersErrorMessage(error, "Unable to update banner status."), type: "error" });
+    }
+  };
+
+  const handleDelete = async (banner) => {
+    const confirm = await Swal.fire({
+      title: "Delete banner?",
+      text: "This permanently removes the banner. The change is recorded in the audit log.",
+      icon: "warning",
+      showCancelButton: true,
+      confirmButtonText: "Yes, delete it!",
+      cancelButtonText: "Cancel",
+    });
+    if (!confirm.isConfirmed) return;
+    try {
+      await deleteBanner(banner._id);
+      setToast({ message: "Banner deleted.", type: "success" });
+      void fetchBanners();
+      void fetchAudits();
+    } catch (error) {
+      setToast({ message: bannersErrorMessage(error, "Delete failed."), type: "error" });
+    }
+  };
+
+  const activeCount = banners.filter((b) => b.active).length;
+  const totalImpressions = banners.reduce((sum, b) => sum + (b.impressionCount || 0), 0);
+  const totalClicks = banners.reduce((sum, b) => sum + (b.clickCount || 0), 0);
+
+  return (
+    <div className="flex flex-col gap-6">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-[22px] font-bold text-slate-900 leading-tight tracking-[-0.01em]">Sponsor Banners</h1>
+          <p className="text-sm text-slate-500 mt-0.5">Manage production banner images, scheduling and placement across Drewel apps.</p>
+        </div>
+        <button type="button" onClick={() => setModal({})}
+          className="h-9 inline-flex items-center gap-2 px-4 rounded-[10px] bg-[#BE1B2C] text-xs font-semibold text-white hover:bg-[#A31725] transition-all">
+          <Plus size={14} /> Create Banner
         </button>
       </div>
 
-      <section className="online-driver-kpis" aria-label="Banner status">
-        <article className="tile online-driver-kpi"><span>Total banners</span><strong>{banners.length}</strong></article>
-        <article className="tile online-driver-kpi online-driver-kpi--success"><span>Connected API</span><strong>{loadError ? "0" : "1"}</strong></article>
-        <article className="tile online-driver-kpi"><span>Accepted formats</span><strong>4</strong></article>
-        <article className={`tile online-driver-kpi ${loadError ? "online-driver-kpi--warning" : ""}`}><span>Needs review</span><strong>{loadError ? "1" : "0"}</strong></article>
-      </section>
-
-      {/* Modal for Create/Edit Banner */}
-      {modalOpen && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50"
-          onClick={closeModal}
-        >
-          <div
-            className="relative bg-white rounded-xl p-8 w-full max-w-md shadow-lg max-h-[90vh] overflow-y-auto"
-            onClick={e => e.stopPropagation()}
-          >
-            <button
-              type="button"
-              onClick={closeModal}
-              className="absolute top-3 right-3 w-9 h-9 flex items-center justify-center text-green-600 text-2xl font-bold bg-gray-100 rounded-full  hover:bg-gray-200 focus:outline-none"
-              aria-label="Close"
-            >
-             X
-            </button>
-            <div className="flex justify-center items-center pt-6">
-              <h4 className="w-full text-center font-semibold text-lg">{editMode ? "Edit Banner" : "Create Banner"}</h4>
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        {[
+          { label: "Total banners", value: banners.length, icon: Image },
+          { label: "Active", value: activeCount, icon: Eye },
+          { label: "Impressions", value: totalImpressions.toLocaleString(), icon: BarChart3 },
+          { label: "Clicks", value: totalClicks.toLocaleString(), icon: Eye },
+        ].map((kpi) => (
+          <div key={kpi.label} className="bg-white rounded-[14px] border border-slate-200 p-4">
+            <div className="flex items-center gap-2 mb-2">
+              <kpi.icon size={14} className="text-[#BE1B2C]" />
+              <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">{kpi.label}</span>
             </div>
-            <form onSubmit={handleFormSubmit} className="mt-4">
-              <div className="mb-4">
-                <label htmlFor="banner-image-input" className="block font-semibold mb-2">Banner Image</label>
-                <input
-                  id="banner-image-input"
-                  type="file"
-                  accept={ACCEPTED_IMAGE_TYPES.join(",")}
-                  className="block w-full border border-gray-300 rounded px-3 py-2 bg-white cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  onChange={handleImageChange}
-                  aria-invalid={Boolean(formError)}
-                />
-                {preview && (
-                  <SafeImage
-                    src={preview}
-                    alt="Banner preview"
-                    fallbackLabel="Banner preview unavailable"
-                    className="w-full max-h-44 object-cover rounded mt-3 border border-gray-200"
-                  />
-                )}
-                <small className="d-block text-muted mt-2">JPG, PNG, WebP, or GIF. Maximum 5 MB.</small>
-                {formError && <div className="alert alert-danger py-2 mt-3 mb-0" role="alert">{formError}</div>}
-              </div>
-              <div className="flex justify-end mt-6">
-                <button
-                  type="submit"
-                  className="bg-green-600 hover:bg-green-700 text-white font-semibold py-2 px-8 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-400 disabled:opacity-60"
-                  disabled={formLoading}
-                >
-                  {formLoading ? (editMode ? "Updating..." : "Creating...") : (editMode ? "Update Banner" : "Create Banner")}
-                </button>
-              </div>
-            </form>
+            <p className="text-xl font-black tabular-nums text-slate-900">{kpi.value}</p>
+          </div>
+        ))}
+      </div>
+
+      {loadError && (
+        <div className="flex items-start gap-3 bg-red-50 border border-red-200 rounded-[10px] px-4 py-3" role="alert">
+          <AlertTriangle size={16} className="text-red-500 shrink-0 mt-0.5" />
+          <div className="flex-1">
+            <p className="text-sm text-red-700">{loadError}</p>
+            <button type="button" onClick={fetchBanners} className="text-xs font-semibold text-red-700 hover:text-red-900 mt-1">Retry</button>
           </div>
         </div>
       )}
 
-      <div className="row mt-4">
-        <div className="col-md-12 px-5">
-          <div className="tile p-3">
-            <div className="tile-body">
+      <div className="bg-white rounded-[14px] border border-slate-200 overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full">
+            <thead>
+              <tr className="border-b border-slate-100">
+                <th className="text-left text-[11px] font-semibold text-slate-400 uppercase tracking-wider px-5 py-3">Preview</th>
+                <th className="text-left text-[11px] font-semibold text-slate-400 uppercase tracking-wider px-5 py-3">Banner</th>
+                <th className="text-left text-[11px] font-semibold text-slate-400 uppercase tracking-wider px-5 py-3">Placement</th>
+                <th className="text-left text-[11px] font-semibold text-slate-400 uppercase tracking-wider px-5 py-3">Schedule</th>
+                <th className="text-left text-[11px] font-semibold text-slate-400 uppercase tracking-wider px-5 py-3">Stats</th>
+                <th className="text-left text-[11px] font-semibold text-slate-400 uppercase tracking-wider px-5 py-3">Status</th>
+                <th className="text-left text-[11px] font-semibold text-slate-400 uppercase tracking-wider px-5 py-3">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
               {loading ? (
-                <div className="d-flex justify-content-center align-items-center" style={{ height: "200px" }}>
-                  <div className="loader"></div>
-                </div>
-              ) : loadError ? (
-                <div className="text-center py-5" role="alert">
-                  <p className="text-danger mb-3">{loadError}</p>
-                  <button type="button" className="btn btn-primary" onClick={fetchBanners}>
-                    Retry
-                  </button>
-                </div>
+                <tr><td colSpan={7}>
+                  <div className="flex items-center justify-center py-16">
+                    <div className="w-6 h-6 border-2 border-[#BE1B2C]/30 border-t-[#BE1B2C] rounded-full animate-spin" />
+                  </div>
+                </td></tr>
               ) : banners.length === 0 ? (
-                <p className="text-center">No banners found.</p>
-              ) : (
-                <div className="row">
-                  {banners.map((banner) => (
-                    <div className="col-md-4 col-sm-6 mb-4" key={banner._id}>
-                      <div className="card h-100 shadow-sm border-0">
-                        <SafeImage
-                          src={banner.imageUrl}
-                          alt="Banner"
-                          fallbackLabel="Banner image unavailable"
-                          className="card-img-top"
-                          style={{ height: 180, objectFit: "cover", borderTopLeftRadius: 8, borderTopRightRadius: 8 }}
-                        />
-                        <div className="card-body d-flex justify-content-between align-items-center">
-                          <button className="btn btn-outline-primary btn-sm" onClick={() => openModal(banner)}>
-                            Edit
-                          </button>
-                          <button className="btn btn-outline-danger btn-sm" onClick={() => handleDelete(banner)}>
-                            Delete
-                          </button>
-                        </div>
-                      </div>
+                <tr><td colSpan={7}>
+                  <div className="flex flex-col items-center gap-2 py-16 text-center">
+                    <Image size={24} className="text-slate-300" />
+                    <p className="text-sm font-medium text-slate-600">No banners yet</p>
+                    <p className="text-xs text-slate-400">Create your first sponsor banner to get started.</p>
+                  </div>
+                </td></tr>
+              ) : banners.map((banner) => (
+                <tr key={banner._id} className="border-b border-slate-50 hover:bg-slate-50/50 transition-colors">
+                  <td className="px-5 py-3">
+                    <SafeImage src={banner.imageUrl} alt={banner.title || "Banner"} fallbackLabel="Banner"
+                      className="w-24 h-14 object-cover rounded-[10px] border border-slate-100" />
+                  </td>
+                  <td className="px-5 py-3">
+                    <p className="text-sm font-medium text-slate-800">{banner.title || "Untitled banner"}</p>
+                    <p className="text-[10px] font-mono text-slate-400">{banner._id?.slice(-8) || ""}</p>
+                  </td>
+                  <td className="px-5 py-3">
+                    <span className="inline-flex text-[10px] font-semibold text-slate-600 bg-slate-100 border border-slate-200 px-2 py-0.5 rounded-full capitalize">
+                      {banner.placement || "home"}
+                    </span>
+                  </td>
+                  <td className="px-5 py-3">
+                    <div className="flex items-center gap-1 text-xs text-slate-600">
+                      <Calendar size={11} className="text-slate-400" />
+                      {fmtDate(banner.startDate)} — {fmtDate(banner.endDate)}
                     </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
+                  </td>
+                  <td className="px-5 py-3">
+                    <div className="flex flex-col gap-0.5 text-xs">
+                      <span className="text-slate-600">{banner.impressionCount || 0} impressions</span>
+                      <span className="text-slate-600">{banner.clickCount || 0} clicks</span>
+                    </div>
+                  </td>
+                  <td className="px-5 py-3"><StatusPill active={banner.active} /></td>
+                  <td className="px-5 py-3">
+                    <div className="flex items-center gap-1.5">
+                      <button type="button" onClick={() => setModal(banner)}
+                        className="h-7 inline-flex items-center gap-1 px-2.5 rounded-[8px] border border-slate-200 bg-white text-[10px] font-semibold text-slate-600 hover:bg-slate-50 transition-all">
+                        <Pencil size={10} /> Edit
+                      </button>
+                      <button type="button" onClick={() => handleToggle(banner)}
+                        className="h-7 inline-flex items-center gap-1 px-2.5 rounded-[8px] border border-slate-200 bg-white text-[10px] font-semibold text-slate-600 hover:bg-slate-50 transition-all"
+                        aria-label={banner.active ? "Deactivate banner" : "Activate banner"}>
+                        {banner.active ? <EyeOff size={10} /> : <Eye size={10} />}
+                        {banner.active ? "Deactivate" : "Activate"}
+                      </button>
+                      <button type="button" onClick={() => handleDelete(banner)}
+                        className="h-7 inline-flex items-center gap-1 px-2.5 rounded-[8px] border border-red-200 bg-white text-[10px] font-semibold text-red-600 hover:bg-red-50 transition-all">
+                        <Trash2 size={10} /> Delete
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       </div>
-    </main>
+
+      <div className="bg-white rounded-[14px] border border-slate-200 p-5">
+        <div className="flex items-center gap-2 mb-3">
+          <ShieldCheck size={14} className="text-slate-400" />
+          <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Recent content changes (audited)</h4>
+        </div>
+        {audits.length === 0 ? (
+          <p className="text-xs text-slate-400">No content changes recorded yet.</p>
+        ) : (
+          <div className="flex flex-col">
+            {audits.map((audit) => (
+              <div key={audit.id} className="flex items-center justify-between gap-3 py-2 border-b border-slate-50 last:border-0">
+                <div className="flex items-center gap-2">
+                  <span className={`text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded
+                    ${["deleted", "deactivated"].includes(audit.action) ? "bg-red-50 text-red-700" : audit.action === "created" ? "bg-green-50 text-green-700" : "bg-sky-50 text-sky-700"}`}>
+                    {audit.action}
+                  </span>
+                  <span className="text-xs text-slate-600">{audit.actorName || "Admin"}</span>
+                </div>
+                <span className="text-[10px] text-slate-400">{new Date(audit.occurredAt).toLocaleString("en-GB", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {modal && <BannerForm banner={modal._id ? modal : null} onCancel={() => setModal(null)}
+        onSaved={() => { setModal(null); void fetchBanners(); void fetchAudits(); }}
+        onToast={(msg) => setToast({ message: msg, type: "success" })} />}
+
+      {toast && (
+        <div className={`fixed bottom-6 right-6 z-[70] px-4 py-3 rounded-[12px] shadow-xl text-sm font-semibold
+          ${toast.type === "success" ? "bg-green-600 text-white" : "bg-red-600 text-white"}`}>
+          {toast.message}
+        </div>
+      )}
+    </div>
   );
 }
-
-export default Sponsor;

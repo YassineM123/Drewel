@@ -46,6 +46,9 @@ const rideConversationSchema = new mongoose.Schema(
     lastMessagePreview: { type: String, default: "" },
     lastMessageSenderRole: { type: String, default: "" },
     lastMessageStatus: { type: String, default: "" },
+    // Internal admin note attached to the conversation. Never sent to
+    // participants; only ever projected into admin payloads.
+    adminNote: { type: String, default: "", trim: true, maxlength: 2000 },
   },
   { timestamps: true, versionKey: false }
 );

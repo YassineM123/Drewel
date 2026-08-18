@@ -6,7 +6,7 @@ import {
   Navigation, AlertOctagon, Coins, MapPin, FileText,
   ArrowLeftRight, Bell, ScrollText, ChevronDown, ShieldCheck,
   Activity, UserCog, AlertTriangle, ClipboardList, CheckCircle2,
-  XCircle, BookOpen, Wallet, Package, BarChart2,
+  XCircle, BookOpen, Wallet, Package, BarChart2, Headphones,
 } from "lucide-react";
 
 const navGroups = [
@@ -59,8 +59,9 @@ const navGroups = [
   {
     section: "Communication",
     items: [
-      { to: "/chat",         label: "Chat",         icon: <MessageSquare size={16} /> },
-      { to: "/secure-calls", label: "Secure Calls", icon: <Phone         size={16} /> },
+      { to: "/chat",         label: "Chat Admin",    icon: <MessageSquare size={16} /> },
+      { to: "/support-chat", label: "Support Chat",  icon: <Headphones   size={16} /> },
+      { to: "/secure-calls", label: "Secure Calls",  icon: <Phone        size={16} /> },
     ],
   },
   {

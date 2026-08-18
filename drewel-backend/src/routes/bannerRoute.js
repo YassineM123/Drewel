@@ -6,6 +6,9 @@ import {
   getAllBanners,
   getBannerById,
   getBannerImage,
+  recordBannerClick,
+  recordBannerImpression,
+  toggleBannerStatus,
   updateBanner,
 } from "../controllers/bannerController.js";
 import { generateStorage } from "../utils/multerFunction.js";
@@ -64,6 +67,9 @@ router.put(
   updateBanner
 );
 router.delete("/delete/:id", requireSignIn, isAdmin, validateBannerId, deleteBanner);
+router.patch("/status/:id", requireSignIn, isAdmin, validateBannerId, toggleBannerStatus);
+router.post("/:id/impression", validateBannerId, recordBannerImpression);
+router.post("/:id/click", validateBannerId, recordBannerClick);
 router.get("/get-image/:fileName", getBannerImage);
 router.get("/:id", validateBannerId, getBannerById);
 export default router;

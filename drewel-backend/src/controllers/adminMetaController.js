@@ -15,6 +15,8 @@ import RideAudit from "../models/RideAudit.js";
 import PointsAdminAudit from "../models/PointsAdminAudit.js";
 import Admin, { ADMIN_ROLES } from "../models/Admin.js";
 import Notification from "../models/Notification.js";
+import CallLog, { CALL_STATUSES } from "../models/CallLog.js";
+import ContentAudit, { CONTENT_ENTITY_TYPES } from "../models/ContentAudit.js";
 import {
   dispatchNotification,
   isPushConfigured,
@@ -425,6 +427,32 @@ export const listChatThreads = async (req, res) => {
     if (req.query.status && ["active", "completed", "cancelled"].includes(req.query.status)) {
       filter.status = req.query.status;
     }
+    const clauses = [];
+    if (req.query.unread === "true") {
+      clauses.push({
+        $or: [{ passengerUnreadCount: { $gt: 0 } }, { driverUnreadCount: { $gt: 0 } }],
+      });
+    }
+    const q = String(req.query.q || "").trim();
+    if (q) {
+      const pattern = new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");
+      clauses.push({
+        $or: [
+          { rideReference: pattern },
+          { passengerName: pattern },
+          { driverName: pattern },
+          { lastMessagePreview: pattern },
+        ],
+      });
+    }
+    if (clauses.length) filter.$and = clauses;
+    if (req.query.reported === "true") {
+      const reportedRideIds = await SupportReport.distinct("rideId", {
+        status: { $in: ["open", "reviewing"] },
+      });
+      filter.rideId = { $in: reportedRideIds.filter(Boolean) };
+    }
+
     const [threads, total] = await Promise.all([
       RideConversation.find(filter)
         .sort({ lastMessageAt: -1, _id: -1 })
@@ -433,6 +461,15 @@ export const listChatThreads = async (req, res) => {
         .lean(),
       RideConversation.countDocuments(filter),
     ]);
+
+    const rideIds = threads.map((thread) => thread.rideId).filter(Boolean);
+    const reportedCounts = await SupportReport.aggregate([
+      { $match: { rideId: { $in: rideIds }, status: { $in: ["open", "reviewing"] } } },
+      { $group: { _id: "$rideId", count: { $sum: 1 } } },
+    ]);
+    const reportedByRide = new Map(
+      reportedCounts.map((row) => [String(row._id), row.count])
+    );
 
     return res.status(200).json({
       success: true,
@@ -460,6 +497,8 @@ export const listChatThreads = async (req, res) => {
         lastMessagePreview: thread.lastMessagePreview || "",
         lastMessageSenderRole: thread.lastMessageSenderRole || "",
         lastMessageStatus: thread.lastMessageStatus || "",
+        reportedCount: thread.rideId ? reportedByRide.get(String(thread.rideId)) || 0 : 0,
+        adminNote: thread.adminNote || "",
         createdAt: thread.createdAt,
       })),
       pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
@@ -470,16 +509,199 @@ export const listChatThreads = async (req, res) => {
 };
 
 // ---------------------------------------------------------------------------
-// GET /api/admin/secure-calls — secure call / contact audit feed
+// GET /api/admin/chat/threads/:id/messages - authorized message inspection
+// ---------------------------------------------------------------------------
+export const getAdminConversationMessages = async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!isObjectId(id)) {
+      const error = new Error("Invalid conversation id");
+      error.statusCode = 400;
+      throw error;
+    }
+    const conversation = await RideConversation.findById(id).lean();
+    if (!conversation) {
+      const error = new Error("Conversation not found");
+      error.statusCode = 404;
+      throw error;
+    }
+
+    const { page, limit } = pagination(req, 100);
+    const filter = { rideId: conversation.rideId };
+    const [messages, total] = await Promise.all([
+      RideMessage.find(filter)
+        .sort({ createdAt: 1, _id: 1 })
+        .skip((page - 1) * limit)
+        .limit(limit)
+        .lean(),
+      RideMessage.countDocuments(filter),
+    ]);
+
+    const reportedByRide = await SupportReport.find({
+      rideId: conversation.rideId,
+      status: { $in: ["open", "reviewing", "resolved", "closed"] },
+    })
+      .sort({ createdAt: -1 })
+      .limit(20)
+      .lean();
+
+    return res.status(200).json({
+      success: true,
+      conversation: {
+        id: String(conversation._id),
+        rideId: String(conversation.rideId),
+        rideReference: conversation.rideReference || "",
+        status: conversation.status,
+        passenger: {
+          id: String(conversation.passengerId || ""),
+          fullName: conversation.passengerName || "",
+        },
+        driver: {
+          id: String(conversation.driverId || ""),
+          fullName: conversation.driverName || "",
+          vehicleType: conversation.driverVehicleType || "",
+          vehicleModel: conversation.driverVehicleModel || "",
+        },
+        passengerUnreadCount: conversation.passengerUnreadCount || 0,
+        driverUnreadCount: conversation.driverUnreadCount || 0,
+        adminNote: conversation.adminNote || "",
+        lastMessagePreview: conversation.lastMessagePreview || "",
+        lastMessageAt: conversation.lastMessageAt || null,
+      },
+      messages: messages.map((message) => ({
+        id: String(message._id),
+        rideId: String(message.rideId),
+        senderRole: message.senderRole,
+        text: message.text,
+        messageType: message.messageType || "text",
+        status: message.status,
+        createdAt: message.createdAt,
+        deliveredAt: message.deliveredAt || null,
+        readAt: message.readAt || null,
+      })),
+      supports: reportedByRide.map((report) => ({
+        id: String(report._id),
+        actorRole: report.actorRole,
+        category: report.category,
+        description: String(report.description).slice(0, 280),
+        status: report.status,
+        createdAt: report.createdAt,
+      })),
+      pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
+    });
+  } catch (error) {
+    return sendError(res, error);
+  }
+};
+
+// ---------------------------------------------------------------------------
+// POST /api/admin/chat/threads/:id/note - internal admin note (audited)
+// ---------------------------------------------------------------------------
+export const addAdminConversationNote = async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!isObjectId(id)) {
+      const error = new Error("Invalid conversation id");
+      error.statusCode = 400;
+      throw error;
+    }
+    const note = String(req.body?.note || "").trim();
+    if (!note) {
+      const error = new Error("note is required");
+      error.statusCode = 400;
+      throw error;
+    }
+    if (note.length > 2000) {
+      const error = new Error("note must not exceed 2000 characters");
+      error.statusCode = 400;
+      throw error;
+    }
+    const conversation = await RideConversation.findByIdAndUpdate(
+      id,
+      { $set: { adminNote: note } },
+      { new: true, runValidators: true }
+    );
+    if (!conversation) {
+      const error = new Error("Conversation not found");
+      error.statusCode = 404;
+      throw error;
+    }
+
+    await ContentAudit.create({
+      entityType: "conversation",
+      entityId: String(conversation._id),
+      action: "note_added",
+      actorId: req.admin?._id || req.user?._id,
+      actorName: req.admin?.fullName || "",
+      actorEmail: req.admin?.email || "",
+      reason: note.slice(0, 1000),
+    }).catch((auditError) => {
+      console.error("Conversation note audit failed", auditError.message);
+    });
+
+    return res.status(200).json({
+      success: true,
+      conversation: {
+        id: String(conversation._id),
+        rideId: String(conversation.rideId),
+        adminNote: conversation.adminNote,
+        updatedAt: conversation.updatedAt,
+      },
+    });
+  } catch (error) {
+    return sendError(res, error);
+  }
+};
+
+// ---------------------------------------------------------------------------
+// GET /api/admin/content-audits - append-only audit for content changes
+// ---------------------------------------------------------------------------
+export const listContentAudits = async (req, res) => {
+  try {
+    const { page, limit } = pagination(req);
+    const filter = {};
+    if (req.query.entityType && CONTENT_ENTITY_TYPES.includes(req.query.entityType)) {
+      filter.entityType = req.query.entityType;
+    }
+    if (req.query.entityId && isObjectId(req.query.entityId)) {
+      filter.entityId = String(req.query.entityId);
+    }
+    const [entries, total] = await Promise.all([
+      ContentAudit.find(filter)
+        .sort({ occurredAt: -1, _id: -1 })
+        .skip((page - 1) * limit)
+        .limit(limit)
+        .lean(),
+      ContentAudit.countDocuments(filter),
+    ]);
+
+    return res.status(200).json({
+      success: true,
+      items: entries.map((entry) => ({
+        id: String(entry._id),
+        entityType: entry.entityType,
+        entityId: entry.entityId,
+        action: entry.action,
+        actorId: entry.actorId ? String(entry.actorId) : null,
+        actorName: entry.actorName || "",
+        actorEmail: entry.actorEmail || "",
+        reason: entry.reason || "",
+        occurredAt: entry.occurredAt,
+      })),
+      pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
+    });
+  } catch (error) {
+    return sendError(res, error);
+  }
+};
+
+// ---------------------------------------------------------------------------
+// GET /api/admin/secure-calls — secure call metadata feed (metadata only)
 // ---------------------------------------------------------------------------
 export const listSecureCalls = async (req, res) => {
   try {
     const { page, limit } = pagination(req);
     const filter = {};
-    const actions = String(req.query.action || "")
-      .split(",")
-      .map((value) => String(value).trim())
-      .filter(Boolean);
     if (req.query.rideId) {
       if (!isObjectId(req.query.rideId)) {
         const error = new Error("rideId is invalid");
@@ -488,31 +710,59 @@ export const listSecureCalls = async (req, res) => {
       }
       filter.rideId = req.query.rideId;
     }
-    if (actions.length) {
-      filter.action = { $in: actions };
+    if (req.query.status && CALL_STATUSES.includes(req.query.status)) {
+      filter.status = req.query.status;
     }
+    Object.assign(filter, dateRange(req, "startedAt"));
 
-    const [entries, total] = await Promise.all([
-      CommunicationAudit.find(filter)
-        .sort({ occurredAt: -1, _id: -1 })
+    const [entries, total, summary] = await Promise.all([
+      CallLog.find(filter)
+        .sort({ startedAt: -1, _id: -1 })
         .skip((page - 1) * limit)
         .limit(limit)
         .lean(),
-      CommunicationAudit.countDocuments(filter),
+      CallLog.countDocuments(filter),
+      CallLog.aggregate([
+        { $match: filter },
+        {
+          $group: {
+            _id: null,
+            completed: { $sum: { $cond: [{ $eq: ["$status", "completed"] }, 1, 0] } },
+            failed: { $sum: { $cond: [{ $eq: ["$status", "failed"] }, 1, 0] } },
+            missed: { $sum: { $cond: [{ $eq: ["$status", "missed"] }, 1, 0] } },
+            totalDurationSec: { $sum: "$durationSec" },
+          },
+        },
+      ]),
     ]);
+
+    const summaryRow = summary[0] || {};
 
     return res.status(200).json({
       success: true,
       items: entries.map((entry) => ({
         id: String(entry._id),
+        callId: entry.callId,
         rideId: entry.rideId ? String(entry.rideId) : null,
-        action: entry.action,
-        actorId: entry.actorId ? String(entry.actorId) : null,
-        actorRole: entry.actorRole,
-        outcome: entry.outcome,
-        reasonCode: entry.reasonCode || "",
-        occurredAt: entry.occurredAt,
+        participants: {
+          passenger: { id: entry.passengerId ? String(entry.passengerId) : null, name: entry.passengerName || "" },
+          driver: { id: entry.driverId ? String(entry.driverId) : null, name: entry.driverName || "" },
+        },
+        startedAt: entry.startedAt,
+        endedAt: entry.endedAt,
+        durationSec: entry.durationSec,
+        status: entry.status,
+        failureReason: entry.failureReason || "",
+        providerReference: entry.providerReference || "",
+        recordingEnabled: Boolean(entry.recordingEnabled),
       })),
+      summary: {
+        total,
+        completed: summaryRow.completed || 0,
+        failed: summaryRow.failed || 0,
+        missed: summaryRow.missed || 0,
+        totalDurationSec: summaryRow.totalDurationSec || 0,
+      },
       pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
     });
   } catch (error) {
@@ -709,7 +959,10 @@ export default {
   getAuditSources,
   getChatMetadata,
   listChatThreads,
+  getAdminConversationMessages,
+  addAdminConversationNote,
   listSecureCalls,
+  listContentAudits,
   getCommunicationActions,
   getRolesCatalog,
   listAdminNotifications,

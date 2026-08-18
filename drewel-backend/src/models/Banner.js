@@ -2,6 +2,23 @@ import mongoose from 'mongoose';
 
 const bannerSchema = new mongoose.Schema(
   {
+    title: {
+      type: String,
+      default: "",
+      trim: true,
+      maxlength: 120,
+    },
+    placement: {
+      type: String,
+      enum: ["home", "splash", "ride", "checkout", "promo"],
+      default: "home",
+      index: true,
+    },
+    active: { type: Boolean, default: true, index: true },
+    startDate: { type: Date, default: null },
+    endDate: { type: Date, default: null },
+    clickCount: { type: Number, default: 0, min: 0 },
+    impressionCount: { type: Number, default: 0, min: 0 },
     imageUrl: {
       type: String,
       required: true,

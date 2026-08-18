@@ -19,6 +19,8 @@ import DriverDetail from "./pages/DriverDetail";
 import EditDriver from "./pages/EditDriver";
 import Sponsor from "./pages/Sponsor";
 import ChatWrapper from "./components/chat/ChatWrapper";
+import AdminChat from "./pages/AdminChat";
+import SecureCalls from "./pages/SecureCalls";
 import OnlineDrivers from "./pages/OnlineDrivers";
 import DriverMap from "./pages/DriverMap";
 import TeamRoles from "./pages/TeamRoles";
@@ -39,18 +41,6 @@ import PurchaseRequests from "./pages/driverPoints/PurchaseRequests";
 import PointTransactions from "./pages/driverPoints/PointTransactions";
 import PointPacks from "./pages/driverPoints/PointPacks";
 import PointsSettings from "./pages/driverPoints/PointsSettings";
-
-function Placeholder({ title }) {
-  return (
-    <div className="flex flex-col items-center justify-center py-20 text-center">
-      <div className="w-14 h-14 rounded-full bg-slate-100 flex items-center justify-center mb-4">
-        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="text-slate-400"><path d="M12 9v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-      </div>
-      <h2 className="text-lg font-bold text-slate-800">{title}</h2>
-      <p className="text-sm text-slate-400 mt-1">This page is coming soon.</p>
-    </div>
-  );
-}
 
 function App() {
   return (
@@ -120,8 +110,9 @@ function App() {
                   <Route path="/driver-points/settings" element={<PointsSettings />} />
                 </Route>
 
-                <Route path="/chat" element={<ChatWrapper />} />
-                <Route path="/secure-calls" element={<Placeholder title="Secure Calls" />} />
+                <Route path="/chat" element={<AdminChat />} />
+                <Route path="/support-chat" element={<ChatWrapper />} />
+                <Route path="/secure-calls" element={<SecureCalls />} />
                 <Route path="/banners" element={<Sponsor />} />
                 <Route path="/sponsor" element={<Sponsor />} />
                 <Route path="/alerts" element={<Alerts />} />

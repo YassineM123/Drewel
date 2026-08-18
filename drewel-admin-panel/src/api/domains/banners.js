@@ -40,6 +40,41 @@ export const deleteBanner = async (bannerId, signal) => {
   return data;
 };
 
+/** Activate/deactivate a banner — PATCH /api/banner/status/:id (audited) */
+export const toggleBannerStatus = async (bannerId, active, signal) => {
+  const data = await apiClient.patch(
+    `/banner/status/${encodeURIComponent(bannerId)}`,
+    { active },
+    { signal },
+  );
+  return data.banner || data;
+};
+
+/** Record a banner impression (public analytics hook) — POST /api/banner/:id/impression */
+export const recordBannerImpression = async (bannerId, signal) => {
+  const data = await apiClient.post(`/banner/${encodeURIComponent(bannerId)}/impression`, null, { signal });
+  return data;
+};
+
+/** Record a banner click (public analytics hook) — POST /api/banner/:id/click */
+export const recordBannerClick = async (bannerId, signal) => {
+  const data = await apiClient.post(`/banner/${encodeURIComponent(bannerId)}/click`, null, { signal });
+  return data;
+};
+
+/**
+ * Content audit trail — GET /api/admin/content-audits
+ * Append-only log of content changes (banner created/updated/activated/
+ * deactivated/deleted, conversation note_added).
+ */
+export const getContentAudits = async (params, signal) => {
+  const data = await apiClient.get("/admin/content-audits", {
+    params: compactParams(params),
+    signal,
+  });
+  return { items: data.items || [], pagination: toPagination(data) };
+};
+
 export const bannersErrorMessage = (error, fallback = "Unable to load banners.") =>
   error?.response?.data?.message || error?.message || fallback;
 
