@@ -2,15 +2,16 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   RefreshCw, Download, AlertTriangle, CheckCircle2, TrendingUp, Activity,
-  MapPin, Clock, ChevronRight, AlertOctagon, Navigation, WifiOff,
+  MapPin, ChevronRight, AlertOctagon, Navigation, WifiOff,
   Zap, Globe, Database, Bell, ShieldCheck, Filter,
 } from "lucide-react";
+import PropTypes from "prop-types";
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell,
 } from "recharts";
-import { getAllDashboard } from "../utils/authUtils";
-import { getPointTransactions } from "../utils/pointsAdminApi";
+import { getDashboard } from "../api/domains/dashboard";
+import { getPointTransactions } from "../api/domains/points";
 import { useSocket } from "../context/SocketContext";
 import { presenceVersion, shouldApplyPresence } from "../utils/driverPresence";
 
@@ -69,6 +70,10 @@ function Skeleton({ className = "" }) {
   return <div className={`bg-slate-100 rounded-[10px] animate-pulse ${className}`} />;
 }
 
+Skeleton.propTypes = {
+  className: PropTypes.string,
+};
+
 function TxIcon({ type }) {
   const green = ["welcome_credit", "purchased_credit", "reservation_release", "admin_refund", "admin_correction"];
   const red = ["ride_debit", "offer_reservation"];
@@ -76,6 +81,10 @@ function TxIcon({ type }) {
   const label = green.includes(type) ? "\u2191" : "\u2193";
   return <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${cls}`}>{label}</span>;
 }
+
+TxIcon.propTypes = {
+  type: PropTypes.string,
+};
 
 function txTypeLabel(type) {
   const m = {
@@ -115,6 +124,10 @@ export function RideStatusBadge({ status }) {
   );
 }
 
+RideStatusBadge.propTypes = {
+  status: PropTypes.string,
+};
+
 const CustomTooltip = ({ active, payload, label }) => {
   if (!active || !payload?.length) return null;
   return (
@@ -129,6 +142,18 @@ const CustomTooltip = ({ active, payload, label }) => {
       ))}
     </div>
   );
+};
+
+CustomTooltip.propTypes = {
+  active: PropTypes.bool,
+  payload: PropTypes.arrayOf(
+    PropTypes.shape({
+      color: PropTypes.string,
+      name: PropTypes.string,
+      value: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
+    }),
+  ),
+  label: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
 };
 
 const HEALTH_SERVICES = [
@@ -152,7 +177,6 @@ export default function Dashboard() {
   const [lastUpdated, setLastUpdated] = useState(null);
   const [dashboard, setDashboard] = useState(emptyDashboard);
   const [transactions, setTransactions] = useState([]);
-  const [dismissedAlerts, setDismissedAlerts] = useState(new Set());
   const presenceVersions = useRef(new Map());
   const refreshTimer = useRef(null);
   const [secondsSince, setSecondsSince] = useState(0);
@@ -162,15 +186,15 @@ export default function Dashboard() {
     setError("");
     try {
       const [dashRes, txRes] = await Promise.allSettled([
-        getAllDashboard(),
+        getDashboard(),
         getPointTransactions({ limit: 7, page: 1 }),
       ]);
       if (dashRes.status === "rejected") throw dashRes.reason;
-      const nextDash = { ...emptyDashboard, ...(dashRes.value?.dashBoardData || {}) };
+      const nextDash = { ...emptyDashboard, ...(dashRes.value || {}) };
       setDashboard(nextDash);
       setTransactions(
         txRes.status === "fulfilled"
-          ? (txRes.value?.transactions || txRes.value?.data?.transactions || txRes.value?.items || [])
+          ? (txRes.value?.transactions || [])
           : []
       );
       setLastUpdated(new Date());
@@ -214,11 +238,13 @@ export default function Dashboard() {
     return () => clearInterval(id);
   }, [lastUpdated]);
 
-  const recentReservations = dashboard.recentReservations || [];
+  const recentReservations = useMemo(
+    () => (Array.isArray(dashboard.recentReservations) ? dashboard.recentReservations : []),
+    [dashboard.recentReservations],
+  );
   const activeRides = Number(dashboard.activeReservations || 0);
   const stuckRides = Number(dashboard.stuckRides || 0);
   const disputes = Number(dashboard.openDisputes || 0);
-  const lowBalanceDrivers = Number(dashboard.lowBalanceDrivers || 0);
   const supportReports = Number(dashboard.openSupportReports || 0);
   const onlineDrivers = Number(dashboard.onlineDrivers || 0);
 
@@ -339,7 +365,7 @@ export default function Dashboard() {
         </div>
       )}
 
-      {alerts.filter((a) => !dismissedAlerts.has(a.id)).slice(0, 2).map((alert) => (
+      {alerts.slice(0, 2).map((alert) => (
         <button key={alert.id} type="button" onClick={() => navigate(alert.path)}
           className={`flex items-start gap-3 rounded-[10px] px-4 py-3 text-left transition-colors border
             ${alert.type === "danger" ? "bg-red-50 border-red-200 hover:bg-red-100" :

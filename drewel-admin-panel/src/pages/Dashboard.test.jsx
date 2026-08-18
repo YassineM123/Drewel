@@ -7,9 +7,8 @@ vi.mock("../context/SocketContext", () => ({
   useSocket: () => ({ socket: null, isConnected: false }),
 }));
 
-vi.mock("../utils/authUtils", () => ({
-  getAllDashboard: vi.fn(async () => ({
-    dashBoardData: {
+vi.mock("../api/domains/dashboard", () => ({
+  getDashboard: vi.fn(async () => ({
       totalUsers: 12,
       totalDrivers: 8,
       onlineDrivers: 4,
@@ -40,8 +39,11 @@ vi.mock("../utils/authUtils", () => ({
           updatedAt: "2026-08-15T10:00:00.000Z",
         },
       ],
-    },
   })),
+}));
+
+vi.mock("../api/domains/points", () => ({
+  getPointTransactions: vi.fn(async () => ({ transactions: [] })),
 }));
 
 describe("Dashboard", () => {
