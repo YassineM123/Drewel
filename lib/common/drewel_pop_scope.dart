@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'package:get/get.dart';
+
 import 'drewel_navigation.dart';
 
 class DrewelPopScope extends StatefulWidget {
@@ -32,18 +34,18 @@ class _DrewelPopScopeState extends State<DrewelPopScope> {
     return await showDialog<bool>(
           context: context,
           builder: (BuildContext dialogContext) => AlertDialog(
-            title: const Text('Discard changes?'),
-            content: const Text(
-              'You have unsaved changes. Are you sure you want to leave?',
+            title: Text('discard_changes'.tr),
+            content: Text(
+              'unsaved_changes'.tr,
             ),
             actions: <Widget>[
               TextButton(
                 onPressed: () => Navigator.pop(dialogContext, false),
-                child: const Text('Cancel'),
+                child: Text('cancel'.tr),
               ),
               FilledButton(
                 onPressed: () => Navigator.pop(dialogContext, true),
-                child: const Text('Discard'),
+                child: Text('discard'.tr),
               ),
             ],
           ),

@@ -909,11 +909,11 @@ class CommonWidgets {
   }
 
   static void networkConnectionShowSnackBar() {
-    snackBarView(title: "Check Your Internet Connection", success: false);
+    snackBarView(title: "check_internet".tr, success: false);
   }
 
   static void serverDownShowSnackBar() {
-    snackBarView(title: "Server Down", success: false);
+    snackBarView(title: "server_down".tr, success: false);
   }
 
   static Widget progressBar(

@@ -30,6 +30,8 @@ import {
 import { startPointsJobs } from "./src/jobs/pointsJobs.js";
 import { startDriverPresenceWatchdog } from "./src/jobs/driverPresenceJob.js";
 import { startRankingJob } from "./src/jobs/rankingJob.js";
+import operationalRoutes from "./src/routes/operationalRoutes.js";
+import { startOperationalJobs } from "./src/jobs/operationalJobs.js";
 
 loadEnv();
 validatePublicAssetConfig();
@@ -108,6 +110,7 @@ app.use("/api/driver/points", driverPointsRoutes);
 app.use("/api/driver", driverRoutes);
 app.use("/api/admin/points", adminPointsRoutes);
 app.use("/api/admin", adminRoute);
+app.use("/api/admin/ops", operationalRoutes);
 app.use("/api/banner", bannerRoute);
 app.use("/api/rides", rideRoutes);
 app.use("/api/conversations", conversationRoutes);
@@ -157,6 +160,7 @@ connectDB()
       startPointsJobs();
       startDriverPresenceWatchdog();
       startRankingJob();
+      startOperationalJobs();
       console.log("server running at " + HOST + ":" + PORT);
     });
   })

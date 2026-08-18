@@ -35,7 +35,7 @@ class AuthSessionManager {
 
       if (showMessage && Get.context != null) {
         CommonWidgets.snackBarView(
-          title: 'Your session expired. Please sign in again.',
+          title: 'session_expired'.tr,
         );
       }
     } finally {

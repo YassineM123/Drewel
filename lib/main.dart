@@ -11,7 +11,7 @@ import 'common/theme_data.dart';
 import 'common/notification_sound_service.dart';
 import 'common/push_notification_service.dart';
 import 'app/modules/communication/controllers/call_state_controller.dart';
-import 'app/modules/points/points_translations.dart';
+import 'app/data/constants/app_translations.dart';
 import 'app/modules/active_ride/bindings/active_ride_binding.dart';
 
 Future<void> main() async {
@@ -43,7 +43,7 @@ Future<void> main() async {
       }),
       debugShowCheckedModeBanner: false,
       theme: MThemeData.themeData(),
-      translations: PointsTranslations(),
+      translations: AppTranslations(),
       locale: savedLanguage.isEmpty ? Get.deviceLocale : Locale(savedLanguage),
       fallbackLocale: const Locale('en'),
       supportedLocales: const <Locale>[Locale('en'), Locale('ar')],

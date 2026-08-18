@@ -387,7 +387,7 @@ class DriverHomeController extends GetxController with WidgetsBindingObserver {
             ? AndroidSettings(
                 accuracy: LocationAccuracy.bestForNavigation,
                 distanceFilter: 0,
-                intervalDuration: Duration(
+                intervalDuration: const Duration(
                   seconds: _locationUpdateIntervalSeconds,
                 ),
               )

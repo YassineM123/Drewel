@@ -38,3 +38,4 @@ export * from "./domains/settings";
 export * from "./domains/health";
 export * from "./domains/roles";
 export * from "./domains/notifications";
+export * from "./domains/operational";

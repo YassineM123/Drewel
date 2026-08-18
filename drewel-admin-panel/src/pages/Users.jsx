@@ -86,7 +86,7 @@ function ActionModal({ title, consequence, variant, onConfirm, onClose }) {
           <div className="flex flex-col gap-1.5">
             <label className="text-sm font-medium text-slate-700">Reason <span className="text-red-500">*</span></label>
             <textarea value={reason} onChange={(e) => setReason(e.target.value)} rows={3}
-              placeholder="Provide a reason for this action\u2026"
+              placeholder="Provide a reason for this action…"
               className="w-full bg-white border border-slate-200 rounded-[10px] p-3 text-sm text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-red-700/20 focus:border-red-400 resize-none" />
           </div>
         </div>
@@ -348,7 +348,7 @@ export default function Users() {
       <div className="flex flex-wrap items-center gap-3">
         <div className="relative flex-1 min-w-52 max-w-sm">
           <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-          <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search by name, phone or user ID\u2026"
+          <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search by name, phone or user ID…"
             className="w-full h-10 bg-white border border-slate-200 rounded-[10px] pl-9 pr-4 text-sm text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-red-700/20 focus:border-red-400 transition-all" />
         </div>
         <div className="flex flex-col gap-1">

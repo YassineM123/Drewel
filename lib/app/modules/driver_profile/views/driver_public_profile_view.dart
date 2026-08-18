@@ -146,7 +146,7 @@ class DriverPublicProfileView extends GetView<DriverProfileController> {
               ),
               if (profile.isVerified) ...[
                 const SizedBox(width: 6),
-                Icon(Icons.verified_rounded, size: 20, color: primaryColor),
+                const Icon(Icons.verified_rounded, size: 20, color: primaryColor),
               ],
             ],
           ),
@@ -155,7 +155,7 @@ class DriverPublicProfileView extends GetView<DriverProfileController> {
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               if (profile.rating != null) ...[
-                Icon(Icons.star_rounded, size: 18, color: amberColor),
+                const Icon(Icons.star_rounded, size: 18, color: amberColor),
                 const SizedBox(width: 2),
                 Text(
                   profile.rating!.toStringAsFixed(2),
@@ -283,7 +283,7 @@ class DriverPublicProfileView extends GetView<DriverProfileController> {
           children: [
             Row(
               children: [
-                Icon(Icons.directions_car_rounded, size: 18, color: primaryColor),
+                const Icon(Icons.directions_car_rounded, size: 18, color: primaryColor),
                 const SizedBox(width: 8),
                 Text('Vehicle', style: MyTextStyle.titleStyle14bb),
               ],
@@ -322,7 +322,7 @@ class DriverPublicProfileView extends GetView<DriverProfileController> {
           children: [
             Row(
               children: [
-                Icon(Icons.info_outline_rounded, size: 18, color: primaryColor),
+                const Icon(Icons.info_outline_rounded, size: 18, color: primaryColor),
                 const SizedBox(width: 8),
                 Text('About', style: MyTextStyle.titleStyle14bb),
               ],
@@ -359,7 +359,7 @@ class DriverPublicProfileView extends GetView<DriverProfileController> {
           children: [
             Row(
               children: [
-                Icon(Icons.rate_review_rounded, size: 18, color: primaryColor),
+                const Icon(Icons.rate_review_rounded, size: 18, color: primaryColor),
                 const SizedBox(width: 8),
                 Text('Reviews', style: MyTextStyle.titleStyle14bb),
                 const Spacer(),
@@ -403,11 +403,11 @@ class DriverPublicProfileView extends GetView<DriverProfileController> {
       mainAxisSize: MainAxisSize.min,
       children: List.generate(5, (index) {
         if (index < rating.floor()) {
-          return Icon(Icons.star_rounded, size: 16, color: amberColor);
+          return const Icon(Icons.star_rounded, size: 16, color: amberColor);
         } else if (index < rating) {
-          return Icon(Icons.star_half_rounded, size: 16, color: amberColor);
+          return const Icon(Icons.star_half_rounded, size: 16, color: amberColor);
         }
-        return Icon(Icons.star_border_rounded, size: 16, color: amberColor);
+        return const Icon(Icons.star_border_rounded, size: 16, color: amberColor);
       }),
     );
   }
@@ -430,7 +430,7 @@ class DriverPublicProfileView extends GetView<DriverProfileController> {
                 ),
               ),
               const SizedBox(width: 4),
-              Icon(Icons.star_rounded, size: 12, color: amberColor),
+              const Icon(Icons.star_rounded, size: 12, color: amberColor),
               const SizedBox(width: 6),
               Expanded(
                 child: ClipRRect(

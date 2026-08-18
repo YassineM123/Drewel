@@ -135,7 +135,7 @@ class DriverRankingsView extends GetView<DriverRankingsController> {
                       )
                     : Container(
                         color: primaryColor.withValues(alpha: 0.1),
-                        child: Icon(Icons.person, color: primaryColor, size: 24),
+                        child: const Icon(Icons.person, color: primaryColor, size: 24),
                       ),
               ),
             ),
@@ -156,14 +156,14 @@ class DriverRankingsView extends GetView<DriverRankingsController> {
                       ),
                       if (item.driver.isVerified) ...[
                         const SizedBox(width: 4),
-                        Icon(Icons.verified_rounded, size: 16, color: primaryColor),
+                        const Icon(Icons.verified_rounded, size: 16, color: primaryColor),
                       ],
                     ],
                   ),
                   const SizedBox(height: 3),
                   Row(
                     children: [
-                      Icon(Icons.star_rounded, size: 14, color: amberColor),
+                      const Icon(Icons.star_rounded, size: 14, color: amberColor),
                       const SizedBox(width: 2),
                       Text(
                         item.ranking.weightedRating.toStringAsFixed(2),
@@ -192,7 +192,7 @@ class DriverRankingsView extends GetView<DriverRankingsController> {
                 ],
               ),
             ),
-            Icon(Icons.chevron_right_rounded, size: 20, color: text2Color),
+            const Icon(Icons.chevron_right_rounded, size: 20, color: text2Color),
           ],
         ),
       ),

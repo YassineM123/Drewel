@@ -1,196 +1,326 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { CheckCircle2, ChevronRight, Loader2, TriangleAlert } from "lucide-react";
-import { getAllDashboard } from "../utils/authUtils";
-import { Card, EmptyState, ErrorState, KpiCard, SectionHeader } from "../components/ui";
+import {
+  Loader2, RefreshCw, Search, Eye, UserCheck, Play, CheckCircle2,
+  AlertTriangle, XCircle, ChevronRight, ExternalLink, MessageSquare,
+} from "lucide-react";
+import {
+  getOperationalAlerts, acknowledgeAlert, investigateAlert,
+  resolveOperationalAlert, operationalErrorMessage,
+} from "../api/domains/operational";
+import {
+  Badge, Button, Card, Drawer, EmptyState, ErrorState, Input,
+  LoadingState, Modal, Pagination, SectionHeader, Select, StatRow,
+  TabBar, Toast,
+} from "../components/ui";
 
-const buildQueueItems = (data = {}) => [
-  {
-    key: "stuckRides",
-    label: "Stuck reservations",
-    value: Number(data.stuckRides || 0),
-    path: "/reservations/stuck",
-    tone: "danger",
-  },
-  {
-    key: "openDisputes",
-    label: "Open disputes",
-    value: Number(data.openDisputes || 0),
-    path: "/reservations/disputes",
-    tone: "danger",
-  },
-  {
-    key: "pendingApproval1",
-    label: "Pending basic registrations",
-    value: Number(data.pendingApproval1 || 0),
-    path: "/requests/pending?stage=basic",
-    tone: "warning",
-  },
-  {
-    key: "pendingApproval2",
-    label: "Pending document reviews",
-    value: Number(data.pendingApproval2 || 0),
-    path: "/requests/pending?stage=profile",
-    tone: "warning",
-  },
-  {
-    key: "pendingPointPurchaseRequests",
-    label: "Point purchase requests",
-    value: Number(data.pendingPointPurchaseRequests || 0),
-    path: "/driver-points/purchase-requests",
-    tone: "warning",
-  },
-  {
-    key: "lowBalanceDrivers",
-    label: "Low-balance drivers",
-    value: Number(data.lowBalanceDrivers || 0),
-    path: "/driver-points/wallets",
-    tone: "warning",
-  },
-  {
-    key: "unreadRideMessages",
-    label: "Unread ride messages",
-    value: Number(data.unreadRideMessages || 0),
-    path: "/chat",
-    tone: "info",
-  },
-  {
-    key: "openSupportReports",
-    label: "Open support reports",
-    value: Number(data.openSupportReports || 0),
-    path: "/requests/all",
-    tone: "info",
-  },
-].map((item) => ({ ...item, value: Number.isFinite(item.value) ? item.value : 0 }));
-
-const TONE_STYLES = {
-  danger: { bg: "bg-red-50 border-red-200", text: "text-red-700", badge: "bg-red-100 text-red-700" },
-  warning: { bg: "bg-amber-50 border-amber-200", text: "text-amber-700", badge: "bg-amber-100 text-amber-700" },
-  info: { bg: "bg-sky-50 border-sky-200", text: "text-sky-700", badge: "bg-sky-100 text-sky-700" },
+const ALERT_TYPE_META = {
+  stuck_ride: { label: "Stuck Ride", category: "Operations", icon: "\u23f1" },
+  stale_gps: { label: "Stale GPS", category: "Operations", icon: "📍" },
+  busy_driver_no_active_ride: { label: "Busy Driver", category: "Operations", icon: "🚗" },
+  multiple_active_rides: { label: "Multi Active Ride", category: "Operations", icon: "\u26a0" },
+  invalid_ride_lock: { label: "Invalid Ride Lock", category: "Operations", icon: "🔒" },
+  negative_inconsistent_points: { label: "Negative Points", category: "Points", icon: "\u2796" },
+  expired_point_reservation: { label: "Expired Reservation", category: "Points", icon: "\u23f0" },
+  google_routes_failure: { label: "Routes Failure", category: "System", icon: "🗺" },
+  socketio_interruption: { label: "Socket.IO Down", category: "System", icon: "\u26a1" },
+  pickup_pin_failures: { label: "PIN Failures", category: "Security", icon: "🔑" },
+  expiring_driver_documents: { label: "Expiring Docs", category: "Compliance", icon: "📄" },
 };
 
-const formatValue = (value) => (Number(value) > 0 ? `+${Number(value).toFixed(0)}` : Number(value).toFixed(0));
+const SEVERITY_CFG = {
+  critical: { variant: "rejected", color: "text-red-700", bg: "bg-red-50", border: "border-red-200" },
+  warning: { variant: "warning", color: "text-amber-700", bg: "bg-amber-50", border: "border-amber-200" },
+  info: { variant: "info", color: "text-sky-700", bg: "bg-sky-50", border: "border-sky-200" },
+};
+
+const STATUS_CFG = {
+  open: { variant: "rejected", label: "Open" },
+  acknowledged: { variant: "pending", label: "Acknowledged" },
+  investigating: { variant: "info", label: "Investigating" },
+  resolved: { variant: "approved", label: "Resolved" },
+};
+
+const OUTCOMES = [
+  { value: "fixed", label: "Fixed" },
+  { value: "wont_fix", label: "Won't Fix" },
+  { value: "duplicate", label: "Duplicate" },
+  { value: "false_positive", label: "False Positive" },
+  { value: "other", label: "Other" },
+];
+
+function formatDate(v) {
+  if (!v) return "\u2014";
+  return new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(new Date(v));
+}
+
+function formatRelTime(iso) {
+  if (!iso) return "\u2014";
+  const diff = Date.now() - new Date(iso).getTime();
+  if (diff < 60000) return "just now";
+  const m = Math.floor(diff / 60000);
+  if (m < 60) return `${m}m ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h ago`;
+  return `${Math.floor(h / 24)}d ago`;
+}
 
 const Alerts = () => {
   const navigate = useNavigate();
-  const [state, setState] = useState({ loading: true, error: "", data: null });
+  const [alerts, setAlerts] = useState([]);
+  const [summary, setSummary] = useState({});
+  const [pagination, setPagination] = useState({ page: 1, limit: 20, total: 0, totalPages: 1 });
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [statusFilter, setStatusFilter] = useState("");
+  const [severityFilter, setSeverityFilter] = useState("");
+  const [typeFilter, setTypeFilter] = useState("");
+  const [search, setSearch] = useState("");
+  const [toast, setToast] = useState(null);
+  const [selectedAlert, setSelectedAlert] = useState(null);
+  const [resolveModal, setResolveModal] = useState({ open: false, alertId: null });
+  const [resolveNote, setResolveNote] = useState("");
+  const [resolveOutcome, setResolveOutcome] = useState("fixed");
+  const [actionLoading, setActionLoading] = useState(false);
 
-  useEffect(() => {
-    let cancelled = false;
-    getAllDashboard()
-      .then((response) => {
-        if (cancelled) return;
-        setState({ loading: false, error: "", data: response?.dashBoardData || null });
-      })
-      .catch((error) => {
-        if (cancelled) return;
-        setState({ loading: false, error: error?.response?.data?.message || error?.message || "Failed to load alerts", data: null });
+  const load = useCallback(async () => {
+    try {
+      setLoading(true);
+      setError("");
+      const result = await getOperationalAlerts({
+        page: pagination.page,
+        limit: pagination.limit,
+        status: statusFilter || undefined,
+        severity: severityFilter || undefined,
+        alertType: typeFilter || undefined,
+        search: search.trim() || undefined,
       });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+      setAlerts(result.alerts);
+      setSummary(result.summary);
+      setPagination((p) => ({ ...p, total: result.pagination.total, totalPages: result.pagination.totalPages }));
+    } catch (err) {
+      setError(operationalErrorMessage(err, "Failed to load alerts."));
+    } finally {
+      setLoading(false);
+    }
+  }, [pagination.page, pagination.limit, statusFilter, severityFilter, typeFilter, search]);
 
-  const queue = useMemo(() => buildQueueItems(state.data), [state.data]);
+  useEffect(() => { load(); }, [load]);
 
-  const urgent = queue.filter((item) => item.tone === "danger");
+  const handleAction = useCallback(async (actionFn, id, successMsg) => {
+    setActionLoading(true);
+    try {
+      await actionFn(id);
+      setToast({ message: successMsg, type: "success" });
+      setSelectedAlert(null);
+      load();
+    } catch (err) {
+      setToast({ message: operationalErrorMessage(err, "Action failed."), type: "error" });
+    } finally {
+      setActionLoading(false);
+    }
+  }, [load]);
+
+  const handleResolve = useCallback(async () => {
+    setActionLoading(true);
+    try {
+      await resolveOperationalAlert(resolveModal.alertId, { note: resolveNote, outcome: resolveOutcome });
+      setToast({ message: "Alert resolved.", type: "success" });
+      setResolveModal({ open: false, alertId: null });
+      setResolveNote("");
+      setSelectedAlert(null);
+      load();
+    } catch (err) {
+      setToast({ message: operationalErrorMessage(err, "Failed to resolve alert."), type: "error" });
+    } finally {
+      setActionLoading(false);
+    }
+  }, [resolveModal.alertId, resolveNote, resolveOutcome, load]);
+
+  const openEntity = useCallback((alert) => {
+    const e = alert.entity;
+    if (!e?.entityType || !e?.entityId) return;
+    if (e.entityType === "ride") navigate(`/reservations/${e.entityId}`);
+    else if (e.entityType === "driver") navigate(`/driver-detail/${e.entityId}`);
+    else if (e.entityType === "user") navigate(`/users/${e.entityId}`);
+  }, [navigate]);
 
   return (
-    <div className="space-y-6 max-w-5xl">
+    <div className="space-y-6">
+      {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
       <SectionHeader
-        title="Alerts"
-        description="Live operational queues from the backend, grouped by severity with a direct path to each review surface."
+        title="Operational Alerts"
+        description="Auto-detected operational anomalies requiring review. Investigate, assign, acknowledge, and resolve."
+        actions={
+          <Button variant="secondary" size="sm" icon={<RefreshCw size={13} className={loading ? "animate-spin" : ""} />} onClick={load}>
+            Refresh
+          </Button>
+        }
       />
 
-      {state.loading && (
-        <Card className="p-10 flex flex-col items-center justify-center text-center gap-3" role="status">
-          <Loader2 size={22} className="animate-spin text-slate-400" />
-          <p className="text-sm text-slate-500">Loading live queue...</p>
-        </Card>
-      )}
-
-      {state.error && !state.loading && (
-        <ErrorState
-          title="Unable to load alerts"
-          description={state.error}
-          action={
+      {summary && Object.keys(summary).length > 0 && (
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          {["open", "acknowledged", "investigating", "resolved"].map((s) => (
             <button
-              type="button"
-              onClick={() => window.location.reload()}
-              className="inline-flex items-center gap-2 h-10 px-4 text-sm font-medium rounded-[10px] bg-[#BE1B2C] text-white hover:bg-[#A31725]"
+              key={s}
+              onClick={() => setStatusFilter(statusFilter === s ? "" : s)}
+              className={`p-3 rounded-[10px] border text-left transition-all ${statusFilter === s ? "ring-2 ring-[#BE1B2C]/30 border-[#BE1B2C]" : "border-slate-200 hover:border-slate-300"}`}
             >
-              Retry
+              <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">{STATUS_CFG[s]?.label}</span>
+              <p className="text-xl font-bold tabular-nums mt-1 text-slate-800">{summary[s] || 0}</p>
             </button>
-          }
-        />
+          ))}
+        </div>
       )}
 
-      {!state.loading && !state.error && (
-        <>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {queue.map((item) => (
-              <button
-                key={item.key}
-                type="button"
-                onClick={() => navigate(item.path)}
-                className="text-left group"
-              >
-                <Card className="p-5 h-full">
-                  <div className="flex items-start justify-between gap-2">
-                    <span className={`text-[11px] font-semibold uppercase tracking-wider ${TONE_STYLES[item.tone].text}`}>
-                      {item.label}
-                    </span>
-                    <ChevronRight size={15} className="text-slate-300 group-hover:text-slate-500 transition-colors shrink-0 mt-0.5" />
-                  </div>
-                  <div className="mt-3 flex items-end justify-between gap-2">
-                    <span className={`text-[28px] font-bold tabular-nums leading-none ${item.value > 0 ? TONE_STYLES[item.tone].text : "text-slate-800"}`}>
-                      {item.value}
-                    </span>
-                    <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${item.value > 0 ? TONE_STYLES[item.tone].badge : "bg-slate-100 text-slate-500"}`}>
-                      {item.value > 0 ? formatValue(item.value) : "Clear"}
-                    </span>
-                  </div>
-                </Card>
-              </button>
-            ))}
+      <Card className="overflow-hidden">
+        <div className="px-4 py-3 border-b border-slate-100 flex flex-wrap items-center gap-2">
+          <div className="min-w-[200px] flex-1">
+            <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search alerts..." leftIcon={<Search size={14} />} />
           </div>
+          <Select value={statusFilter} onChange={setStatusFilter} options={[{ value: "", label: "All Statuses" }, { value: "open", label: "Open" }, { value: "acknowledged", label: "Acknowledged" }, { value: "investigating", label: "Investigating" }, { value: "resolved", label: "Resolved" }]} />
+          <Select value={severityFilter} onChange={setSeverityFilter} options={[{ value: "", label: "All Severities" }, { value: "critical", label: "Critical" }, { value: "warning", label: "Warning" }, { value: "info", label: "Info" }]} />
+          <Select value={typeFilter} onChange={setTypeFilter} options={[{ value: "", label: "All Types" }, ...Object.entries(ALERT_TYPE_META).map(([k, v]) => ({ value: k, label: v.label }))]} />
+        </div>
 
-          {urgent.length > 0 && (
-            <Card className="overflow-hidden">
-              <div className="px-6 py-4 border-b border-slate-100 flex items-center gap-2">
-                <TriangleAlert size={15} className="text-red-500" />
-                <h2 className="text-sm font-semibold text-slate-700">Needs attention now</h2>
-              </div>
-              <div className="p-6 space-y-2">
-                {urgent.map((item) => (
-                  <button
-                    key={item.key}
-                    type="button"
-                    onClick={() => navigate(item.path)}
-                    className="w-full flex items-center justify-between gap-3 px-4 py-3 rounded-[10px] bg-red-50 border border-red-200 text-left hover:bg-red-100/70 transition-colors"
-                  >
-                    <span className="text-sm font-medium text-red-700">{item.label}</span>
-                    <span className="text-xl font-bold text-red-700 tabular-nums">{item.value}</span>
-                  </button>
-                ))}
-              </div>
-            </Card>
-          )}
+        {loading ? (
+          <LoadingState label="Loading alerts..." />
+        ) : error ? (
+          <ErrorState title="Unable to load alerts" description={error} action={<Button variant="secondary" onClick={load}>Retry</Button>} />
+        ) : alerts.length === 0 ? (
+          <EmptyState title="No alerts found" description={statusFilter || severityFilter || typeFilter || search ? "Try adjusting your filters." : "No operational alerts have been detected."} />
+        ) : (
+          <div className="divide-y divide-slate-100">
+            {alerts.map((alert) => {
+              const sev = SEVERITY_CFG[alert.severity] || SEVERITY_CFG.info;
+              const typeMeta = ALERT_TYPE_META[alert.alertType] || { label: alert.alertType, icon: "\u2699" };
+              return (
+                <div
+                  key={alert.id}
+                  onClick={() => setSelectedAlert(alert)}
+                  className="px-4 py-3.5 hover:bg-slate-50 cursor-pointer transition-colors flex items-start gap-3"
+                >
+                  <span className={`text-lg shrink-0 mt-0.5`}>{typeMeta.icon}</span>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-sm font-semibold text-slate-800 truncate">{alert.title}</span>
+                      <Badge variant={STATUS_CFG[alert.status]?.variant || "info"} label={STATUS_CFG[alert.status]?.label || alert.status} />
+                      <Badge variant={sev.variant} label={alert.severity} />
+                    </div>
+                    {alert.description && (
+                      <p className="text-xs text-slate-500 mt-0.5 line-clamp-1">{alert.description}</p>
+                    )}
+                    <div className="flex items-center gap-3 mt-1.5 text-[11px] text-slate-400">
+                      <span>{typeMeta.category}</span>
+                      {alert.entity?.label && <span>Entity: {alert.entity.label}</span>}
+                      {alert.assignedAdmin && <span>Assigned: {alert.assignedAdmin.name}</span>}
+                      <span>{formatRelTime(alert.detectedAt)}</span>
+                    </div>
+                  </div>
+                  <ChevronRight size={14} className="text-slate-300 shrink-0 mt-2" />
+                </div>
+              );
+            })}
+          </div>
+        )}
 
-          {queue.every((item) => item.value === 0) && (
-            <EmptyState
-              title="All queues are clear"
-              description="No stuck reservations, disputes, pending reviews, or low-balance drivers right now."
-              action={
-                <span className="inline-flex items-center gap-2 text-xs text-green-600 font-medium">
-                  <CheckCircle2 size={14} />
-                  Verified against the live dashboard API
-                </span>
-              }
+        {!loading && !error && alerts.length > 0 && (
+          <Pagination page={pagination.page} total={pagination.total} perPage={pagination.limit} onChange={(p) => setPagination((prev) => ({ ...prev, page: p }))} />
+        )}
+      </Card>
+
+      {/* Detail Drawer */}
+      <Drawer open={Boolean(selectedAlert)} onClose={() => setSelectedAlert(null)} title="Alert Details" width="w-[520px]">
+        {selectedAlert && (
+          <div className="p-6 space-y-5">
+            <div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <Badge variant={STATUS_CFG[selectedAlert.status]?.variant || "info"} label={STATUS_CFG[selectedAlert.status]?.label} dot />
+                <Badge variant={SEVERITY_CFG[selectedAlert.severity]?.variant || "info"} label={selectedAlert.severity} />
+              </div>
+              <h3 className="text-base font-semibold text-slate-800 mt-2">{selectedAlert.title}</h3>
+              {selectedAlert.description && <p className="text-sm text-slate-500 mt-1">{selectedAlert.description}</p>}
+            </div>
+
+            <div className="space-y-0">
+              <StatRow label="Type" value={ALERT_TYPE_META[selectedAlert.alertType]?.label || selectedAlert.alertType} />
+              <StatRow label="Detected" value={formatDate(selectedAlert.detectedAt)} />
+              {selectedAlert.entity && (
+                <StatRow
+                  label="Entity"
+                  value={
+                    selectedAlert.entity.entityId ? (
+                      <button onClick={() => openEntity(selectedAlert)} className="text-[#BE1B2C] hover:underline flex items-center gap-1">
+                        {selectedAlert.entity.label || String(selectedAlert.entity.entityId).slice(0, 12)}
+                        <ExternalLink size={10} />
+                      </button>
+                    ) : selectedAlert.entity.label || "\u2014"
+                  }
+                />
+              )}
+              {selectedAlert.assignedAdmin && (
+                <StatRow label="Assigned To" value={`${selectedAlert.assignedAdmin.name} (${formatDate(selectedAlert.assignedAdmin.assignedAt)})`} />
+              )}
+              {selectedAlert.acknowledgement && (
+                <StatRow label="Acknowledged By" value={`${selectedAlert.acknowledgement.name} (${formatDate(selectedAlert.acknowledgement.acknowledgedAt)})`} />
+              )}
+              {selectedAlert.resolution?.resolvedAt && (
+                <>
+                  <StatRow label="Resolved By" value={selectedAlert.resolution.name} />
+                  <StatRow label="Resolution" value={selectedAlert.resolution.outcome} />
+                  {selectedAlert.resolution.note && <StatRow label="Resolution Note" value={selectedAlert.resolution.note} />}
+                  <StatRow label="Resolved At" value={formatDate(selectedAlert.resolution.resolvedAt)} />
+                </>
+              )}
+            </div>
+
+            {selectedAlert.status !== "resolved" && (
+              <div className="flex flex-wrap gap-2 pt-3 border-t border-slate-100">
+                {selectedAlert.status === "open" && (
+                  <Button size="sm" variant="secondary" icon={<UserCheck size={13} />} loading={actionLoading} onClick={() => handleAction(acknowledgeAlert, selectedAlert.id, "Alert acknowledged.")}>
+                    Acknowledge
+                  </Button>
+                )}
+                {["open", "acknowledged"].includes(selectedAlert.status) && (
+                  <Button size="sm" variant="secondary" icon={<Play size={13} />} loading={actionLoading} onClick={() => handleAction(investigateAlert, selectedAlert.id, "Investigation started.")}>
+                    Investigate
+                  </Button>
+                )}
+                <Button size="sm" icon={<CheckCircle2 size={13} />} onClick={() => setResolveModal({ open: true, alertId: selectedAlert.id })}>
+                  Resolve
+                </Button>
+                {selectedAlert.entity?.entityId && (
+                  <Button size="sm" variant="ghost" icon={<ExternalLink size={13} />} onClick={() => openEntity(selectedAlert)}>
+                    Open Entity
+                  </Button>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+      </Drawer>
+
+      {/* Resolve Modal */}
+      <Modal open={resolveModal.open} onClose={() => setResolveModal({ open: false, alertId: null })} title="Resolve Alert">
+        <div className="space-y-4">
+          <Select value={resolveOutcome} onChange={setResolveOutcome} options={OUTCOMES} label="Outcome" />
+          <div className="flex flex-col gap-1.5">
+            <label className="text-sm font-medium text-slate-700">Note (optional)</label>
+            <textarea
+              value={resolveNote}
+              onChange={(e) => setResolveNote(e.target.value)}
+              rows={3}
+              maxLength={2000}
+              className="w-full bg-white border border-slate-200 rounded-[10px] px-3 py-2 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#BE1B2C]/20 focus:border-[#BE1B2C]/40 resize-none"
+              placeholder="Resolution details..."
             />
-          )}
-        </>
-      )}
+          </div>
+          <div className="flex justify-end gap-2 pt-2">
+            <Button variant="secondary" onClick={() => setResolveModal({ open: false, alertId: null })}>Cancel</Button>
+            <Button onClick={handleResolve} loading={actionLoading}>Resolve Alert</Button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 };

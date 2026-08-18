@@ -200,7 +200,7 @@ export default function Login() {
                   type={showPw ? "text" : "password"}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  placeholder="\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022"
+                  placeholder="••••••••"
                   autoComplete="current-password"
                   className="w-full h-11 bg-white border border-slate-200 rounded-[11px] pl-9 pr-11 text-sm text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-red-700/20 focus:border-red-400 transition-all shadow-[0_1px_3px_rgba(0,0,0,0.04)]"
                 />
@@ -236,15 +236,15 @@ export default function Login() {
                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                   </svg>
-                  Signing in\u2026
+                  Signing in…
                 </>
               ) : "Sign In \u2192"}
             </button>
           </form>
 
           <div className="mt-8 pt-6 border-t border-slate-200 flex items-center justify-between text-xs text-slate-400">
-            <span>\u00a9 2025 Drewel Operations</span>
-            <span>v2.5.0 \u00b7 <a href="#" className="hover:text-slate-600 underline transition-colors">Support</a></span>
+            <span>© 2025 Drewel Operations</span>
+            <span>v2.5.0 · <a href="#" className="hover:text-slate-600 underline transition-colors">Support</a></span>
           </div>
         </div>
       </div>

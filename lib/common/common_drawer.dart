@@ -57,12 +57,12 @@ class CustomDrawer extends StatelessWidget {
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12.px),
           ),
-          title: Center(
-            child: Text(
-              "Delete Account",
-              style: MyTextStyle.titleStyle20bb,
+            title: Center(
+              child: Text(
+                "delete_account".tr,
+                style: MyTextStyle.titleStyle20bb,
+              ),
             ),
-          ),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -73,7 +73,7 @@ class CustomDrawer extends StatelessWidget {
               ),
               SizedBox(height: 10.px),
               Text(
-                "Are you sure you want to delete your account? This action cannot be undone.",
+                "delete_account_confirm".tr,
                 style: MyTextStyle.titleStyle14b,
                 textAlign: TextAlign.center,
               ),
@@ -89,7 +89,7 @@ class CustomDrawer extends StatelessWidget {
                     },
                     context: context,
                     child: Text(
-                      "Cancel",
+                      "cancel".tr,
                       style: MyTextStyle.titleStyle14b,
                     ),
                     decoration: BoxDecoration(
@@ -107,7 +107,7 @@ class CustomDrawer extends StatelessWidget {
                     },
                     context: context,
                     child: Text(
-                      "Delete",
+                      "delete".tr,
                       style: MyTextStyle.titleStyle14b
                           .copyWith(color: Colors.white),
                     ),
@@ -138,7 +138,7 @@ class CustomDrawer extends StatelessWidget {
 
       if (userId == null || userId.isEmpty) {
         Get.back(); // Close loading
-        CommonWidgets.snackBarView(title: 'User ID not found');
+        CommonWidgets.snackBarView(title: 'user_id_not_found'.tr);
         return;
       }
 

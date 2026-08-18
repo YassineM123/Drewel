@@ -120,7 +120,7 @@ function ActionModal({ title, consequence, variant, requiresReason, confirmLabel
             <div className="flex flex-col gap-1.5">
               <label className="text-sm font-medium text-slate-700">Reason <span className="text-red-500">*</span></label>
               <textarea value={reason} onChange={(e) => setReason(e.target.value)} rows={3}
-                placeholder="Provide your reason for this action\u2026"
+                placeholder="Provide your reason for this action…"
                 className="w-full bg-white border border-slate-200 rounded-[10px] p-3 text-sm text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-red-700/20 focus:border-red-400 resize-none" />
             </div>
           )}

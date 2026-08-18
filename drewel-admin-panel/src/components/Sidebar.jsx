@@ -8,6 +8,14 @@ import {
   Activity, UserCog, AlertTriangle, ClipboardList, CheckCircle2,
   XCircle, BookOpen, Wallet, Package, BarChart2, Headphones,
 } from "lucide-react";
+import { useAuth } from "../context/AuthContext";
+import { bestMatchingRoute } from "../utils/routeMeta";
+
+const ROLE_LABELS = {
+  owner: "Owner",
+  finance_admin: "Finance Admin",
+  admin: "Admin",
+};
 
 const navGroups = [
   {
@@ -94,6 +102,7 @@ function DrewelMark() {
 
 export default function Sidebar({ collapsed, onToggle }) {
   const location = useLocation();
+  const { user, role, signOut } = useAuth();
   const [expandedGroups, setExpandedGroups] = useState(
     ["Operations", "People", "Requests", "Driver Points", "Governance"]
   );
@@ -104,16 +113,20 @@ export default function Sidebar({ collapsed, onToggle }) {
     );
   };
 
-  const isGroupActive = (group) =>
-    group.items.some(item =>
-      location.pathname === item.to || location.pathname.startsWith(item.to + "/")
-    );
+  const allNavPaths = navGroups.flatMap(g => g.items.map(i => i.to));
+  const activePath = bestMatchingRoute(location.pathname, allNavPaths);
 
-  const handleSignOut = () => {
-    localStorage.removeItem("admin_token");
-    localStorage.removeItem("admin_user");
-    window.location.href = "/login";
-  };
+  const isGroupActive = (group) => group.items.some(item => item.to === activePath);
+
+  const displayName = user?.fullName || user?.name || "Admin";
+  const roleLabel = ROLE_LABELS[role] || (role ? role.replace(/_/g, " ") : "—");
+  const initials = displayName
+    .split(" ")
+    .map((part) => part[0])
+    .filter(Boolean)
+    .slice(0, 2)
+    .join("")
+    .toUpperCase() || "AD";
 
   return (
     <aside
@@ -168,9 +181,7 @@ export default function Sidebar({ collapsed, onToggle }) {
               {isExpanded && (
                 <div className="flex flex-col gap-0.5">
                   {group.items.map(item => {
-                    const isActive =
-                      location.pathname === item.to ||
-                      (item.to !== "/dashboard" && location.pathname.startsWith(item.to + "/"));
+                    const isActive = item.to === activePath;
 
                     return (
                       <div key={item.to} className={`relative ${collapsed ? "flex justify-center group/tt" : ""}`}>
@@ -205,7 +216,7 @@ export default function Sidebar({ collapsed, onToggle }) {
         <div className="mt-auto pt-4 border-t border-white/[0.07]">
           <div className={`relative ${collapsed ? "flex justify-center group/tt" : ""}`}>
             <button
-              onClick={handleSignOut}
+              onClick={signOut}
               className={`flex items-center w-full rounded-[8px] transition-all text-white/35 hover:bg-red-900/30 hover:text-red-400
                 ${collapsed ? "justify-center h-10 w-10" : "gap-2.5 px-3 py-2.5"}`}
             >
@@ -227,15 +238,15 @@ export default function Sidebar({ collapsed, onToggle }) {
           <div className="flex items-center gap-3">
             <div className="relative shrink-0">
               <div className="w-8 h-8 rounded-full bg-[#BE1B2C]/80 flex items-center justify-center text-xs font-bold text-white shadow">
-                AD
+                {initials}
               </div>
               <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-green-400 border-2 border-[#130406]" />
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-[13px] font-semibold text-white truncate leading-tight">Admin</p>
-              <p className="text-[11px] text-white/35 truncate mt-0.5">Owner</p>
+              <p className="text-[13px] font-semibold text-white truncate leading-tight">{displayName}</p>
+              <p className="text-[11px] text-white/35 truncate mt-0.5">{roleLabel}</p>
             </div>
-            <span title="Owner access"><ShieldCheck size={14} className="text-amber-400 shrink-0" /></span>
+            <span title={`${roleLabel} access`}><ShieldCheck size={14} className="text-amber-400 shrink-0" /></span>
           </div>
         </div>
       )}

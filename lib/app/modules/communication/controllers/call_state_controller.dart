@@ -60,7 +60,7 @@ class CallStateController extends GetxService with WidgetsBindingObserver {
   String _selfId = '';
   String _sessionToken = '';
   String _pushRegisteredForSession = '';
-  bool _socketEventInFlight = false;
+  final bool _socketEventInFlight = false;
 
   bool get hasAuthorizedRide => activeRide.value?.canCommunicate == true;
   RideParticipantModel? get counterpart =>

@@ -5,75 +5,14 @@ import {
   AlertTriangle, FileText, ClipboardCheck, MessageSquare, Zap, Activity,
   ExternalLink, CheckCheck
 } from "lucide-react";
+import { useAuth } from "../context/AuthContext";
+import { getRouteMeta, PALETTE_ITEMS } from "../utils/routeMeta";
 
-const routeLabels = {
-  "/dashboard": "Dashboard",
-  "/rides/live": "Live Rides",
-  "/rides/all": "All Rides",
-  "/rides/completed": "Completed Rides",
-  "/rides/cancelled": "Cancelled Rides",
-  "/rides/disputes": "Disputes",
-  "/rides/stuck": "Stuck Rides",
-  "/drivers": "Drivers",
-  "/users": "Users",
-  "/verification": "Verification Requests",
-  "/chat": "Chat",
-  "/secure-calls": "Secure Calls",
-  "/points/balances": "Driver Balances",
-  "/points/transactions": "Point Transactions",
-  "/points/requests": "Point Requests",
-  "/points/overview": "Points Overview",
-  "/points/packs": "Point Packs",
-  "/banners": "Sponsor Banners",
-  "/alerts": "Alerts",
-  "/audit-logs": "Audit Logs",
-  "/team-roles": "Team & Roles",
-  "/system-health": "System Health",
-  "/settings": "Settings",
-  "/online-drivers": "Online Drivers",
+const ROLE_LABELS = {
+  owner: "Owner",
+  finance_admin: "Finance Admin",
+  admin: "Admin",
 };
-
-const routeParent = {
-  "/rides/live": "Operations", "/rides/all": "Operations",
-  "/rides/completed": "Operations", "/rides/cancelled": "Operations",
-  "/rides/disputes": "Operations", "/rides/stuck": "Operations",
-  "/drivers": "People", "/users": "People", "/verification": "People",
-  "/chat": "Communication", "/secure-calls": "Communication",
-  "/points/balances": "Driver Points", "/points/transactions": "Driver Points",
-  "/points/requests": "Driver Points", "/points/overview": "Driver Points", "/points/packs": "Driver Points",
-  "/banners": "Content",
-  "/alerts": "Governance", "/audit-logs": "Governance",
-  "/team-roles": "Governance", "/system-health": "Governance", "/settings": "Governance",
-  "/online-drivers": "Operations",
-};
-
-const PALETTE_ITEMS = [
-  { label: "Dashboard",          path: "/dashboard",           group: "Overview" },
-  { label: "Live Rides",         path: "/rides/live",          group: "Operations" },
-  { label: "All Rides",          path: "/rides/all",           group: "Operations" },
-  { label: "Disputes",           path: "/rides/disputes",      group: "Operations" },
-  { label: "Stuck Rides",        path: "/rides/stuck",         group: "Operations" },
-  { label: "Online Drivers",     path: "/online-drivers",      group: "Operations" },
-  { label: "Pending Requests",   path: "/verification/pending",group: "Requests" },
-  { label: "Approved Requests",  path: "/verification/approved",group: "Requests" },
-  { label: "Rejected Requests",  path: "/verification/rejected",group: "Requests" },
-  { label: "All Requests",       path: "/verification",        group: "Requests" },
-  { label: "Drivers",            path: "/drivers",             group: "People" },
-  { label: "Users",              path: "/users",               group: "People" },
-  { label: "Points Overview",    path: "/points/overview",     group: "Driver Points" },
-  { label: "Driver Wallets",     path: "/points/balances",     group: "Driver Points" },
-  { label: "Purchase Requests",  path: "/points/requests",     group: "Driver Points" },
-  { label: "Point Transactions", path: "/points/transactions", group: "Driver Points" },
-  { label: "Point Packs",        path: "/points/packs",        group: "Driver Points" },
-  { label: "Chat",               path: "/chat",                group: "Communication" },
-  { label: "Secure Calls",       path: "/secure-calls",        group: "Communication" },
-  { label: "Sponsor Banners",    path: "/banners",             group: "Content" },
-  { label: "Alerts",             path: "/alerts",              group: "Governance" },
-  { label: "Audit Logs",         path: "/audit-logs",          group: "Governance" },
-  { label: "Team & Roles",       path: "/team-roles",          group: "Governance" },
-  { label: "System Health",      path: "/system-health",       group: "Governance" },
-  { label: "Settings",           path: "/settings",            group: "Governance" },
-];
 
 function CommandPalette({ onClose }) {
   const navigate = useNavigate();
@@ -119,7 +58,7 @@ function CommandPalette({ onClose }) {
               value={query}
               onChange={e => setQuery(e.target.value)}
               onKeyDown={handleKey}
-              placeholder="Search pages\u2026"
+              placeholder="Search pages…"
               className="flex-1 text-[14px] text-slate-700 placeholder:text-slate-400 outline-none bg-transparent"
             />
             <kbd className="text-[10px] bg-slate-100 text-slate-400 px-1.5 py-0.5 rounded-[5px] font-mono shrink-0">ESC</kbd>
@@ -158,9 +97,18 @@ export default function TopBar({ onMobileMenuOpen }) {
   const [profileOpen, setProfileOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
 
-  const verifMatch = location.pathname.match(/^\/verification\/(.+)$/);
-  const label = verifMatch ? "Request Details" : (routeLabels[location.pathname] ?? "Dashboard");
-  const parent = verifMatch ? "People" : (routeParent[location.pathname] ?? undefined);
+  const { user, role, signOut } = useAuth();
+  const { section: parent, title: label } = getRouteMeta(location.pathname);
+
+  const displayName = user?.fullName || user?.name || "Admin";
+  const roleLabel = ROLE_LABELS[role] || (role ? role.replace(/_/g, " ") : "—");
+  const initials = displayName
+    .split(" ")
+    .map((part) => part[0])
+    .filter(Boolean)
+    .slice(0, 2)
+    .join("")
+    .toUpperCase() || "AD";
 
   useEffect(() => {
     const handler = (e) => {
@@ -175,10 +123,8 @@ export default function TopBar({ onMobileMenuOpen }) {
 
   const handleSignOut = useCallback(() => {
     setProfileOpen(false);
-    localStorage.removeItem("admin_token");
-    localStorage.removeItem("admin_user");
-    window.location.href = "/login";
-  }, []);
+    signOut();
+  }, [signOut]);
 
   return (
     <header className="h-[68px] bg-white border-b border-slate-200/80 flex items-center px-6 gap-4 shrink-0 sticky top-0 z-30 shadow-[0_1px_0_0_#E2E8F0]">
@@ -207,7 +153,7 @@ export default function TopBar({ onMobileMenuOpen }) {
         className="hidden md:flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-[10px] px-3 h-9 w-56 text-sm text-slate-400 cursor-pointer hover:border-slate-300 hover:bg-white transition-colors"
       >
         <Search size={13} className="shrink-0 text-slate-400" />
-        <span className="text-slate-400 text-[13px] flex-1 text-left">Search pages\u2026</span>
+        <span className="text-slate-400 text-[13px] flex-1 text-left">Search pages…</span>
         <span className="ml-auto text-[10px] bg-slate-200 text-slate-500 px-1.5 py-0.5 rounded-[5px] font-mono">&ctrl;K</span>
       </button>
       {searchOpen && <CommandPalette onClose={() => setSearchOpen(false)} />}
@@ -235,11 +181,11 @@ export default function TopBar({ onMobileMenuOpen }) {
             className="flex items-center gap-2.5 hover:bg-slate-50 rounded-[10px] px-2.5 py-1.5 transition-colors"
           >
             <div className="w-8 h-8 rounded-full bg-[#7C1A22] flex items-center justify-center text-xs font-bold text-white shadow-sm">
-              AD
+              {initials}
             </div>
             <div className="hidden sm:flex flex-col text-left">
-              <span className="text-[13px] font-semibold text-slate-700 leading-tight">Admin</span>
-              <span className="text-[11px] text-slate-400 leading-tight">Ops Manager</span>
+              <span className="text-[13px] font-semibold text-slate-700 leading-tight">{displayName}</span>
+              <span className="text-[11px] text-slate-400 leading-tight">{roleLabel}</span>
             </div>
             <ChevronDown size={13} className="text-slate-400 hidden sm:block" />
           </button>
@@ -248,8 +194,8 @@ export default function TopBar({ onMobileMenuOpen }) {
               <div className="fixed inset-0 z-30" onClick={() => setProfileOpen(false)} />
               <div className="absolute right-0 top-full mt-2 w-56 bg-white rounded-[14px] shadow-2xl border border-slate-200 z-40 overflow-hidden fade-in-up">
                 <div className="px-4 py-3.5 border-b border-slate-100 bg-slate-50/60">
-                  <p className="text-[13px] font-bold text-slate-800">Admin</p>
-                  <p className="text-xs text-slate-400 mt-0.5">admin@drewel.ops</p>
+                  <p className="text-[13px] font-bold text-slate-800">{displayName}</p>
+                  <p className="text-xs text-slate-400 mt-0.5">{user?.email || "—"}</p>
                 </div>
                 <div className="py-1">
                   <button className="w-full text-left text-[13px] text-slate-700 px-4 py-2.5 hover:bg-slate-50 transition-colors font-medium"

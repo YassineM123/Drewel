@@ -1,4 +1,4 @@
-const normalize = (value) => String(value || "").trim().toLowerCase();
+import { resolvePermissions } from "./permissions";
 
 export const getStoredAdmin = () => {
   try {
@@ -9,22 +9,18 @@ export const getStoredAdmin = () => {
 };
 
 export const getPointsAccess = (admin = getStoredAdmin()) => {
-  const role = normalize(admin?.role);
-  const isOwner = role === "owner";
-  const isFinanceAdmin = role === "finance_admin";
+  const perms = resolvePermissions(admin);
   return {
-    role,
-    isOwner,
-    isFinanceAdmin,
-    canRead: isOwner || isFinanceAdmin,
-    canAdjust: isOwner || isFinanceAdmin,
-    canAddPurchasedPoints: isOwner,
-    canManageRequests: isOwner || isFinanceAdmin,
-    canManagePacks: isOwner,
-    canManageSettings: isOwner,
+    role: perms.role,
+    isOwner: perms.isOwner,
+    isFinanceAdmin: perms.isFinanceAdmin,
+    canRead: perms["points.read"],
+    canAdjust: perms["points.adjust"],
+    canAddPurchasedPoints: perms.isOwner,
+    canManageRequests: perms["points.purchase_requests.manage"],
+    canManagePacks: perms["points.packs.manage"],
+    canManageSettings: perms["points.settings.manage"],
   };
 };
 
-export const canAccessDriverPoints = (admin) =>
-  getPointsAccess(admin).canRead;
-
+export const canAccessDriverPoints = (admin) => getPointsAccess(admin).canRead;
