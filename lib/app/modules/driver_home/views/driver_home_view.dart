@@ -49,8 +49,10 @@ class DriverHomeView extends GetView<DriverHomeController> {
                 controller.clickOnMenu();
               },
             ),
-            endDrawer: CustomDrawer(
-              userData: controller.userData,
+            endDrawer: Obx(
+              () => CustomDrawer(
+                userData: Map<String, String>.from(controller.userData),
+              ),
             ),
             backgroundColor: primaryColor,
             bottomNavigationBar: DriverHomeBottomBar(
