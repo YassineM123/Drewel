@@ -29,13 +29,12 @@ import RejectedRequests from "./pages/RejectedRequests";
 import AllRequests from "./pages/AllRequests";
 import Rides from "./pages/rides/Rides";
 import RideDetail from "./pages/rides/RideDetail";
-import RequirePointsAccess from "./components/driverPoints/RequirePointsAccess";
 import PointsOverview from "./pages/driverPoints/PointsOverview";
+import PointPacks from "./pages/driverPoints/PointPacks";
 import DriverWallets from "./pages/driverPoints/DriverWallets";
 import DriverWalletDetail from "./pages/driverPoints/DriverWalletDetail";
 import PurchaseRequests from "./pages/driverPoints/PurchaseRequests";
 import PointTransactions from "./pages/driverPoints/PointTransactions";
-import PointPacks from "./pages/driverPoints/PointPacks";
 import PointsSettings from "./pages/driverPoints/PointsSettings";
 
 function App() {
@@ -75,17 +74,13 @@ function App() {
                 <Route path="/rides/stuck" element={<Rides initialFilter="stuck" lockedFilter />} />
                 <Route path="/rides/:rideId" element={<RideDetail />} />
 
-                <Route element={<RequirePointsAccess />}>
-                  <Route path="/points/overview" element={<PointsOverview />} />
-                  <Route path="/points/balances" element={<DriverWallets />} />
-                  <Route path="/points/balances/:driverId" element={<DriverWalletDetail />} />
-                  <Route path="/points/requests" element={<PurchaseRequests />} />
-                  <Route path="/points/transactions" element={<PointTransactions />} />
-                </Route>
-                <Route element={<RequirePointsAccess ownerOnly />}>
-                  <Route path="/points/packs" element={<PointPacks />} />
-                  <Route path="/points/settings" element={<PointsSettings />} />
-                </Route>
+                <Route path="/points/overview" element={<PointsOverview />} />
+                <Route path="/points/balances" element={<DriverWallets />} />
+                <Route path="/points/balances/:driverId" element={<DriverWalletDetail />} />
+                <Route path="/points/requests" element={<PurchaseRequests />} />
+                <Route path="/points/transactions" element={<PointTransactions />} />
+                <Route path="/points/packs" element={<PointPacks />} />
+                <Route path="/points/settings" element={<PointsSettings />} />
 
                 <Route path="/chat" element={<AdminChat />} />
                 <Route path="/support-chat" element={<ChatWrapper />} />
