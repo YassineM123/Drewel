@@ -12,6 +12,7 @@ import {
 } from "recharts";
 import { getDashboard } from "../api/domains/dashboard";
 import { getPointTransactions } from "../api/domains/points";
+import { getDriverRankings } from "../api/domains/drivers";
 import { useSocket } from "../context/SocketContext";
 import { presenceVersion, shouldApplyPresence } from "../utils/driverPresence";
 
@@ -177,6 +178,7 @@ export default function Dashboard() {
   const [lastUpdated, setLastUpdated] = useState(null);
   const [dashboard, setDashboard] = useState(emptyDashboard);
   const [transactions, setTransactions] = useState([]);
+  const [topDrivers, setTopDrivers] = useState([]);
   const presenceVersions = useRef(new Map());
   const refreshTimer = useRef(null);
   const [secondsSince, setSecondsSince] = useState(0);
@@ -185,9 +187,10 @@ export default function Dashboard() {
     if (!background) setDataState("loading");
     setError("");
     try {
-      const [dashRes, txRes] = await Promise.allSettled([
+      const [dashRes, txRes, rankRes] = await Promise.allSettled([
         getDashboard(),
         getPointTransactions({ limit: 7, page: 1 }),
+        getDriverRankings({ limit: 5, page: 1 }),
       ]);
       if (dashRes.status === "rejected") throw dashRes.reason;
       const nextDash = { ...emptyDashboard, ...(dashRes.value || {}) };
@@ -195,6 +198,11 @@ export default function Dashboard() {
       setTransactions(
         txRes.status === "fulfilled"
           ? (txRes.value?.transactions || [])
+          : []
+      );
+      setTopDrivers(
+        rankRes.status === "fulfilled"
+          ? (rankRes.value?.drivers || [])
           : []
       );
       setLastUpdated(new Date());
@@ -684,6 +692,48 @@ export default function Dashboard() {
           </div>
         </div>
       </div>
+
+      {topDrivers.length > 0 && (
+        <div className="bg-white rounded-[14px] border border-slate-200">
+          <div className="flex items-center justify-between px-5 py-3.5 border-b border-slate-100">
+            <div className="flex items-center gap-2.5">
+              <TrendingUp size={14} className="text-amber-500" />
+              <h2 className="text-sm font-bold text-slate-800">Top Drivers This Month</h2>
+            </div>
+          </div>
+          <div className="divide-y divide-slate-100">
+            {topDrivers.map((entry, index) => (
+              <div key={entry.driver?.id || index} className="flex items-center gap-3 px-5 py-3">
+                <span className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold shrink-0
+                  ${index === 0 ? "bg-amber-100 text-amber-700" : index === 1 ? "bg-slate-200 text-slate-600" : index === 2 ? "bg-orange-100 text-orange-700" : "bg-slate-50 text-slate-400"}`}>
+                  {entry.position || index + 1}
+                </span>
+                <span className="w-8 h-8 rounded-full bg-[#BE1B2C]/10 flex items-center justify-center text-[11px] font-bold text-[#BE1B2C] shrink-0">
+                  {(entry.driver?.fullName || "?").split(/\s+/).map((p) => p[0]?.toUpperCase()).filter(Boolean).slice(0, 2).join("")}
+                </span>
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-semibold text-slate-700 truncate">{entry.driver?.fullName || "Unknown"}</p>
+                  <p className="text-[11px] text-slate-400">{entry.driver?.vehicleType || ""} {entry.driver?.vehicleModel || ""}</p>
+                </div>
+                <div className="flex items-center gap-4 text-right shrink-0">
+                  <div>
+                    <p className="text-xs font-bold text-slate-800 tabular-nums">{Number(entry.ranking?.completedTrips || 0)}</p>
+                    <p className="text-[10px] text-slate-400">trips</p>
+                  </div>
+                  <div>
+                    <p className="text-xs font-bold text-amber-600 tabular-nums">{Number(entry.ranking?.weightedRating || 0).toFixed(1)}</p>
+                    <p className="text-[10px] text-slate-400">rating</p>
+                  </div>
+                  <div>
+                    <p className="text-xs font-bold text-green-600 tabular-nums">{Number(entry.ranking?.rankingScore || 0).toFixed(0)}</p>
+                    <p className="text-[10px] text-slate-400">score</p>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="bg-white rounded-[14px] border border-slate-200 p-4">
         <div className="flex items-center justify-between mb-3">

@@ -70,3 +70,18 @@ export const addDriver = async (formData, signal) => {
 
 export const driversErrorMessage = (error, fallback = "Unable to load drivers.") =>
   error?.response?.data?.message || error?.message || fallback;
+
+/**
+ * Driver rankings — GET /api/driver-profile/rankings
+ * Monthly leaderboard with weighted rating, trips, and ranking score.
+ */
+export const getDriverRankings = async (params, signal) => {
+  const data = await apiClient.get("/driver-profile/rankings", {
+    params: compactParams(params),
+    signal,
+  });
+  return {
+    drivers: data.drivers || [],
+    pagination: toPagination(data),
+  };
+};

@@ -17,7 +17,6 @@ import ChatWrapper from "./components/chat/ChatWrapper";
 import AdminChat from "./pages/AdminChat";
 import SecureCalls from "./pages/SecureCalls";
 import OnlineDrivers from "./pages/OnlineDrivers";
-import DriverMap from "./pages/DriverMap";
 import TeamRoles from "./pages/TeamRoles";
 import SystemHealth from "./pages/SystemHealth";
 import Settings from "./pages/Settings";
@@ -56,7 +55,6 @@ function App() {
                 <Route path="/drivers" element={<Drivers />} />
                 <Route path="/driver-detail/:id" element={<DriverDetail />} />
                 <Route path="/edit-driver/:id" element={<EditDriver />} />
-                <Route path="/driver-map" element={<DriverMap />} />
 
                 <Route path="/online-drivers" element={<OnlineDrivers />} />
 
