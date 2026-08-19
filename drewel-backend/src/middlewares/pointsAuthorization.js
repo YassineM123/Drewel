@@ -14,6 +14,10 @@ const FINANCE_DEFAULT_PERMISSIONS = new Set([
   POINTS_PERMISSIONS.PURCHASE_REQUESTS,
   POINTS_PERMISSIONS.ADJUST,
 ]);
+const ADMIN_DEFAULT_PERMISSIONS = new Set([
+  POINTS_PERMISSIONS.READ,
+  POINTS_PERMISSIONS.ADJUST,
+]);
 
 const normalize = (value) => String(value ?? "").trim().toLowerCase();
 
@@ -91,7 +95,10 @@ const explicitPermissions = (admin) =>
 export const resolvePointsPermissions = (admin) => {
   if (!admin || normalize(admin.role) === "user") return new Set();
   if (isOwner(admin)) return new Set(ALL_POINTS_PERMISSIONS);
-  if (!isFinanceAdmin(admin)) return new Set();
+
+  // Plain admins get a fixed default (read + adjust) and cannot escalate via
+  // capability fields — those are only honored for finance admins below.
+  if (!isFinanceAdmin(admin)) return new Set(ADMIN_DEFAULT_PERMISSIONS);
 
   const permissions = explicitPermissions(admin);
   for (const permission of FINANCE_DEFAULT_PERMISSIONS) {

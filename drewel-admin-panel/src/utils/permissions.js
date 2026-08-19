@@ -35,8 +35,8 @@ export const resolvePermissions = (admin) => {
     "team-roles.manage": isOwner,
     "settings.view": isAdmin,
     // Points/wallet subsystem: matches src/middlewares/pointsAuthorization.js exactly.
-    "points.read": isOwner || isFinanceAdmin,
-    "points.adjust": isOwner || isFinanceAdmin,
+    "points.read": isOwner || isFinanceAdmin || isAdmin,
+    "points.adjust": isOwner || isFinanceAdmin || isAdmin,
     "points.purchase_requests.manage": isOwner || isFinanceAdmin,
     "points.packs.manage": isOwner,
     "points.settings.manage": isOwner,

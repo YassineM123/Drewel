@@ -605,14 +605,16 @@ test("point settings and pack mutations require an owner", () => {
   assert.equal(nextCalled, true);
 });
 
-test("plain administrators cannot gain points access through capability fields", () => {
-  assert.equal(
-    resolvePointsPermissions({
-      role: "admin",
-      permissions: ["points.*"],
-    }).size,
-    0
-  );
+test("plain administrators get default read/adjust access but cannot escalate via capability fields", () => {
+  const granted = resolvePointsPermissions({
+    role: "admin",
+    permissions: ["points.*"],
+  });
+  assert.equal(granted.has("points.read"), true);
+  assert.equal(granted.has("points.adjust"), true);
+  assert.equal(granted.has("points.purchase_requests.manage"), false);
+  assert.equal(granted.has("points.settings.manage"), false);
+  assert.equal(granted.has("points.*"), false);
   assert.equal(
     resolvePointsPermissions({ role: "finance_admin" }).has("points.adjust"),
     true
@@ -643,7 +645,7 @@ test("verified purchase credit requires an explicit administrator reason", async
 });
 
 test(
-  "plain admins cannot adjust points and passengers cannot read driver wallets",
+  "plain admins can adjust points and passengers cannot read driver wallets",
   { skip: !integrationEnabled },
   async () => {
     const [admin, passenger] = await Promise.all([
@@ -664,8 +666,7 @@ test(
         nextCalled = true;
       }
     );
-    assert.equal(nextCalled, false);
-    assert.equal(adminResponse.result.statusCode, 403);
+    assert.equal(nextCalled, true);
 
     const passengerResponse = responseRecorder();
     await getMyPointsWallet(

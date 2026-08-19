@@ -16,7 +16,10 @@ describe("Driver Points role access", () => {
     });
   });
 
-  it("rejects an unauthorized admin", () => {
-    expect(getPointsAccess({ role: "admin" }).canRead).toBe(false);
+  it("allows a general Admin to read and adjust points but not manage requests/packs/settings", () => {
+    expect(getPointsAccess({ role: "admin" })).toMatchObject({
+      canRead: true, canAdjust: true, canManageRequests: false,
+      canManagePacks: false, canManageSettings: false,
+    });
   });
 });
