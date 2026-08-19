@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import {
   Search, X, ChevronRight,
@@ -10,14 +10,50 @@ import {
   Card, Button, SectionHeader, Th, Td, Tr, Pagination, Avatar,
   Select, EmptyState, Drawer, Toast, TabBar
 } from "../../components/ui";
+import { getOperationalDisputes } from "../../api";
 import {
-  mockDisputes,
   type Dispute,
   type DisputeStatus,
   type DisputePriority,
   type DisputeReason,
   type ResolutionDecision,
 } from "../../data/mockDisputes";
+
+function mapApiDispute(d: any): Dispute {
+  return {
+    id: d._id || d.id || "",
+    rideId: d.rideId || "",
+    reportedBy: d.reportedBy || "user",
+    user: { id: d.user?._id || d.user?.id || "", name: d.user?.name || "Unknown", avatar: d.user?.avatar || d.user?.name?.charAt(0) || "?", phone: d.user?.phone || "" },
+    driver: { id: d.driver?._id || d.driver?.id || "", name: d.driver?.name || "Unknown", avatar: d.driver?.avatar || d.driver?.name?.charAt(0) || "?", phone: d.driver?.phone || "" },
+    reason: (d.reason || "payment_issue") as DisputeReason,
+    rideStatus: d.rideStatus || "completed",
+    pointsInvolved: d.pointsInvolved || 0,
+    amountNGN: d.amountNGN || d.amount || 0,
+    priority: (d.priority || "medium") as DisputePriority,
+    assignedAdmin: d.assignedAdmin || null,
+    createdAt: d.createdAt || new Date().toISOString(),
+    updatedAt: d.updatedAt || d.createdAt || new Date().toISOString(),
+    status: (d.status || "open") as DisputeStatus,
+    userStatement: d.userStatement || "",
+    driverStatement: d.driverStatement || null,
+    internalNotes: d.internalNotes || [],
+    chatEvidence: d.chatEvidence || false,
+    callEvidence: d.callEvidence || false,
+    callDuration: d.callDuration,
+    resolution: d.resolution || null,
+    auditRefs: d.auditRefs || [],
+    city: d.city || "",
+    vehicleType: d.vehicleType || "sedan",
+    ridePickup: d.ridePickup || "",
+    rideDestination: d.rideDestination || "",
+    rideDistanceKm: d.rideDistanceKm || 0,
+    rideDurationMin: d.rideDurationMin || 0,
+    rideTimeline: d.rideTimeline || [],
+    pointsTransactions: d.pointsTransactions || [],
+    previousAdminActions: d.previousAdminActions || [],
+  };
+}
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -674,18 +710,45 @@ export default function Disputes() {
   const [priorityF, setPriorityF] = useState("all");
   const [reasonF, setReasonF] = useState("all");
   const [page, setPage] = useState(1);
+
+  const [disputes, setDisputes] = useState<Dispute[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    getOperationalDisputes({ page, limit: 50, status: tab !== "open" ? tab : undefined })
+      .then(({ disputes: apiDisputes }) => {
+        if (cancelled) return;
+        setDisputes((apiDisputes || []).map(mapApiDispute));
+      })
+      .catch((err) => {
+        console.error("Failed to load disputes", err);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, [page, tab]);
+
   const [selected, setSelected] = useState<Dispute | null>(
-    preSelected ? (mockDisputes.find(d => d.id === preSelected) ?? null) : null
+    preSelected ? null : null
   );
+
+  useEffect(() => {
+    if (preSelected && disputes.length > 0) {
+      setSelected(disputes.find(d => d.id === preSelected) ?? null);
+    }
+  }, [preSelected, disputes]);
 
   const tabCounts = useMemo(() => {
     const counts: Record<TabId, number> = { open: 0, under_review: 0, waiting_user: 0, waiting_driver: 0, resolved: 0, rejected: 0 };
-    mockDisputes.forEach(d => { counts[d.status]++; });
+    disputes.forEach(d => { if (counts[d.status as TabId] !== undefined) counts[d.status as TabId]++; });
     return counts;
-  }, []);
+  }, [disputes]);
 
   const filtered = useMemo(() =>
-    mockDisputes.filter(d => {
+    disputes.filter(d => {
       if (d.status !== tab) return false;
       if (priorityF !== "all" && d.priority !== priorityF) return false;
       if (reasonF !== "all" && d.reason !== reasonF) return false;
@@ -700,8 +763,8 @@ export default function Disputes() {
   const perPage = 8;
   const paginated = filtered.slice((page - 1) * perPage, page * perPage);
 
-  const openCritical = mockDisputes.filter(d => d.status === "open" && d.priority === "critical").length;
-  const unassigned = mockDisputes.filter(d => ["open", "under_review"].includes(d.status) && !d.assignedAdmin).length;
+  const openCritical = disputes.filter(d => d.status === "open" && d.priority === "critical").length;
+  const unassigned = disputes.filter(d => ["open", "under_review"].includes(d.status) && !d.assignedAdmin).length;
 
   return (
     <div className="flex flex-col gap-5">
@@ -777,7 +840,16 @@ export default function Disputes() {
               </tr>
             </thead>
             <tbody>
-              {paginated.length === 0 ? (
+              {loading ? (
+                <tr>
+                  <td colSpan={11}>
+                    <div className="flex items-center justify-center py-16">
+                      <div className="w-5 h-5 border-2 border-[#BE1B2C] border-t-transparent rounded-full animate-spin" />
+                      <span className="ml-3 text-sm text-slate-400">Loading disputes…</span>
+                    </div>
+                  </td>
+                </tr>
+              ) : paginated.length === 0 ? (
                 <tr>
                   <td colSpan={11}>
                     <EmptyState

@@ -398,7 +398,7 @@ Drawer.propTypes = {
   width: PropTypes.string,
 };
 
-export function Select({ value, onChange, options, label, className = "" }) {
+export function Select({ value, onChange, options, label, className = "", ...rest }) {
   const selectId = `select-${Math.random().toString(36).slice(2)}`;
   return (
     <div className="flex flex-col gap-1.5">
@@ -413,6 +413,7 @@ export function Select({ value, onChange, options, label, className = "" }) {
         onChange={(e) => onChange(e.target.value)}
         className={`h-10 bg-white border border-slate-200 rounded-[10px] px-3 text-sm text-slate-700 appearance-none
           focus:outline-none focus:ring-2 focus:ring-[#BE1B2C]/20 focus:border-[#BE1B2C]/40 cursor-pointer ${className}`}
+        {...rest}
         style={{
           backgroundImage:
             "url(\"data:image/svg+xml,%3Csvg width='12' height='8' viewBox='0 0 12 8' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1.5L6 6.5L11 1.5' stroke='%2394A3B8' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E\")",

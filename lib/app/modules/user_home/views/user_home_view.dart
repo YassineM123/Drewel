@@ -160,8 +160,10 @@ class _UserHomeViewState extends State<UserHomeView> {
                 controller.clickOnMenu();
               },
             ),
-            endDrawer: CustomDrawer(
-              userData: Map<String, String>.from(controller.userData),
+            endDrawer: Obx(
+              () => CustomDrawer(
+                userData: Map<String, String>.from(controller.userData),
+              ),
             ),
             resizeToAvoidBottomInset: false,
             backgroundColor: primaryColor,

@@ -2,6 +2,11 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import Swal from "sweetalert2";
 import PropTypes from "prop-types";
+import { Search, Download, RefreshCw, X, Printer } from "lucide-react";
+import {
+  Badge, Button, Card, Select, KpiCard, Th, Td, Tr,
+  Pagination, FilterChip, EmptyState, ErrorState, LoadingState, SectionHeader,
+} from "../components/ui";
 import {
   approveProfileRequest,
   approveRequest,
@@ -9,7 +14,6 @@ import {
   reopenProfileRequest,
   reopenRequest,
 } from "../utils/requestsApi";
-import "../assets/css/requests.css";
 
 const PAGE_SIZE_OPTIONS = [10, 25, 50];
 const REQUEST_STAGES = new Set(["basic", "profile"]);
@@ -24,22 +28,49 @@ const getInitialRequestStage = (status, searchParams) => {
 };
 
 const pageConfig = {
-  pending: { title: "Pending Requests", description: "Requests waiting for review" },
-  approved: { title: "Approved Requests", description: "Validated requests and their approval history" },
-  rejected: { title: "Rejected Requests", description: "Requests rejected during review" },
-  all: { title: "All Requests", description: "Every submitted request, without deleting its history" },
+  pending: { title: "Pending", description: "Requests waiting for review at the selected approval stage." },
+  approved: { title: "Approved", description: "Validated requests and their approval history." },
+  rejected: { title: "Rejected", description: "Requests rejected during review." },
+  all: { title: "All Requests", description: "Review and approve driver onboarding and document submissions." },
 };
+
+const STATUS_OPTIONS = [
+  { value: "", label: "All Statuses" },
+  { value: "pending", label: "Pending" },
+  { value: "approved", label: "Approved" },
+  { value: "completed", label: "Completed" },
+  { value: "rejected", label: "Rejected" },
+];
+
+const PERIOD_OPTIONS = [
+  { value: "all", label: "All time" },
+  { value: "today", label: "Today" },
+  { value: "7d", label: "Last 7 days" },
+  { value: "30d", label: "Last 30 days" },
+];
+
+const STAGE_OPTIONS = [
+  { value: "basic", label: "Approval 1 - Registration" },
+  { value: "profile", label: "Approval 2 - Profile & documents" },
+];
+
+const SORT_OPTIONS = [
+  { value: "approvedAt:desc", label: "Approval date - newest" },
+  { value: "approvedAt:asc", label: "Approval date - oldest" },
+  { value: "submittedAt:desc", label: "Submission date - newest" },
+  { value: "submittedAt:asc", label: "Submission date - oldest" },
+];
 
 const getId = (request) => request.requestId || request.requestCode || request._id || request.id;
 const getName = (request) => request.requesterName || request.requester?.name ||
   `${request.firstName || ""} ${request.lastName || ""}`.trim() || request.fullName || "N/A";
+const getInitials = (request) => {
+  const name = getName(request);
+  return name.split(/\s+/).filter(Boolean).map((p) => p[0]?.toUpperCase()).slice(0, 2).join("") || "?";
+};
 const formatDate = (value) => value ? new Intl.DateTimeFormat(undefined, {
   dateStyle: "medium", timeStyle: "short",
 }).format(new Date(value)) : "N/A";
-const statusClass = (status) => ({
-  approved: "badge-success", completed: "badge-primary", rejected: "badge-danger",
-  pending: "badge-warning",
-}[String(status || "pending").toLowerCase()] || "badge-secondary");
 const stageStatus = (request, stage) => {
   const nested = request?.stages?.[stage]?.status;
   if (nested) return String(nested).toLowerCase();
@@ -59,7 +90,6 @@ const overallStatus = (request) => {
   }
   return String(request?.status || "pending").toLowerCase();
 };
-const statusBadge = (value) => <span className={`badge ${statusClass(value)}`}>{String(value || "pending").replaceAll("_", " ").toUpperCase()}</span>;
 
 const unwrap = (payload) => payload?.data || payload || {};
 const normalizeList = (payload) => {
@@ -115,14 +145,28 @@ const openPrintView = (requests, title) => {
   if (!popup) return false;
   popup.opener = null;
   popup.document.write(`<!doctype html><html><head><title>${escapeHtml(title)}</title><style>
-    body{font-family:Arial,sans-serif;color:#172b4d;padding:24px}h1{color:#00489d}table{border-collapse:collapse;width:100%}
-    th,td{border:1px solid #dfe3e8;padding:8px;text-align:left;font-size:12px}th{background:#f4f7fb}@media print{button{display:none}}
+    body{font-family:Arial,sans-serif;color:#222;padding:24px}h1{color:#BE1B2C}table{border-collapse:collapse;width:100%}
+    th,td{border:1px solid #E4E2DF;padding:8px;text-align:left;font-size:12px}th{background:#F5F4F3}@media print{button{display:none}}
   </style></head><body><h1>${escapeHtml(title)}</h1><p>Generated ${escapeHtml(new Date().toLocaleString())}</p>
   <table><thead><tr><th>Request ID</th><th>Type</th><th>Requester</th><th>Submitted</th><th>Approval 1</th><th>Approval 1 date</th><th>Approval 2</th><th>Approval 2 date</th><th>Overall</th></tr></thead>
   <tbody>${printableRows(requests)}</tbody></table><p><button onclick="window.print()">Print / Save as PDF</button></p></body></html>`);
   popup.document.close();
   return true;
 };
+
+function ApprovalCell({ status }) {
+  if (status === "approved") return (
+    <span className="inline-flex items-center gap-1 text-xs text-green-700 font-medium"><span className="w-1.5 h-1.5 rounded-full bg-green-500" />Approved</span>
+  );
+  if (status === "rejected") return (
+    <span className="inline-flex items-center gap-1 text-xs text-red-700 font-medium"><span className="w-1.5 h-1.5 rounded-full bg-red-500" />Rejected</span>
+  );
+  if (status === "pending") return (
+    <span className="inline-flex items-center gap-1 text-xs text-amber-700 font-medium"><span className="w-1.5 h-1.5 rounded-full bg-amber-400" />Pending</span>
+  );
+  return <span className="text-xs text-slate-400">Not submitted</span>;
+}
+ApprovalCell.propTypes = { status: PropTypes.string };
 
 const RequestsPage = ({ status = "all" }) => {
   const navigate = useNavigate();
@@ -132,7 +176,13 @@ const RequestsPage = ({ status = "all" }) => {
   const [kpis, setKpis] = useState({});
   const [filterOptions, setFilterOptions] = useState({ types: [], responsibles: [] });
   const [pagination, setPagination] = useState({ page: 1, limit: 10, total: 0, totalPages: 1 });
-  const [filters, setFilters] = useState({ search: "", period: "all", type: "", responsible: "", stage: getInitialRequestStage(status, searchParams), status: status === "all" ? "" : status, sortBy: status === "approved" ? "approvedAt" : "submittedAt", sortOrder: "desc" });
+  const [filters, setFilters] = useState({
+    search: "", period: "all", type: "", responsible: "",
+    stage: getInitialRequestStage(status, searchParams),
+    status: status === "all" ? "" : status,
+    sortBy: status === "approved" ? "approvedAt" : "submittedAt",
+    sortOrder: "desc",
+  });
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -149,7 +199,8 @@ const RequestsPage = ({ status = "all" }) => {
       setFilters((current) => ({ ...current, stage: requestedStage }));
       setPagination((current) => ({ ...current, page: 1 }));
     }
-  }, [filters.stage, searchParams]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
 
   const dateRange = useMemo(() => {
     if (filters.period === "all") return {};
@@ -196,6 +247,12 @@ const RequestsPage = ({ status = "all" }) => {
     setPagination((current) => ({ ...current, page: 1 }));
   };
 
+  const setStage = (nextStage) => {
+    setFilters((current) => ({ ...current, stage: nextStage, ...(status === "all" ? { status: "" } : {}) }));
+    setSearchParams((current) => { const next = new URLSearchParams(current); next.set("stage", nextStage); return next; }, { replace: true });
+    setPagination((current) => ({ ...current, page: 1 }));
+  };
+
   const toast = (icon, title) => Swal.fire({ toast: true, position: "top-end", icon, title, showConfirmButton: false, timer: 2500, timerProgressBar: true });
 
   const mutate = async (request, action, successMessage) => {
@@ -211,16 +268,16 @@ const RequestsPage = ({ status = "all" }) => {
   };
 
   const confirmReopen = async (request) => {
-    const result = await Swal.fire({ title: "Reopen this request?", text: "It will return to Pending Requests. Its history will be preserved.", icon: "warning", showCancelButton: true, confirmButtonText: "Reopen request", confirmButtonColor: "#00489d" });
+    const result = await Swal.fire({ title: "Reopen this request?", text: "It will return to Pending Requests. Its history will be preserved.", icon: "warning", showCancelButton: true, confirmButtonText: "Reopen request", confirmButtonColor: "#BE1B2C" });
     if (result.isConfirmed) mutate(request, reopenRequest, "Request 1 reopened");
   };
 
   const confirmProfileReopen = async (request) => {
-    const result = await Swal.fire({ title: "Reopen Request 2?", text: "The profile and documents will return to pending review. Its history will be preserved.", icon: "warning", showCancelButton: true, confirmButtonText: "Reopen Request 2", confirmButtonColor: "#00489d" });
+    const result = await Swal.fire({ title: "Reopen Request 2?", text: "The profile and documents will return to pending review. Its history will be preserved.", icon: "warning", showCancelButton: true, confirmButtonText: "Reopen Request 2", confirmButtonColor: "#BE1B2C" });
     if (result.isConfirmed) mutate(request, reopenProfileRequest, "Request 2 reopened");
   };
 
-  const showDetails = (request) => navigate(`/requests/${getId(request)}`);
+  const showDetails = (request) => navigate(`/verification/${getId(request)}`);
 
   const exportCsv = () => {
     const values = requests.map((request) => [getId(request), request.type || request.requestType || "Driver verification", getName(request), formatDate(request.submittedAt || request.basicRequestSubmittedAt || request.createdAt), stageStatus(request, "basic"), formatDate(request.stages?.basic?.approvedAt || (request.requestStage === "basic" ? request.approvedAt : request.basicApprovedAt)), request.stages?.basic?.approvedBy?.fullName || (request.requestStage === "basic" ? request.approvedBy?.fullName : request.basicApprovedBy?.fullName) || request.basicApprovedByName || "", stageStatus(request, "profile"), formatDate(request.stages?.profile?.approvedAt || request.profileApprovedAt), request.stages?.profile?.approvedBy?.fullName || request.profileApprovedBy?.fullName || request.profileApprovedByName || "", overallStatus(request)]);
@@ -234,39 +291,167 @@ const RequestsPage = ({ status = "all" }) => {
     toast("success", "CSV exported");
   };
 
-  const totalPages = Math.max(1, pagination.totalPages || Math.ceil(pagination.total / pagination.limit));
-  const first = pagination.total ? (pagination.page - 1) * pagination.limit + 1 : 0;
-  const last = Math.min(pagination.page * pagination.limit, pagination.total);
+  const activeFilters = [];
+  if (filters.status) activeFilters.push({ label: `Status: ${filters.status}`, clear: () => updateFilter("status", "") });
+  if (filters.type) activeFilters.push({ label: `Type: ${filters.type}`, clear: () => updateFilter("type", "") });
+  if (filters.period !== "all") activeFilters.push({ label: `Period: ${filters.period}`, clear: () => updateFilter("period", "all") });
+  if (filters.responsible) {
+    const match = (filterOptions.responsibles || []).find((r) => r._id === filters.responsible);
+    activeFilters.push({ label: `Responsible: ${match?.fullName || match?.email || filters.responsible}`, clear: () => updateFilter("responsible", "") });
+  }
 
-  return <main className="app-content requests-page">
-    <header className="app-title tile p-3 requests-heading"><div><h1>{config.title}</h1><p>{config.description}</p></div>
-      <div className="requests-export" aria-label="Export current page"><button className="btn btn-outline-primary" type="button" title="Export the displayed page" disabled={!requests.length} onClick={exportCsv}>Export CSV</button><button className="btn btn-primary" type="button" title="Print or save the displayed page as PDF" disabled={!requests.length} onClick={() => openPrintView(requests, config.title)}>Print / PDF</button></div>
-    </header>
+  return (
+    <div className="flex flex-col gap-6">
+      <SectionHeader
+        title={config.title}
+        description={config.description}
+        actions={
+          <>
+            <Button variant="secondary" size="sm" icon={<RefreshCw size={14} />} onClick={() => loadRequests()}>Refresh</Button>
+            <Button variant="secondary" size="sm" icon={<Download size={14} />} disabled={!requests.length} onClick={exportCsv}>Export CSV</Button>
+            <Button variant="secondary" size="sm" icon={<Printer size={14} />} disabled={!requests.length} onClick={() => openPrintView(requests, config.title)}>Print / PDF</Button>
+          </>
+        }
+      />
 
-    {status === "approved" && <section className="requests-kpis" aria-label="Approved request metrics">
-      {[['Total approved', kpis.totalApproved ?? pagination.total, 'fa-check-circle'], ['Approved today', kpis.approvedToday ?? 0, 'fa-calendar-check'], ['Completed', kpis.completed ?? kpis.totalCompleted ?? 0, 'fa-flag-checkered'], ['Average approval time', kpis.averageApprovalTimeFormatted ?? kpis.averageApprovalTime ?? formatDuration(kpis.averageApprovalTimeMs), 'fa-clock']].map(([label, value, icon]) => <article className="tile request-kpi" key={label}><i className={`fa ${icon}`} aria-hidden="true"/><div><span>{label}</span><strong>{value}</strong></div></article>)}
-    </section>}
-
-    <section className="tile p-3 requests-panel" aria-labelledby="request-filters-title"><h2 className="sr-only" id="request-filters-title">Request filters</h2>
-      <div className="requests-filters">
-        <label className="requests-search"><span>Search by ID or name</span><input className="form-control" type="search" value={filters.search} onChange={(event) => updateFilter('search', event.target.value)} placeholder="Request ID or requester name"/></label>
-        <label><span>Period</span><select className="form-control" value={filters.period} onChange={(event) => updateFilter('period', event.target.value)}><option value="all">All time</option><option value="today">Today</option><option value="7d">Last 7 days</option><option value="30d">Last 30 days</option></select></label>
-        <label><span>Type</span><select className="form-control" value={filters.type} onChange={(event) => updateFilter('type', event.target.value)}><option value="">All types</option>{(filterOptions.types || []).map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>
-        <label><span>Approval stage</span><select className="form-control" value={filters.stage} onChange={(event) => { const nextStage = event.target.value; setFilters((current) => ({ ...current, stage: nextStage, ...(status === "all" ? { status: "" } : {}) })); setSearchParams((current) => { const next = new URLSearchParams(current); next.set("stage", nextStage); return next; }, { replace: true }); setPagination((current) => ({ ...current, page: 1 })); }}><option value="basic">Approval 1 - Registration</option><option value="profile">Approval 2 - Profile & documents</option></select></label>
-        {status === 'all' && <label><span>Status</span><select className="form-control" value={filters.status} onChange={(event) => updateFilter('status', event.target.value)}><option value="">All statuses</option>{filters.stage === "profile" && <option value="not_submitted">Not submitted</option>}<option value="pending">Pending</option><option value="approved">Approved</option>{filters.stage === "basic" && <option value="completed">Completed</option>}<option value="rejected">Rejected</option></select></label>}
-        <label><span>Responsible</span><select className="form-control" value={filters.responsible} onChange={(event) => updateFilter('responsible', event.target.value)}><option value="">All responsibles</option>{(filterOptions.responsibles || []).map((responsible) => <option key={responsible._id} value={responsible._id}>{responsible.fullName || responsible.email}</option>)}</select></label>
-        <label><span>Sort by</span><select className="form-control" value={`${filters.sortBy}:${filters.sortOrder}`} onChange={(event) => { const [sortBy, sortOrder] = event.target.value.split(':'); setFilters((current) => ({ ...current, sortBy, sortOrder })); setPagination((current) => ({ ...current, page: 1 })); }}><option value="approvedAt:desc">Approval date - newest</option><option value="approvedAt:asc">Approval date - oldest</option><option value="submittedAt:desc">Submission date - newest</option><option value="submittedAt:asc">Submission date - oldest</option></select></label>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <KpiCard label="Total" value={pagination.total} tooltip="Requests matching the current filters" />
+        <KpiCard label="Pending" value={kpis.pending ?? kpis.totalPending ?? "—"} urgent tooltip="Requests awaiting review at this stage" />
+        <KpiCard label="Approved" value={kpis.approved ?? kpis.totalApproved ?? "—"} tooltip="Requests approved at this stage" />
+        <KpiCard label="Avg. Approval Time" value={kpis.averageApprovalTimeFormatted ?? formatDuration(kpis.averageApprovalTimeMs) ?? "—"} tooltip="Average time from submission to approval" />
       </div>
 
-      <div className="requests-state" aria-live="polite">
-        {loading ? <div className="requests-loading"><div className="loader"/><span>Loading requests...</span></div> : error ? <div className="alert alert-danger" role="alert"><p>{error}</p><button className="btn btn-outline-danger btn-sm" type="button" onClick={() => loadRequests()}>Retry</button></div> : requests.length === 0 ? <div className="requests-empty"><i className="fa fa-inbox" aria-hidden="true"/><h3>No requests found</h3><p>Try changing the search or filters.</p></div> : <div className="table-responsive"><table className="table table-bordered table-hover requests-table"><caption className="sr-only">{config.title}. Approval 1 and Approval 2 are reviewed independently.</caption><thead><tr><th scope="col">Request ID</th><th scope="col">Type</th><th scope="col">Requester</th><th scope="col">Submitted</th><th scope="col">Approval 1</th><th scope="col">Approval 2</th><th scope="col">Overall</th><th scope="col">Actions</th></tr></thead><tbody>
-          {requests.map((request) => { const id = getId(request); const basic = stageStatus(request, "basic"); const profile = stageStatus(request, "profile"); const activeStageStatus = filters.stage === "profile" ? profile : basic; return <tr key={id}><td data-label="Request ID"><strong>{id}</strong></td><td data-label="Type">{request.type || request.requestType || 'Driver verification'}</td><td data-label="Requester">{getName(request)}</td><td data-label="Submitted">{formatDate(request.submittedAt || request.basicRequestSubmittedAt || request.createdAt)}</td><td data-label="Approval 1">{statusBadge(basic)}</td><td data-label="Approval 2">{statusBadge(profile)}</td><td data-label="Overall">{statusBadge(overallStatus(request))}</td><td data-label="Actions"><div className="requests-actions"><button type="button" className="btn btn-sm btn-outline-primary" onClick={() => showDetails(request)}>Review approvals</button>{filters.stage === "basic" && activeStageStatus === 'pending' && <button type="button" className="btn btn-sm btn-success" disabled={busyId === id} onClick={() => mutate(request, approveRequest, "Request 1 approved")}>Approve Request 1</button>}{filters.stage === "basic" && activeStageStatus === 'approved' && <button type="button" className="btn btn-sm btn-warning" disabled={busyId === id} onClick={() => confirmReopen(request)}>Reopen Request 1</button>}{filters.stage === "profile" && activeStageStatus === 'pending' && <button type="button" className="btn btn-sm btn-success" disabled={busyId === id} onClick={() => mutate(request, approveProfileRequest, "Request 2 approved")}>Approve Request 2</button>}{filters.stage === "profile" && activeStageStatus === 'approved' && <button type="button" className="btn btn-sm btn-warning" disabled={busyId === id} onClick={() => confirmProfileReopen(request)}>Reopen Request 2</button>}</div></td></tr>; })}
-        </tbody></table></div>}
-      </div>
+      <Card className="p-4">
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="relative flex-1 min-w-52">
+            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+            <input
+              value={filters.search}
+              onChange={(e) => updateFilter("search", e.target.value)}
+              placeholder="Search by request ID or requester name…"
+              className="w-full h-10 bg-slate-50 border border-slate-200 rounded-[10px] pl-9 pr-4 text-sm text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-red-700/20 focus:border-red-400 transition-all"
+            />
+            {filters.search && (
+              <button type="button" onClick={() => updateFilter("search", "")} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+                <X size={12} />
+              </button>
+            )}
+          </div>
+          <Select value={filters.stage} onChange={setStage} options={STAGE_OPTIONS} className="w-56" />
+          {status === "all" && <Select value={filters.status} onChange={(v) => updateFilter("status", v)} options={STATUS_OPTIONS} className="w-36" />}
+          <Select value={filters.period} onChange={(v) => updateFilter("period", v)} options={PERIOD_OPTIONS} className="w-36" />
+          <Select
+            value={filters.type}
+            onChange={(v) => updateFilter("type", v)}
+            options={[{ value: "", label: "All Types" }, ...(filterOptions.types || [])]}
+            className="w-44"
+          />
+          <Select
+            value={filters.responsible}
+            onChange={(v) => updateFilter("responsible", v)}
+            options={[{ value: "", label: "All Responsibles" }, ...(filterOptions.responsibles || []).map((r) => ({ value: r._id, label: r.fullName || r.email }))]}
+            className="w-44"
+          />
+          <Select
+            value={`${filters.sortBy}:${filters.sortOrder}`}
+            onChange={(v) => { const [sortBy, sortOrder] = v.split(":"); setFilters((current) => ({ ...current, sortBy, sortOrder })); setPagination((current) => ({ ...current, page: 1 })); }}
+            options={SORT_OPTIONS}
+            className="w-48"
+          />
+          {activeFilters.length > 0 && (
+            <button type="button" onClick={() => { updateFilter("status", ""); updateFilter("type", ""); updateFilter("period", "all"); updateFilter("responsible", ""); }} className="text-xs text-slate-400 hover:text-slate-600 flex items-center gap-1 underline underline-offset-2">
+              Clear all
+            </button>
+          )}
+        </div>
+        {activeFilters.length > 0 && (
+          <div className="flex flex-wrap gap-2 mt-3">
+            {activeFilters.map((f) => <FilterChip key={f.label} label={f.label} onRemove={f.clear} />)}
+          </div>
+        )}
+      </Card>
 
-      {!loading && !error && pagination.total > 0 && <nav className="requests-pagination" aria-label="Requests pagination"><div><label>Rows <select value={pagination.limit} onChange={(event) => setPagination((current) => ({ ...current, page: 1, limit: Number(event.target.value) }))}>{PAGE_SIZE_OPTIONS.map((size) => <option key={size}>{size}</option>)}</select></label><span>Showing {first}-{last} of {pagination.total}</span></div><div><button type="button" className="btn btn-light" disabled={pagination.page <= 1} onClick={() => setPagination((current) => ({ ...current, page: current.page - 1 }))}>Previous</button><span>Page {pagination.page} of {totalPages}</span><button type="button" className="btn btn-light" disabled={pagination.page >= totalPages} onClick={() => setPagination((current) => ({ ...current, page: current.page + 1 }))}>Next</button></div></nav>}
-    </section>
-  </main>;
+      <Card>
+        {loading ? (
+          <LoadingState label="Loading requests…" />
+        ) : error ? (
+          <ErrorState description={error} action={<Button variant="secondary" size="sm" onClick={() => loadRequests()}>Retry</Button>} />
+        ) : requests.length === 0 ? (
+          <EmptyState title="No requests found" description="Try adjusting the search or filters." />
+        ) : (
+          <>
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr>
+                    <Th>Request ID</Th>
+                    <Th>Type</Th>
+                    <Th>Requester</Th>
+                    <Th>Submitted</Th>
+                    <Th>Approval 1</Th>
+                    <Th>Approval 2</Th>
+                    <Th>Overall</Th>
+                    <Th>Actions</Th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {requests.map((request) => {
+                    const id = getId(request);
+                    const basic = stageStatus(request, "basic");
+                    const profile = stageStatus(request, "profile");
+                    const activeStageStatus = filters.stage === "profile" ? profile : basic;
+                    return (
+                      <Tr key={id}>
+                        <Td><span className="font-mono text-xs text-slate-600 bg-slate-100 px-2 py-0.5 rounded">{id}</span></Td>
+                        <Td><span className="text-xs text-slate-600">{request.type || request.requestType || "Driver verification"}</span></Td>
+                        <Td>
+                          <div className="flex items-center gap-2.5">
+                            <div className="w-8 h-8 rounded-full bg-[#BE1B2C]/10 flex items-center justify-center text-[11px] font-bold text-[#BE1B2C] shrink-0">{getInitials(request)}</div>
+                            <div className="text-sm font-medium text-slate-800">{getName(request)}</div>
+                          </div>
+                        </Td>
+                        <Td><span className="text-xs text-slate-600">{formatDate(request.submittedAt || request.basicRequestSubmittedAt || request.createdAt)}</span></Td>
+                        <Td><ApprovalCell status={basic} /></Td>
+                        <Td><ApprovalCell status={profile} /></Td>
+                        <Td><Badge variant={overallStatus(request)} /></Td>
+                        <Td>
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            <Button variant="secondary" size="sm" onClick={() => showDetails(request)}>Review</Button>
+                            {filters.stage === "basic" && activeStageStatus === "pending" && (
+                              <Button variant="primary" size="sm" disabled={busyId === id} onClick={() => mutate(request, approveRequest, "Request 1 approved")}>Approve</Button>
+                            )}
+                            {filters.stage === "basic" && activeStageStatus === "approved" && (
+                              <Button variant="warning" size="sm" disabled={busyId === id} onClick={() => confirmReopen(request)}>Reopen</Button>
+                            )}
+                            {filters.stage === "profile" && activeStageStatus === "pending" && (
+                              <Button variant="primary" size="sm" disabled={busyId === id} onClick={() => mutate(request, approveProfileRequest, "Request 2 approved")}>Approve</Button>
+                            )}
+                            {filters.stage === "profile" && activeStageStatus === "approved" && (
+                              <Button variant="warning" size="sm" disabled={busyId === id} onClick={() => confirmProfileReopen(request)}>Reopen</Button>
+                            )}
+                          </div>
+                        </Td>
+                      </Tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+            <div className="flex items-center justify-between px-4 py-3 border-t border-slate-100">
+              <label className="text-xs text-slate-400 flex items-center gap-2">
+                Rows
+                <select value={pagination.limit} onChange={(e) => setPagination((current) => ({ ...current, page: 1, limit: Number(e.target.value) }))}
+                  className="h-8 bg-white border border-slate-200 rounded-[8px] px-2 text-xs text-slate-600 focus:outline-none focus:ring-2 focus:ring-red-700/20">
+                  {PAGE_SIZE_OPTIONS.map((size) => <option key={size} value={size}>{size}</option>)}
+                </select>
+              </label>
+            </div>
+            <Pagination page={pagination.page} total={pagination.total} perPage={pagination.limit} onChange={(page) => setPagination((current) => ({ ...current, page }))} />
+          </>
+        )}
+      </Card>
+    </div>
+  );
 };
 
 RequestsPage.propTypes = { status: PropTypes.oneOf(["pending", "approved", "rejected", "all"]) };

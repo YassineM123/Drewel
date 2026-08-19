@@ -15,6 +15,7 @@ import '../../../data/apis/communication_api_client.dart';
 import '../../../data/repositories/passenger_account_repository.dart';
 import '../../../routes/app_pages.dart';
 import '../../communication/controllers/call_state_controller.dart';
+import '../../user_home/controllers/user_home_controller.dart';
 
 class PassengerAccountController extends GetxController {
   PassengerAccountController({required PassengerAccountRepository repository})
@@ -314,5 +315,17 @@ class PassengerAccountController extends GetxController {
     await prefs.setString(ApiKeyConstants.phone, next.phone);
     await prefs.setString(ApiKeyConstants.countryCode, next.countryCode);
     await prefs.setString(ApiKeyConstants.profileImage, next.profileImageUrl);
+
+    // Keep the nav drawer (UserHomeController.userData) in sync so edited
+    // name/photo show up immediately instead of only after the next
+    // full user-details refetch.
+    if (Get.isRegistered<UserHomeController>()) {
+      Get.find<UserHomeController>().userData.value = <String, String>{
+        ApiKeyConstants.phone: next.phone,
+        ApiKeyConstants.countryCode: next.countryCode,
+        ApiKeyConstants.profileImage: next.profileImageUrl,
+        ApiKeyConstants.fullName: next.fullName,
+      };
+    }
   }
 }

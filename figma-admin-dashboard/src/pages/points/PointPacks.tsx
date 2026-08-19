@@ -1,6 +1,7 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Package, Plus, Pencil, Trash2, ShieldCheck } from "lucide-react";
 import { Card, Button, SectionHeader, Modal, ConfirmDialog, Toast } from "../../components/ui";
+import { getPointPacks } from "../../api";
 
 const ROLE = "owner";
 
@@ -14,13 +15,6 @@ interface Pack {
   order: number;
 }
 
-const DEFAULT_PACKS: Pack[] = [
-  { id: "PACK-001", name: "Starter",    points: 100,  priceCents: 500,  bonusPct: 0,  active: true,  order: 1 },
-  { id: "PACK-002", name: "Standard",   points: 250,  priceCents: 1000, bonusPct: 5,  active: true,  order: 2 },
-  { id: "PACK-003", name: "Pro",        points: 600,  priceCents: 2000, bonusPct: 10, active: true,  order: 3 },
-  { id: "PACK-004", name: "Enterprise", points: 1500, priceCents: 4500, bonusPct: 15, active: false, order: 4 },
-];
-
 const SETTINGS = [
   { key: "welcome_points",    label: "Welcome Points",              value: 100, unit: "pts", description: "Points credited to a new driver on first approval" },
   { key: "ride_offer_cost",   label: "Ride Offer Cost",             value: 20,  unit: "pts", description: "Points deducted from driver on each trip offer sent" },
@@ -33,12 +27,28 @@ function fmt(cents: number) {
 }
 
 export default function PointPacks() {
-  const [packs, setPacks] = useState<Pack[]>(DEFAULT_PACKS);
+  const [packs, setPacks] = useState<Pack[]>([]);
   const [editPack, setEditPack] = useState<Pack | null>(null);
   const [deletePack, setDeletePack] = useState<Pack | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [_fetching, setFetching] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const data = await getPointPacks();
+        if (!cancelled) setPacks(data);
+      } catch (err) {
+        console.error("Failed to load point packs", err);
+      } finally {
+        if (!cancelled) setFetching(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
 
   // Form state
   const [form, setForm] = useState({ name: "", points: "", priceCents: "", bonusPct: "0" });

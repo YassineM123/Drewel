@@ -1,58 +1,87 @@
 import { useState, useRef, useEffect } from "react";
 import { Search, Send, Paperclip, CheckCheck, Check, Wifi } from "lucide-react";
 import { Avatar, Badge, EmptyState } from "../components/ui";
-import { mockChats } from "../data/mock";
-
-type Chat = typeof mockChats[0];
-type Message = Chat["messages"][0];
+import { getChatThreads, getConversationMessages } from "../api";
 
 export default function Chat() {
-  const [activeChat, setActiveChat] = useState<Chat>(mockChats[0]);
+  const [activeChat, setActiveChat] = useState<any>(null);
   const [search, setSearch] = useState("");
   const [message, setMessage] = useState("");
-  const [chats, setChats] = useState(mockChats);
+  const [chats, setChats] = useState<any[]>([]);
   const [sending, setSending] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const [mobileView, setMobileView] = useState<"list" | "thread">("list");
   const [chatTab, setChatTab] = useState<"all" | "unread" | "drivers" | "users">("all");
+  const [loading, setLoading] = useState(true);
+  const [messages, setMessages] = useState<any[]>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const data = await getChatThreads();
+        const threads = data.threads ?? data.items ?? data ?? [];
+        if (!cancelled) {
+          setChats(threads);
+          if (threads.length > 0) setActiveChat(threads[0]);
+        }
+      } catch (err) {
+        console.error("Failed to load chat threads", err);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  useEffect(() => {
+    if (!activeChat) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const threadId = activeChat.id ?? activeChat.threadId;
+        const data = await getConversationMessages(threadId);
+        if (!cancelled) setMessages(data.messages ?? data.items ?? []);
+      } catch (err) {
+        console.error("Failed to load messages", err);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [activeChat]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [activeChat]);
+  }, [messages, activeChat]);
 
   const filteredChats = chats.filter(c => {
-    const matchSearch = !search || c.contact.name.toLowerCase().includes(search.toLowerCase());
+    const contactName = c.contact?.name ?? c.participantName ?? c.name ?? "";
+    const matchSearch = !search || contactName.toLowerCase().includes(search.toLowerCase());
     const matchTab = chatTab === "all"
-      || (chatTab === "unread" && c.unread > 0)
-      || (chatTab === "drivers" && c.contact.type === "driver")
-      || (chatTab === "users" && c.contact.type === "user");
+      || (chatTab === "unread" && (c.unread ?? 0) > 0)
+      || (chatTab === "drivers" && (c.contact?.type ?? c.participantType ?? "") === "driver")
+      || (chatTab === "users" && (c.contact?.type ?? c.participantType ?? "") === "user");
     return matchSearch && matchTab;
   });
 
   const handleSend = () => {
     if (!message.trim() || sending) return;
     setSending(true);
-    const newMsg: Message = {
+    const newMsg: any = {
       id: Date.now(),
       from: "admin",
       text: message.trim(),
       at: new Date().toISOString(),
       read: true,
     };
-    setChats(prev => prev.map(c =>
-      c.id === activeChat.id
-        ? { ...c, messages: [...c.messages, newMsg], lastMessage: newMsg.text, lastAt: newMsg.at, unread: 0 }
-        : c
-    ));
-    setActiveChat(prev => ({ ...prev, messages: [...prev.messages, newMsg], unread: 0 }));
+    setMessages(prev => [...prev, newMsg]);
     setMessage("");
     setSending(false);
   };
 
-  const handleSelectChat = (chat: Chat) => {
+  const handleSelectChat = (chat: any) => {
     setActiveChat(chat);
     setMobileView("thread");
-    setChats(prev => prev.map(c => c.id === chat.id ? { ...c, unread: 0 } : c));
+    setChats(prev => prev.map(c => (c.id ?? c.threadId) === (chat.id ?? chat.threadId) ? { ...c, unread: 0 } : c));
   };
 
   return (
@@ -116,24 +145,24 @@ export default function Chat() {
               <EmptyState title="No conversations" description="Conversations with drivers and users will appear here." />
             ) : filteredChats.map(chat => (
               <button
-                key={chat.id}
+                key={chat.id ?? chat.threadId}
                 onClick={() => handleSelectChat(chat)}
                 className={`w-full flex items-start gap-3 px-4 py-3.5 text-left transition-colors border-b border-slate-50
-                  ${activeChat.id === chat.id ? "bg-red-50/30 border-l-2 border-l-[#BE1B2C]" : "hover:bg-slate-50"}`}
+                  ${(activeChat?.id ?? activeChat?.threadId) === (chat.id ?? chat.threadId) ? "bg-red-50/30 border-l-2 border-l-[#BE1B2C]" : "hover:bg-slate-50"}`}
               >
                 <div className="relative shrink-0 mt-0.5">
-                  <Avatar initials={chat.contact.avatar} size="sm" />
+                  <Avatar initials={chat.contact?.avatar ?? chat.participantAvatar ?? "?"} size="sm" />
                   <span className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-white
-                    ${chat.status === "open" ? "bg-green-500" : "bg-slate-300"}`} />
+                    ${(chat.status ?? "open") === "open" ? "bg-green-500" : "bg-slate-300"}`} />
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center justify-between gap-2">
-                    <span className="text-sm font-medium text-slate-800 truncate">{chat.contact.name}</span>
-                    <span className="text-xs text-slate-400 shrink-0">{formatRelTime(chat.lastAt)}</span>
+                    <span className="text-sm font-medium text-slate-800 truncate">{chat.contact?.name ?? chat.participantName ?? chat.name}</span>
+                    <span className="text-xs text-slate-400 shrink-0">{formatRelTime(chat.lastAt ?? chat.updatedAt ?? chat.createdAt)}</span>
                   </div>
                   <div className="flex items-center justify-between gap-2 mt-0.5">
-                    <p className="text-xs text-slate-500 truncate">{chat.lastMessage}</p>
-                    {chat.unread > 0 && (
+                    <p className="text-xs text-slate-500 truncate">{chat.lastMessage ?? chat.lastMessageText}</p>
+                    {(chat.unread ?? 0) > 0 && (
                       <span className="shrink-0 w-5 h-5 rounded-full bg-[#BE1B2C] text-white text-[10px] font-bold flex items-center justify-center">
                         {chat.unread}
                       </span>
@@ -141,12 +170,12 @@ export default function Chat() {
                   </div>
                   <div className="flex items-center gap-1.5 mt-1">
                     <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium
-                      ${chat.contact.type === "driver" ? "bg-red-50 text-[#BE1B2C]" : "bg-violet-50 text-violet-600"}`}>
-                      {chat.contact.type}
+                      ${(chat.contact?.type ?? chat.participantType ?? "") === "driver" ? "bg-red-50 text-[#BE1B2C]" : "bg-violet-50 text-violet-600"}`}>
+                      {chat.contact?.type ?? chat.participantType ?? "user"}
                     </span>
                     <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium
-                      ${chat.status === "open" ? "bg-green-50 text-green-600" : "bg-slate-100 text-slate-500"}`}>
-                      {chat.status}
+                      ${(chat.status ?? "open") === "open" ? "bg-green-50 text-green-600" : "bg-slate-100 text-slate-500"}`}>
+                      {chat.status ?? "open"}
                     </span>
                   </div>
                 </div>
@@ -166,16 +195,16 @@ export default function Chat() {
                   ←
                 </button>
                 <div className="relative shrink-0">
-                  <Avatar initials={activeChat.contact.avatar} size="sm" />
+                  <Avatar initials={activeChat.contact?.avatar ?? activeChat.participantAvatar ?? "?"} size="sm" />
                   <span className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-white
-                    ${activeChat.status === "open" ? "bg-green-500" : "bg-slate-300"}`} />
+                    ${(activeChat.status ?? "open") === "open" ? "bg-green-500" : "bg-slate-300"}`} />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold text-slate-800">{activeChat.contact.name}</p>
-                  <p className="text-xs text-slate-400">{activeChat.contact.id} · {activeChat.contact.type}</p>
+                  <p className="text-sm font-semibold text-slate-800">{activeChat.contact?.name ?? activeChat.participantName ?? activeChat.name}</p>
+                  <p className="text-xs text-slate-400">{activeChat.contact?.id ?? activeChat.participantId ?? activeChat.id} · {activeChat.contact?.type ?? activeChat.participantType ?? ""}</p>
                 </div>
                 <div className="flex items-center gap-2">
-                  <Badge variant={activeChat.status === "open" ? "active" : "inactive"} label={activeChat.status} />
+                  <Badge variant={(activeChat.status ?? "open") === "open" ? "active" : "inactive"} label={activeChat.status ?? "open"} />
                   <button className="text-xs text-slate-500 hover:text-slate-700 border border-slate-200 rounded-[8px] px-2.5 py-1.5 hover:bg-slate-50 transition-colors">
                     Resolve
                   </button>
@@ -184,7 +213,7 @@ export default function Chat() {
 
               {/* Messages */}
               <div className="flex-1 overflow-y-auto p-5 flex flex-col gap-4 bg-[#F6F8FB]">
-                {groupByDate(activeChat.messages).map(([date, msgs]) => (
+                {groupByDate(messages).map(([date, msgs]) => (
                   <div key={date}>
                     <div className="flex items-center gap-3 my-3">
                       <div className="flex-1 h-px bg-slate-200" />
@@ -192,21 +221,20 @@ export default function Chat() {
                       <div className="flex-1 h-px bg-slate-200" />
                     </div>
                     <div className="flex flex-col gap-3">
-                      {msgs.map((msg: Message) => {
-                        const isAdmin = msg.from === "admin";
+                      {msgs.map((msg: any) => {
                         return (
-                          <div key={msg.id} className={`flex items-end gap-2 ${isAdmin ? "flex-row-reverse" : "flex-row"}`}>
-                            {!isAdmin && <Avatar initials={activeChat.contact.avatar} size="xs" />}
+                          <div key={msg.id} className={`flex items-end gap-2 ${(msg.from ?? msg.sender) === "admin" ? "flex-row-reverse" : "flex-row"}`}>
+                            {(msg.from ?? msg.sender) !== "admin" && <Avatar initials={activeChat.contact?.avatar ?? activeChat.participantAvatar ?? "?"} size="xs" />}
                             <div className={`max-w-[70%] group`}>
                               <div className={`px-3.5 py-2.5 rounded-[12px] text-sm leading-relaxed
-                                ${isAdmin
+                                ${(msg.from ?? msg.sender) === "admin"
                                   ? "bg-[#BE1B2C] text-white rounded-br-[4px]"
                                   : "bg-white border border-slate-200 text-slate-700 rounded-bl-[4px]"}`}>
                                 {msg.text}
                               </div>
-                              <div className={`flex items-center gap-1 mt-1 ${isAdmin ? "justify-end" : "justify-start"}`}>
-                                <span className="text-[10px] text-slate-400">{formatMsgTime(msg.at)}</span>
-                                {isAdmin && (
+                              <div className={`flex items-center gap-1 mt-1 ${(msg.from ?? msg.sender) === "admin" ? "justify-end" : "justify-start"}`}>
+                                <span className="text-[10px] text-slate-400">{formatMsgTime(msg.at ?? msg.createdAt ?? msg.timestamp)}</span>
+                                {(msg.from ?? msg.sender) === "admin" && (
                                   msg.read
                                     ? <CheckCheck size={11} className="text-blue-400" />
                                     : <Check size={11} className="text-slate-400" />
@@ -271,8 +299,8 @@ function formatMsgTime(iso: string) {
   return new Date(iso).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
 }
 
-function groupByDate(messages: Message[]): [string, Message[]][] {
-  const groups: Record<string, Message[]> = {};
+function groupByDate(messages: any[]): [string, any[]][] {
+  const groups: Record<string, any[]> = {};
   for (const msg of messages) {
     const d = new Date(msg.at).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
     if (!groups[d]) groups[d] = [];

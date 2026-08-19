@@ -1,14 +1,14 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Search, CheckCircle2, XCircle } from "lucide-react";
 import {
   Card, Button, SectionHeader, Th, Td, Tr,
   Avatar, EmptyState, Modal, Toast, StatRow, TabBar
 } from "../../components/ui";
-import { mockPointRequests, type PointRequest, type PointRequestStatus } from "../../data/mockRides";
+import { getPurchaseRequests } from "../../api";
 
 const ROLE = "owner";
 
-const STATUS_STYLES: Record<PointRequestStatus, string> = {
+const STATUS_STYLES: Record<string, string> = {
   pending: "bg-amber-50 text-amber-700 border border-amber-200",
   approved: "bg-green-50 text-green-700 border border-green-200",
   rejected: "bg-red-50 text-red-700 border border-red-200",
@@ -19,11 +19,28 @@ export default function PointRequests() {
   const [search, setSearch] = useState("");
   const [tab, setTab] = useState("pending");
   const [page, setPage] = useState(1);
-  const [actionReq, setActionReq] = useState<{ req: PointRequest; type: "approve" | "reject" } | null>(null);
+  const [actionReq, setActionReq] = useState<{ req: any; type: "approve" | "reject" } | null>(null);
   const [note, setNote] = useState("");
   const [loading, setLoading] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
-  const [requests, setRequests] = useState(mockPointRequests);
+  const [requests, setRequests] = useState<any[]>([]);
+  const [_fetching, setFetching] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      setFetching(true);
+      try {
+        const res = await getPurchaseRequests({ page, limit: 50 });
+        if (!cancelled) setRequests(res.requests ?? []);
+      } catch (err) {
+        console.error("Failed to load purchase requests", err);
+      } finally {
+        if (!cancelled) setFetching(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [page]);
 
   const filtered = requests.filter(r => {
     const matchSearch = !search || r.driverName.toLowerCase().includes(search.toLowerCase()) || r.id.toLowerCase().includes(search.toLowerCase());

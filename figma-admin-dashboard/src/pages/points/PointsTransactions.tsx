@@ -1,9 +1,9 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Search, Download, Lock } from "lucide-react";
 import { Card, SectionHeader, Th, Td, Tr, Pagination, Avatar, Select, EmptyState } from "../../components/ui";
-import { mockPointTransactions, type PointTransactionType } from "../../data/mockRides";
+import { getPointTransactions } from "../../api";
 
-const TX_COLORS: Record<PointTransactionType, string> = {
+const TX_COLORS: Record<string, string> = {
   welcome_credit: "text-green-700 bg-green-50 border-green-200",
   purchased_credit: "text-green-700 bg-green-50 border-green-200",
   offer_reservation: "text-sky-700 bg-sky-50 border-sky-200",
@@ -13,7 +13,7 @@ const TX_COLORS: Record<PointTransactionType, string> = {
   admin_correction: "text-amber-700 bg-amber-50 border-amber-200",
 };
 
-const TX_LABELS: Record<PointTransactionType, string> = {
+const TX_LABELS: Record<string, string> = {
   welcome_credit: "Welcome Credit",
   purchased_credit: "Purchased",
   offer_reservation: "Reservation",
@@ -27,9 +27,31 @@ export default function PointsTransactions() {
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState("all");
   const [page, setPage] = useState(1);
+  const [transactions, setTransactions] = useState<any[]>([]);
+  const [_total, setTotal] = useState(0);
+  const [_fetching, setFetching] = useState(true);
 
-  const filtered = mockPointTransactions.filter(tx => {
-    const matchSearch = !search || tx.driverName.toLowerCase().includes(search.toLowerCase()) || tx.id.toLowerCase().includes(search.toLowerCase()) || (tx.rideId?.toLowerCase().includes(search.toLowerCase()) ?? false);
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      setFetching(true);
+      try {
+        const res = await getPointTransactions({ page, limit: 50 });
+        if (!cancelled) {
+          setTransactions(res.transactions ?? []);
+          setTotal(res.pagination?.total ?? (res.transactions ?? []).length);
+        }
+      } catch (err) {
+        console.error("Failed to load point transactions", err);
+      } finally {
+        if (!cancelled) setFetching(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [page]);
+
+  const filtered = transactions.filter(tx => {
+    const matchSearch = !search || (tx.driverName ?? "").toLowerCase().includes(search.toLowerCase()) || (tx.id ?? "").toLowerCase().includes(search.toLowerCase()) || ((tx.rideId ?? "").toLowerCase().includes(search.toLowerCase()));
     const matchType = typeFilter === "all" || tx.type === typeFilter;
     return matchSearch && matchType;
   });

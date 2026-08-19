@@ -1,7 +1,7 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { Navigation, RefreshCw, Map, List, AlertTriangle, Clock, Eye } from "lucide-react";
 import { Card, OnlineBadge, Avatar, SectionHeader, Badge, Select, Button } from "../components/ui";
-import { mockDrivers, mockAreaAvailability } from "../data/mock";
+import { getOnlineDrivers, getDriversWithLocation } from "../api";
 import { useNavigate } from "react-router-dom";
 
 // ─── Extended per-driver metadata ─────────────────────────────────────────────
@@ -41,14 +41,36 @@ type ViewMode = "map" | "list";
 export default function OnlineDrivers() {
   const navigate = useNavigate();
   const [viewMode, setViewMode] = useState<ViewMode>("map");
-  const [selected, setSelected] = useState<typeof mockDrivers[0] | null>(null);
+  const [selected, setSelected] = useState<any | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [vehicleFilter, setVehicleFilter] = useState("all");
   const [cityFilter, setCityFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
   const [revealedPII, setRevealedPII] = useState<Set<string>>(new Set());
+  const [drivers, setDrivers] = useState<any[]>([]);
+  const [locationDrivers, setLocationDrivers] = useState<any[]>([]);
+  const [_fetching, setFetching] = useState(true);
 
-  const onlineDrivers = useMemo(() => mockDrivers.filter(d => {
+  const fetchDrivers = async () => {
+    try {
+      const [online, withLocation] = await Promise.all([
+        getOnlineDrivers(),
+        getDriversWithLocation(),
+      ]);
+      setDrivers(online);
+      setLocationDrivers(withLocation);
+    } catch (err) {
+      console.error("Failed to load drivers", err);
+    } finally {
+      setFetching(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchDrivers();
+  }, []);
+
+  const onlineDrivers = useMemo(() => drivers.filter(d => {
     if (d.onlineStatus === "offline") return false;
     const meta = DRIVER_META[d.id];
     if (!meta) return true;
@@ -58,17 +80,18 @@ export default function OnlineDrivers() {
     if (statusFilter === "busy" && d.onlineStatus !== "online_busy") return false;
     if (statusFilter === "available" && d.onlineStatus !== "online_available") return false;
     return true;
-  }), [vehicleFilter, cityFilter, statusFilter]);
+  }), [drivers, vehicleFilter, cityFilter, statusFilter]);
 
-  const allOnline = mockDrivers.filter(d => d.onlineStatus !== "offline");
+  const allOnline = drivers.filter(d => d.onlineStatus !== "offline");
   const staleCount = allOnline.filter(d => {
     const m = DRIVER_META[d.id];
     return m && m.lastGpsMinutes >= STALE_GPS_MINUTES;
   }).length;
 
-  const handleRefresh = () => {
+  const handleRefresh = async () => {
     setRefreshing(true);
-    setTimeout(() => setRefreshing(false), 1000);
+    await fetchDrivers();
+    setRefreshing(false);
   };
 
   const toggleReveal = (id: string) => {
@@ -112,8 +135,8 @@ export default function OnlineDrivers() {
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         {[
           { label: "Online Now", value: allOnline.length, color: "text-green-700", bg: "bg-green-50 border-green-200" },
-          { label: "On Trip", value: mockDrivers.filter(d => d.onlineStatus === "online_busy").length, color: "text-blue-700", bg: "bg-blue-50 border-blue-200" },
-          { label: "Available", value: mockDrivers.filter(d => d.onlineStatus === "online_available").length, color: "text-slate-700", bg: "" },
+          { label: "On Trip", value: drivers.filter(d => d.onlineStatus === "online_busy").length, color: "text-blue-700", bg: "bg-blue-50 border-blue-200" },
+          { label: "Available", value: drivers.filter(d => d.onlineStatus === "online_available").length, color: "text-slate-700", bg: "" },
           {
             label: "Stale Location",
             value: staleCount,
@@ -269,21 +292,21 @@ export default function OnlineDrivers() {
             <Card className="p-4">
               <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">Availability by Area</h3>
               <div className="flex flex-col gap-2.5">
-                {mockAreaAvailability.map(area => {
-                  const pct = Math.round((area.online / area.total) * 100);
+                {(locationDrivers as any[]).length > 0 ? (locationDrivers as any[]).map((area: any) => {
+                  const pct = Math.round(((area.online ?? 0) / Math.max(area.total ?? 1, 1)) * 100);
                   const low = pct < 60;
                   return (
-                    <div key={area.area}>
+                    <div key={area.area ?? area.name}>
                       <div className="flex items-center justify-between mb-1">
-                        <span className="text-xs text-slate-600 truncate">{area.area}</span>
-                        <span className={`text-xs font-medium ${low ? "text-amber-600" : "text-green-600"}`}>{area.online}/{area.total}</span>
+                        <span className="text-xs text-slate-600 truncate">{area.area ?? area.name}</span>
+                        <span className={`text-xs font-medium ${low ? "text-amber-600" : "text-green-600"}`}>{area.online ?? 0}/{area.total ?? 0}</span>
                       </div>
                       <div className="bg-slate-100 rounded-full h-1.5">
                         <div className="h-full rounded-full" style={{ width: `${pct}%`, background: low ? "#D97706" : "#16A34A" }} />
                       </div>
                     </div>
                   );
-                })}
+                }) : null}
               </div>
             </Card>
 
@@ -433,7 +456,7 @@ export default function OnlineDrivers() {
 // ─── Driver detail panel (map view) ──────────────────────────────────────────
 
 function DriverPanel({ driver, revealed, onReveal, onViewProfile }: {
-  driver: typeof mockDrivers[0];
+  driver: any;
   revealed: boolean;
   onReveal: () => void;
   onViewProfile: () => void;

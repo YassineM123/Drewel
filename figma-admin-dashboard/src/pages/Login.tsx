@@ -1,9 +1,11 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Navigate } from "react-router-dom";
 import { Eye, EyeOff, Lock, Mail, ShieldCheck } from "lucide-react";
+import { useAuth } from "../context/AuthContext";
 
 export default function Login() {
   const navigate = useNavigate();
+  const { login, isAuthenticated } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPw, setShowPw] = useState(false);
@@ -11,7 +13,11 @@ export default function Login() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  const handleSubmit = (e: React.FormEvent) => {
+  if (isAuthenticated) {
+    return <Navigate to="/dashboard" replace />;
+  }
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
     if (!email || !password) {
@@ -19,28 +25,25 @@ export default function Login() {
       return;
     }
     setLoading(true);
-    setTimeout(() => {
+    try {
+      await login(email, password);
+      navigate("/dashboard");
+    } catch (err: unknown) {
+      const apiErr = err as { message?: string; response?: { data?: { message?: string } } };
+      setError(apiErr?.response?.data?.message || apiErr?.message || "Invalid credentials. Please check your email and password.");
+    } finally {
       setLoading(false);
-      if (password === "wrong") {
-        setError("Invalid credentials. Please check your email and password.");
-      } else {
-        navigate("/dashboard");
-      }
-    }, 1200);
+    }
   };
 
   return (
     <div className="min-h-screen flex">
       {/* Left — branded panel */}
       <div className="hidden lg:flex lg:w-[54%] bg-[#1A0608] relative overflow-hidden flex-col justify-between p-12">
-        {/* Background pattern */}
         <RoutePattern />
-
-        {/* Gradient overlays */}
         <div className="absolute inset-0 bg-gradient-to-br from-red-950/30 via-transparent to-navy-900/30 pointer-events-none" />
         <div className="absolute bottom-0 left-0 right-0 h-48 bg-gradient-to-t from-[#1A0608]/80 to-transparent pointer-events-none" />
 
-        {/* Logo */}
         <div className="relative z-10">
           <div className="flex items-center gap-3 mb-20">
             <div className="w-11 h-11 rounded-[13px] bg-[#BE1B2C] flex items-center justify-center shadow-lg shadow-red-900/40">
@@ -60,7 +63,6 @@ export default function Login() {
             Real-time visibility across your driver network, verification workflows, and passenger activity—all from a single secure console.
           </p>
 
-          {/* Feature pills */}
           <div className="flex flex-wrap gap-2 mt-7">
             {["Live Ride Tracking", "Driver Verification", "Points Ledger", "Dispute Resolution"].map(f => (
               <span key={f} className="text-xs font-medium text-white/60 border border-white/10 bg-white/5 px-3 py-1.5 rounded-full backdrop-blur-sm">{f}</span>
@@ -68,7 +70,6 @@ export default function Login() {
           </div>
         </div>
 
-        {/* Stats strip */}
         <div className="relative z-10 grid grid-cols-3 gap-3">
           {[
             { label: "Active Drivers", value: "2,841", delta: "↑ 12%" },
@@ -86,7 +87,6 @@ export default function Login() {
 
       {/* Right — form panel */}
       <div className="flex-1 flex flex-col items-center justify-center p-8 bg-[#F6F8FB]">
-        {/* Mobile logo */}
         <div className="lg:hidden flex items-center gap-2.5 mb-10">
           <div className="w-9 h-9 rounded-[11px] bg-[#BE1B2C] flex items-center justify-center">
             <DrewelMark />
@@ -210,43 +210,28 @@ function DrewelMark() {
 function RoutePattern() {
   return (
     <svg className="absolute inset-0 w-full h-full" viewBox="0 0 700 900" fill="none" preserveAspectRatio="xMidYMid slice">
-      {/* Grid base */}
       {[100, 200, 300, 400, 500, 600, 700, 800].map(y => (
         <line key={`h${y}`} x1="0" y1={y} x2="700" y2={y} stroke="white" strokeOpacity="0.025" strokeWidth="1" />
       ))}
       {[100, 200, 300, 400, 500, 600].map(x => (
         <line key={`v${x}`} x1={x} y1="0" x2={x} y2="900" stroke="white" strokeOpacity="0.025" strokeWidth="1" />
       ))}
-
-      {/* Route paths */}
       <path d="M80 180 Q180 120 280 160 Q390 200 460 140 Q540 80 620 160" stroke="white" strokeOpacity="0.12" strokeWidth="2" fill="none" />
       <path d="M80 380 Q200 320 320 360 Q430 400 530 340 Q610 295 680 340" stroke="white" strokeOpacity="0.1" strokeWidth="2" fill="none" />
       <path d="M40 560 Q160 500 260 540 Q380 590 500 540 Q590 500 680 560" stroke="white" strokeOpacity="0.08" strokeWidth="2" fill="none" />
       <path d="M100 740 Q230 680 360 720 Q470 750 570 700 Q640 665 700 700" stroke="white" strokeOpacity="0.07" strokeWidth="1.5" fill="none" />
-
-      {/* Cross paths */}
       <path d="M300 0 Q320 200 300 400 Q285 600 310 900" stroke="white" strokeOpacity="0.06" strokeWidth="2" fill="none" />
       <path d="M480 0 Q500 300 480 580 Q460 750 490 900" stroke="white" strokeOpacity="0.05" strokeWidth="1.5" fill="none" />
-
-      {/* Node points */}
-      {[
-        [80, 180], [280, 160], [460, 140], [620, 160],
-        [80, 380], [320, 360], [530, 340], [680, 340],
-        [260, 540], [500, 540], [360, 720], [570, 700],
-      ].map(([x, y], i) => (
+      {[[80, 180], [280, 160], [460, 140], [620, 160], [80, 380], [320, 360], [530, 340], [680, 340], [260, 540], [500, 540], [360, 720], [570, 700]].map(([x, y], i) => (
         <g key={i}>
           <circle cx={x} cy={y} r="5" fill="white" fillOpacity="0.18" />
           <circle cx={x} cy={y} r="10" stroke="white" strokeOpacity="0.06" strokeWidth="1" fill="none" />
           <circle cx={x} cy={y} r="20" stroke="white" strokeOpacity="0.03" strokeWidth="1" fill="none" />
         </g>
       ))}
-
-      {/* Large glow orbs */}
       <circle cx="280" cy="160" r="60" fill="blue" fillOpacity="0.04" />
       <circle cx="530" cy="340" r="50" fill="blue" fillOpacity="0.04" />
       <circle cx="360" cy="720" r="45" fill="blue" fillOpacity="0.03" />
-
-      {/* Vehicle dots */}
       <circle cx="190" cy="168" r="4" fill="#60A5FA" fillOpacity="0.5" />
       <circle cx="400" cy="352" r="4" fill="#60A5FA" fillOpacity="0.4" />
       <circle cx="590" cy="520" r="3.5" fill="#60A5FA" fillOpacity="0.3" />

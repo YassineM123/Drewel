@@ -1,17 +1,46 @@
-import { useState, useMemo } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useSearchParams } from "react-router-dom";
 import { Navigation, RefreshCw, AlertTriangle, Search, X, ZoomIn, ZoomOut, Locate, Filter } from "lucide-react";
 import { Button, Drawer, Select } from "../../components/ui";
-import { mockRides, type Ride, type RideStatus } from "../../data/mockRides";
+import { getRides } from "../../api";
+import { type Ride, type RideStatus } from "../../data/mockRides";
 import { RideStatusBadge } from "../Dashboard";
 import RideDetails from "./RideDetails";
 
-// ─── Constants ────────────────────────────────────────────────────────────────
+function mapApiRide(r: any): Ride {
+  return {
+    id: r._id || r.id || "",
+    offerId: r.offerId || "",
+    driver: { id: r.driver?._id || r.driver?.id || "", name: r.driver?.name || "Unknown", avatar: r.driver?.avatar || r.driver?.name?.charAt(0) || "?", phone: r.driver?.phone || "" },
+    user: { id: r.user?._id || r.user?.id || "", name: r.user?.name || "Unknown", avatar: r.user?.avatar || r.user?.name?.charAt(0) || "?", phone: r.user?.phone || "" },
+    pickup: { address: r.pickup_location?.address || r.pickup?.address || "", lat: r.pickup_location?.lat || r.pickup?.lat || 0, lng: r.pickup_location?.lng || r.pickup?.lng || 0 },
+    destination: { address: r.destination?.address || "", lat: r.destination?.lat || 0, lng: r.destination?.lng || 0 },
+    status: (r.status || "offer_sent") as RideStatus,
+    fareNGN: r.fare || r.fareNGN || 0,
+    vehicleType: r.vehicleType || "sedan",
+    pointsCharged: r.pointsCharged || 0,
+    pointsReserved: r.pointsReserved || 0,
+    startedAt: r.startedAt || null,
+    completedAt: r.completedAt || null,
+    cancelledAt: r.cancelledAt || null,
+    cancelReason: r.cancelReason || null,
+    cancelledBy: r.cancelledBy || null,
+    createdAt: r.createdAt || new Date().toISOString(),
+    eta: r.eta ?? null,
+    distanceKm: r.distanceKm ?? null,
+    lastLocationUpdate: r.lastLocationUpdate || null,
+    isStuck: r.isStuck || false,
+    isStaleLocation: r.isStaleLocation || false,
+    isDisputed: r.isDisputed || r.status === "disputed",
+    disputeNote: r.disputeNote || null,
+    city: r.city || "",
+    adminNote: r.adminNote || null,
+    internalNotes: r.internalNotes || [],
+    timeline: r.timeline || [],
+  };
+}
 
-const ACTIVE_STATUSES: RideStatus[] = [
-  "offer_sent", "offer_accepted", "driver_on_way",
-  "driver_arrived", "pickup_confirmed", "ride_started",
-];
+// ─── Constants ────────────────────────────────────────────────────────────────
 
 // ─── Lagos map coordinate transform ──────────────────────────────────────────
 // Bounding box: lat 6.38–6.64, lng 3.28–3.62
@@ -289,7 +318,28 @@ export default function LiveRides() {
   const [searchParams] = useSearchParams();
   const preSelected = searchParams.get("selected");
 
-  const activeRides = mockRides.filter(r => ACTIVE_STATUSES.includes(r.status) || r.isStuck);
+  const [allRides, setAllRides] = useState<Ride[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    getRides({ status: "offer_sent,offer_accepted,driver_on_way,driver_arrived,pickup_confirmed,ride_started", limit: 100 })
+      .then(({ rides: apiRides }) => {
+        if (cancelled) return;
+        setAllRides((apiRides || []).map(mapApiRide));
+      })
+      .catch((err) => {
+        console.error("Failed to load live rides", err);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, []);
+
+  const activeRides = allRides;
 
   const initialRide = preSelected ? (activeRides.find(r => r.id === preSelected) ?? null) : null;
 
@@ -302,7 +352,6 @@ export default function LiveRides() {
   const [selected, setSelected]       = useState<Ride | null>(initialRide);
   const [detailOpen, setDetailOpen]   = useState(!!initialRide);
   const [zoom, setZoom]               = useState(1);
-  const [refreshing, setRefreshing]   = useState(false);
   const [showFilters, setShowFilters] = useState(false);
 
   const filtered = useMemo(() => activeRides.filter(r => {
@@ -328,7 +377,14 @@ export default function LiveRides() {
 
   const handleRefresh = () => {
     setRefreshing(true);
-    setTimeout(() => setRefreshing(false), 1200);
+    getRides({ status: "offer_sent,offer_accepted,driver_on_way,driver_arrived,pickup_confirmed,ride_started", limit: 100 })
+      .then(({ rides: apiRides }) => {
+        setAllRides((apiRides || []).map(mapApiRide));
+      })
+      .catch((err) => {
+        console.error("Failed to refresh live rides", err);
+      })
+      .finally(() => setRefreshing(false));
   };
 
   const stuckCount = activeRides.filter(r => r.isStuck).length;
@@ -512,7 +568,12 @@ export default function LiveRides() {
             )}
           </div>
           <div className="flex-1 overflow-y-auto">
-            {filtered.length === 0 ? (
+            {loading ? (
+              <div className="flex items-center justify-center py-16">
+                <div className="w-5 h-5 border-2 border-[#BE1B2C] border-t-transparent rounded-full animate-spin" />
+                <span className="ml-3 text-sm text-slate-400">Loading rides…</span>
+              </div>
+            ) : filtered.length === 0 ? (
               <div className="flex flex-col items-center gap-2 py-16 px-6 text-center">
                 <Navigation size={24} className="text-slate-300" />
                 <p className="text-sm font-medium text-slate-500">No active rides</p>

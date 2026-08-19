@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   AlertTriangle, Search, UserPlus, CheckCircle2, XCircle,
@@ -8,8 +8,9 @@ import {
   Card, Button, SectionHeader, Drawer, StatRow,
   Modal, Toast, EmptyState, Select
 } from "../components/ui";
+import { getAlerts } from "../api";
 import {
-  mockAlertsList, ALERT_TYPE_META,
+  ALERT_TYPE_META,
   type Alert, type AlertStatus, type AlertSeverity, type AlertType
 } from "../data/mockAlerts";
 
@@ -255,7 +256,7 @@ function AlertDetail({ alert, onAcknowledge, onAssign, onResolve }: {
 type TabId = "all" | "critical" | "warning" | "acknowledged" | "resolved";
 
 export default function Alerts() {
-  const [alerts, setAlerts] = useState<Alert[]>(mockAlertsList);
+  const [alerts, setAlerts] = useState<Alert[]>([]);
   const [tab, setTab] = useState<TabId>("all");
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState<AlertType | "all">("all");
@@ -266,6 +267,22 @@ export default function Alerts() {
   const [loading, setLoading] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const [expandedRow, setExpandedRow] = useState<string | null>(null);
+  const [_fetching, setFetching] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await getAlerts({ limit: 100 });
+        if (!cancelled) setAlerts(res.alerts ?? []);
+      } catch (err) {
+        console.error("Failed to load alerts", err);
+      } finally {
+        if (!cancelled) setFetching(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
 
   const counts = useMemo(() => ({
     all: alerts.length,

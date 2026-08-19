@@ -1,8 +1,9 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   Card, Button, SectionHeader, Th, Td, Tr, Avatar, Badge, Modal, Toast, StatRow
 } from "../components/ui";
 import { ShieldCheck, UserPlus, Mail, MoreHorizontal, Check, X } from "lucide-react";
+import { getTeam, getRolesCatalog } from "../api";
 
 interface TeamMember {
   id: string;
@@ -15,22 +16,23 @@ interface TeamMember {
   addedAt: string;
 }
 
-const ROLE_CONFIG: Record<TeamMember["role"], { label: string; color: string; bg: string; border: string }> = {
+const ROLE_CONFIG: Record<string, { label: string; color: string; bg: string; border: string }> = {
   owner:   { label: "Owner",   color: "text-violet-700", bg: "bg-violet-50",  border: "border-violet-200" },
   admin:   { label: "Admin",   color: "text-violet-700",   bg: "bg-violet-50",    border: "border-violet-200"   },
   support: { label: "Support", color: "text-amber-700",  bg: "bg-amber-50",   border: "border-amber-200"  },
   analyst: { label: "Analyst", color: "text-slate-600",  bg: "bg-slate-100",  border: "border-slate-200"  },
 };
 
-const mockTeam: TeamMember[] = [
-  { id: "USR-001", name: "Sarah Chen",      avatar: "SC", email: "sarah.chen@drewel.ops",    role: "owner",   status: "active",   lastActive: "2024-07-14T07:41:00Z", addedAt: "2023-01-15T00:00:00Z" },
-  { id: "USR-002", name: "Adewale Bello",   avatar: "AB", email: "a.bello@drewel.ops",       role: "admin",   status: "active",   lastActive: "2024-07-14T07:10:00Z", addedAt: "2023-03-22T00:00:00Z" },
-  { id: "USR-003", name: "Priya Nair",      avatar: "PN", email: "p.nair@drewel.ops",        role: "admin",   status: "active",   lastActive: "2024-07-13T18:22:00Z", addedAt: "2023-06-08T00:00:00Z" },
-  { id: "USR-004", name: "James Okafor",    avatar: "JO", email: "j.okafor@drewel.ops",      role: "support", status: "active",   lastActive: "2024-07-14T06:50:00Z", addedAt: "2023-09-01T00:00:00Z" },
-  { id: "USR-005", name: "Fatima Aliyu",    avatar: "FA", email: "f.aliyu@drewel.ops",       role: "support", status: "active",   lastActive: "2024-07-12T14:30:00Z", addedAt: "2024-01-12T00:00:00Z" },
-  { id: "USR-006", name: "Chukwudi Eze",    avatar: "CE", email: "c.eze@drewel.ops",         role: "analyst", status: "active",   lastActive: "2024-07-11T09:15:00Z", addedAt: "2024-02-28T00:00:00Z" },
-  { id: "USR-007", name: "Ngozi Adeyemi",   avatar: "NA", email: "n.adeyemi@drewel.ops",     role: "analyst", status: "inactive", lastActive: "2024-06-28T11:00:00Z", addedAt: "2024-04-05T00:00:00Z" },
-];
+interface TeamMember {
+  id: string;
+  name: string;
+  avatar: string;
+  email: string;
+  role: "owner" | "admin" | "support" | "analyst";
+  status: "active" | "inactive";
+  lastActive: string;
+  addedAt: string;
+}
 
 const PERMISSIONS: { label: string; owner: boolean; admin: boolean; support: boolean; analyst: boolean }[] = [
   { label: "View Dashboard & KPIs",         owner: true,  admin: true,  support: true,  analyst: true  },
@@ -58,6 +60,23 @@ export default function TeamRoles() {
   const [loading, setLoading] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<"members" | "permissions">("members");
+  const [team, setTeam] = useState<TeamMember[]>([]);
+  const [_fetching, setFetching] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await getTeam({ limit: 50 });
+        if (!cancelled) setTeam(res.admins ?? []);
+      } catch (err) {
+        console.error("Failed to load team", err);
+      } finally {
+        if (!cancelled) setFetching(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
 
   const handleInvite = () => {
     if (!inviteEmail.trim()) return;
@@ -99,7 +118,7 @@ export default function TeamRoles() {
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             {(["owner", "admin", "support", "analyst"] as TeamMember["role"][]).map(role => {
               const cfg = ROLE_CONFIG[role];
-              const count = mockTeam.filter(m => m.role === role).length;
+              const count = team.filter(m => m.role === role).length;
               return (
                 <Card key={role} className="p-4">
                   <div className="flex items-center gap-2.5 mb-2">
@@ -128,7 +147,7 @@ export default function TeamRoles() {
                   </tr>
                 </thead>
                 <tbody>
-                  {mockTeam.map(member => {
+                  {team.map(member => {
                     const cfg = ROLE_CONFIG[member.role];
                     return (
                       <Tr key={member.id}>

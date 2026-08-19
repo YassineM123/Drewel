@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import {
   ArrowLeft, Clock, FileText, CheckCircle2, XCircle, AlertTriangle,
@@ -7,7 +7,42 @@ import {
 import {
   Badge, Avatar, Button, Card, StatRow, Stepper, ConfirmDialog, Modal, Toast, SlaBadge
 } from "../components/ui";
-import { mockVerificationRequests, mockAuditLog } from "../data/mock";
+import { getRequestDetails, approveRequest, rejectProfileRequest } from "../api";
+import { mockAuditLog } from "../data/mock";
+
+interface VerificationRequest {
+  id: string;
+  type: string;
+  driver: { name: string; avatar: string; id: string };
+  submittedAt: string;
+  approval1: { status: string; admin: string | null; at: string | null };
+  approval2: { status: string; admin: string | null; at: string | null };
+  status: string;
+  responsible: string;
+  slaHours: number;
+  slaBreached: boolean;
+  documents: string[];
+}
+
+function mapApiRequest(r: any): VerificationRequest {
+  return {
+    id: r._id || r.id || "",
+    type: r.type || r.requestType || "New Driver",
+    driver: {
+      name: r.driver?.name || "Unknown",
+      avatar: r.driver?.avatar || r.driver?.name?.charAt(0) || "?",
+      id: r.driver?._id || r.driver?.id || "",
+    },
+    submittedAt: r.createdAt || r.submittedAt || new Date().toISOString(),
+    approval1: r.approval1 || { status: "pending", admin: null, at: null },
+    approval2: r.approval2 || { status: "not_submitted", admin: null, at: null },
+    status: r.status || "pending",
+    responsible: r.responsible || "Unassigned",
+    slaHours: r.slaHours || 0,
+    slaBreached: r.slaBreached || false,
+    documents: r.documents || [],
+  };
+}
 
 // ─── Enhanced document types ──────────────────────────────────────────────────
 
@@ -239,42 +274,94 @@ function formatTs(iso: string) {
 export default function RequestDetails() {
   const navigate = useNavigate();
   const { id } = useParams();
-  const req = mockVerificationRequests.find(r => r.id === id) ?? mockVerificationRequests[0];
+
+  const [req, setReq] = useState<VerificationRequest | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!id) return;
+    let cancelled = false;
+    setLoading(true);
+    getRequestDetails(id)
+      .then((data) => {
+        if (cancelled) return;
+        setReq(mapApiRequest(data));
+      })
+      .catch((err) => {
+        console.error("Failed to load request details", err);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, [id]);
 
   const [approveOpen, setApproveOpen] = useState(false);
   const [rejectOpen, setRejectOpen] = useState(false);
   const [rejectReason, setRejectReason] = useState("");
-  const [loading, setLoading] = useState(false);
+  const [loadingAction, setLoadingAction] = useState(false);
   const [toast, setToast] = useState<{ msg: string; type: "success" | "error" } | null>(null);
   const [previewDoc, setPreviewDoc] = useState<EnhancedDoc | null>(null);
-  const [currentStatus, setCurrentStatus] = useState(req.status);
+  const [currentStatus, setCurrentStatus] = useState(req?.status || "pending");
+
+  useEffect(() => {
+    if (req) setCurrentStatus(req.status);
+  }, [req]);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <div className="w-5 h-5 border-2 border-[#BE1B2C] border-t-transparent rounded-full animate-spin" />
+        <span className="ml-3 text-sm text-slate-400">Loading request…</span>
+      </div>
+    );
+  }
+
+  if (!req) {
+    return (
+      <div className="flex flex-col items-center gap-3 py-20">
+        <AlertTriangle size={24} className="text-slate-300" />
+        <p className="text-sm text-slate-500">Request not found.</p>
+        <Button variant="secondary" size="sm" onClick={() => navigate("/verification")}>Back to Requests</Button>
+      </div>
+    );
+  }
 
   const stepperStep = currentStatus === "completed" ? 2 : currentStatus === "pending" ? 1 : 0;
   const hasMissing = mockDocuments.some(d => d.status === "missing");
   const hasExpired = mockDocuments.some(d => d.status === "expired" || (d.expiryDate && new Date(d.expiryDate) < new Date()));
   const hasDuplicates = mockDocuments.some(d => d.status === "duplicate");
-  const prevRejected = mockVerificationRequests.find(r => r.driver.id === req.driver.id && r.id !== req.id && r.status === "rejected");
 
-  const doApprove = () => {
-    setLoading(true);
-    setTimeout(() => {
-      setLoading(false);
-      setApproveOpen(false);
+  const doApprove = async () => {
+    setLoadingAction(true);
+    try {
+      await approveRequest(req.id);
       setCurrentStatus("completed");
+      setApproveOpen(false);
       setToast({ msg: "Request approved successfully. Driver has been notified.", type: "success" });
-    }, 1200);
+    } catch (err) {
+      console.error("Failed to approve request", err);
+      setToast({ msg: "Failed to approve request.", type: "error" });
+    } finally {
+      setLoadingAction(false);
+    }
   };
 
-  const doReject = () => {
+  const doReject = async () => {
     if (!rejectReason.trim()) return;
-    setLoading(true);
-    setTimeout(() => {
-      setLoading(false);
-      setRejectOpen(false);
+    setLoadingAction(true);
+    try {
+      await rejectProfileRequest(req.id, rejectReason);
       setCurrentStatus("rejected");
+      setRejectOpen(false);
       setRejectReason("");
       setToast({ msg: "Request rejected. Driver has been notified with your reason.", type: "success" });
-    }, 1200);
+    } catch (err) {
+      console.error("Failed to reject request", err);
+      setToast({ msg: "Failed to reject request.", type: "error" });
+    } finally {
+      setLoadingAction(false);
+    }
   };
 
   return (
@@ -313,18 +400,6 @@ export default function RequestDetails() {
 
       {/* Alerts strip */}
       <div className="flex flex-col gap-2">
-        {prevRejected && (
-          <div className="flex items-start gap-3 bg-amber-50 border border-amber-200 rounded-[12px] p-4">
-            <AlertTriangle size={16} className="text-amber-600 shrink-0 mt-0.5" />
-            <div>
-              <p className="text-sm font-semibold text-amber-800">Previous application rejected</p>
-              <p className="text-xs text-amber-700 mt-0.5">
-                {req.driver.name} had a previous request ({prevRejected.id}) rejected on {formatTs(prevRejected.approval1.at ?? prevRejected.submittedAt)}.
-                Review the rejection reason in the audit history below.
-              </p>
-            </div>
-          </div>
-        )}
         {hasMissing && (
           <div className="flex items-center gap-3 bg-red-50 border border-red-200 rounded-[12px] px-4 py-3">
             <AlertTriangle size={15} className="text-red-600 shrink-0" />
@@ -528,7 +603,7 @@ export default function RequestDetails() {
       {/* Approve confirm */}
       <ConfirmDialog
         open={approveOpen} onClose={() => setApproveOpen(false)} onConfirm={doApprove}
-        title="Approve Verification Request" loading={loading} confirmLabel="Approve Request" variant="primary"
+        title="Approve Verification Request" loading={loadingAction} confirmLabel="Approve Request" variant="primary"
         message={
           <div>
             <p>You are approving <strong>{req.id}</strong> for <strong>{req.driver.name}</strong>.</p>
@@ -551,7 +626,7 @@ export default function RequestDetails() {
           </div>
           <div className="flex justify-end gap-3">
             <Button variant="secondary" onClick={() => setRejectOpen(false)}>Cancel</Button>
-            <Button variant="danger" onClick={doReject} disabled={!rejectReason.trim()} loading={loading}>Reject Request</Button>
+            <Button variant="danger" onClick={doReject} disabled={!rejectReason.trim()} loading={loadingAction}>Reject Request</Button>
           </div>
         </div>
       </Modal>

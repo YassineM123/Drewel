@@ -1,26 +1,44 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Search, PhoneCall, PhoneMissed, Flag, ShieldCheck, AlertTriangle } from "lucide-react";
 import {
   Avatar, Button, Card, Drawer, StatRow, SectionHeader, EmptyState,
   Th, Td, Tr, Pagination, AlertBanner, Select
 } from "../components/ui";
-import { mockCalls } from "../data/mock";
+import { getSecureCalls } from "../api";
 
 export default function SecureCalls() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [reportedOnly, setReportedOnly] = useState(false);
-  const [selectedCall, setSelectedCall] = useState<typeof mockCalls[0] | null>(null);
+  const [selectedCall, setSelectedCall] = useState<any | null>(null);
   const [page, setPage] = useState(1);
+  const [calls, setCalls] = useState<any[]>([]);
+  const [_fetching, setFetching] = useState(true);
 
-  const filtered = mockCalls.filter(c => {
-    const matchSearch = !search || c.id.toLowerCase().includes(search.toLowerCase()) || c.rideId.toLowerCase().includes(search.toLowerCase());
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      setFetching(true);
+      try {
+        const res = await getSecureCalls({ page, limit: 50 });
+        if (!cancelled) setCalls(res.events ?? []);
+      } catch (err) {
+        console.error("Failed to load secure calls", err);
+      } finally {
+        if (!cancelled) setFetching(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [page]);
+
+  const filtered = calls.filter(c => {
+    const matchSearch = !search || (c.id ?? "").toLowerCase().includes(search.toLowerCase()) || (c.rideId ?? "").toLowerCase().includes(search.toLowerCase());
     const matchStatus = statusFilter === "all" || c.status === statusFilter;
     const matchReported = !reportedOnly || c.reported;
     return matchSearch && matchStatus && matchReported;
   });
 
-  const reportedCount = mockCalls.filter(c => c.reported).length;
+  const reportedCount = calls.filter(c => c.reported).length;
   const perPage = 8;
   const paginated = filtered.slice((page - 1) * perPage, page * perPage);
 
@@ -61,9 +79,9 @@ export default function SecureCalls() {
       {/* KPI strip */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         {[
-          { label: "Total Calls", value: mockCalls.length, color: "text-slate-800" },
-          { label: "Completed", value: mockCalls.filter(c => c.status === "completed").length, color: "text-green-700" },
-          { label: "Failed", value: mockCalls.filter(c => c.status === "failed").length, color: "text-slate-600" },
+          { label: "Total Calls", value: calls.length, color: "text-slate-800" },
+          { label: "Completed", value: calls.filter(c => c.status === "completed").length, color: "text-green-700" },
+          { label: "Failed", value: calls.filter(c => c.status === "failed").length, color: "text-slate-600" },
           { label: "Reported", value: reportedCount, color: reportedCount > 0 ? "text-red-700" : "text-slate-600", urgent: reportedCount > 0 },
         ].map(k => (
           <Card key={k.label} className={`p-4 ${k.urgent ? "border-red-200 bg-red-50/30" : ""}`}>
@@ -136,14 +154,14 @@ export default function SecureCalls() {
                   </Td>
                   <Td>
                     <div>
-                      <p className="text-sm font-medium text-slate-700">{call.caller.name}</p>
-                      <p className="text-xs text-slate-400">{call.caller.type}</p>
+                      <p className="text-sm font-medium text-slate-700">{call.caller?.name ?? call.callerName ?? "—"}</p>
+                      <p className="text-xs text-slate-400">{call.caller?.type ?? call.callerType ?? ""}</p>
                     </div>
                   </Td>
                   <Td>
                     <div>
-                      <p className="text-sm font-medium text-slate-700">{call.receiver.name}</p>
-                      <p className="text-xs text-slate-400">{call.receiver.type}</p>
+                      <p className="text-sm font-medium text-slate-700">{call.receiver?.name ?? call.receiverName ?? "—"}</p>
+                      <p className="text-xs text-slate-400">{call.receiver?.type ?? call.receiverType ?? ""}</p>
                     </div>
                   </Td>
                   <Td><span className="text-xs text-slate-600">{formatTs(call.startTime)}</span></Td>
@@ -206,9 +224,9 @@ export default function SecureCalls() {
             <Card className="p-4">
               <h4 className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">Participants</h4>
               <div className="flex flex-col gap-3">
-                {[selectedCall.caller, selectedCall.receiver].map((p, i) => (
+                {[{ name: selectedCall.caller?.name ?? selectedCall.callerName ?? "—", type: selectedCall.caller?.type ?? selectedCall.callerType ?? "" }, { name: selectedCall.receiver?.name ?? selectedCall.receiverName ?? "—", type: selectedCall.receiver?.type ?? selectedCall.receiverType ?? "" }].map((p, i) => (
                   <div key={i} className="flex items-center gap-3 p-3 bg-slate-50 rounded-[8px]">
-                    <Avatar initials={p.name.split(" ").map(n => n[0]).join("")} size="sm" />
+                    <Avatar initials={p.name.split(" ").map((n: string) => n[0]).join("")} size="sm" />
                     <div>
                       <p className="text-sm font-medium text-slate-800">{p.name}</p>
                       <p className="text-xs text-slate-400 capitalize">{i === 0 ? "Caller" : "Receiver"} · {p.type}</p>

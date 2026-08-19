@@ -8,7 +8,7 @@ import {
   Activity, UserCog, AlertTriangle, ClipboardList, CheckCircle2,
   XCircle, BookOpen, Wallet, Package, BarChart2,
 } from "lucide-react";
-import { mockAdminUser } from "../data/mock";
+import { useAuth } from "../context/AuthContext";
 
 interface NavItem {
   to: string;
@@ -103,6 +103,7 @@ interface SidebarProps {
 
 export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
   const location = useLocation();
+  const { admin, logout } = useAuth();
   const [expandedGroups, setExpandedGroups] = useState<string[]>(
     ["Operations", "People", "Requests", "Driver Points", "Governance"]
   );
@@ -230,7 +231,7 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
         {/* Logout */}
         <div className="mt-auto pt-4 border-t border-white/[0.07]">
           <div className={`relative ${collapsed ? "flex justify-center group/tt" : ""}`}>
-            <button className={`flex items-center w-full rounded-[8px] transition-all text-white/35 hover:bg-red-900/30 hover:text-red-400
+            <button onClick={logout} className={`flex items-center w-full rounded-[8px] transition-all text-white/35 hover:bg-red-900/30 hover:text-red-400
               ${collapsed ? "justify-center h-10 w-10" : "gap-2.5 px-3 py-2.5"}`}>
               <LogOut size={16} />
               {!collapsed && <span className="text-[13px] font-medium">Sign Out</span>}
@@ -251,13 +252,13 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
           <div className="flex items-center gap-3">
             <div className="relative shrink-0">
               <div className="w-8 h-8 rounded-full bg-[#BE1B2C]/80 flex items-center justify-center text-xs font-bold text-white shadow">
-                {mockAdminUser.avatar}
+                {admin?.name?.split(" ").map((n: string) => n[0]).join("").toUpperCase().slice(0, 2) || "AD"}
               </div>
               <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-green-400 border-2 border-[#130406]" />
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-[13px] font-semibold text-white truncate leading-tight">{mockAdminUser.name}</p>
-              <p className="text-[11px] text-white/35 truncate mt-0.5">Owner</p>
+              <p className="text-[13px] font-semibold text-white truncate leading-tight">{admin?.name || "Admin"}</p>
+              <p className="text-[11px] text-white/35 truncate mt-0.5 capitalize">{admin?.role || "Admin"}</p>
             </div>
             <span title="Owner access"><ShieldCheck size={14} className="text-amber-400 shrink-0" /></span>
           </div>

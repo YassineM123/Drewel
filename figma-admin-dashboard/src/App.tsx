@@ -1,4 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { AuthProvider } from "./context/AuthContext";
+import { SocketProvider } from "./context/SocketContext";
+import ProtectedRoute from "./components/ProtectedRoute";
 import Layout from "./components/Layout";
 import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
@@ -28,58 +31,56 @@ import PointPacks from "./pages/points/PointPacks";
 export default function App() {
   return (
     <BrowserRouter>
-      <Routes>
-        <Route path="/login" element={<Login />} />
-        <Route element={<Layout />}>
-          <Route path="/" element={<Navigate to="/dashboard" replace />} />
-          <Route path="/dashboard" element={<Dashboard />} />
+      <AuthProvider>
+        <SocketProvider>
+          <Routes>
+            <Route path="/login" element={<Login />} />
+            <Route element={<ProtectedRoute />}>
+              <Route element={<Layout />}>
+                <Route path="/" element={<Navigate to="/dashboard" replace />} />
+                <Route path="/dashboard" element={<Dashboard />} />
 
-          {/* Reservations (Ride Operations) */}
-          <Route path="/rides/live"      element={<LiveRides />} />
-          <Route path="/rides/all"       element={<AllRides defaultTab="all" />} />
-          <Route path="/rides/completed" element={<AllRides defaultTab="completed" />} />
-          <Route path="/rides/cancelled" element={<AllRides defaultTab="cancelled" />} />
-          <Route path="/rides/disputes"  element={<Disputes />} />
-          <Route path="/rides/stuck"     element={<StuckRides />} />
+                <Route path="/rides/live"      element={<LiveRides />} />
+                <Route path="/rides/all"       element={<AllRides defaultTab="all" />} />
+                <Route path="/rides/completed" element={<AllRides defaultTab="completed" />} />
+                <Route path="/rides/cancelled" element={<AllRides defaultTab="cancelled" />} />
+                <Route path="/rides/disputes"  element={<Disputes />} />
+                <Route path="/rides/stuck"     element={<StuckRides />} />
 
-          {/* Online Drivers */}
-          <Route path="/online-drivers" element={<OnlineDrivers />} />
+                <Route path="/online-drivers" element={<OnlineDrivers />} />
 
-          {/* Requests / Verification */}
-          <Route path="/verification"          element={<VerificationRequests />} />
-          <Route path="/verification/pending"  element={<VerificationRequests defaultStatus="pending" />} />
-          <Route path="/verification/approved" element={<VerificationRequests defaultStatus="approved" />} />
-          <Route path="/verification/rejected" element={<VerificationRequests defaultStatus="rejected" />} />
-          <Route path="/verification/:id"      element={<RequestDetails />} />
+                <Route path="/verification"          element={<VerificationRequests />} />
+                <Route path="/verification/pending"  element={<VerificationRequests defaultStatus="pending" />} />
+                <Route path="/verification/approved" element={<VerificationRequests defaultStatus="approved" />} />
+                <Route path="/verification/rejected" element={<VerificationRequests defaultStatus="rejected" />} />
+                <Route path="/verification/:id"      element={<RequestDetails />} />
 
-          {/* People */}
-          <Route path="/drivers" element={<Drivers />} />
-          <Route path="/users"   element={<Users />} />
+                <Route path="/drivers" element={<Drivers />} />
+                <Route path="/users"   element={<Users />} />
 
-          {/* Driver Points */}
-          <Route path="/points/overview"     element={<PointsOverview />} />
-          <Route path="/points/balances"     element={<DriverPoints />} />
-          <Route path="/points/requests"     element={<PointRequests />} />
-          <Route path="/points/transactions" element={<PointsTransactions />} />
-          <Route path="/points/packs"        element={<PointPacks />} />
+                <Route path="/points/overview"     element={<PointsOverview />} />
+                <Route path="/points/balances"     element={<DriverPoints />} />
+                <Route path="/points/requests"     element={<PointRequests />} />
+                <Route path="/points/transactions" element={<PointsTransactions />} />
+                <Route path="/points/packs"        element={<PointPacks />} />
 
-          {/* Communication */}
-          <Route path="/chat"         element={<Chat />} />
-          <Route path="/secure-calls" element={<SecureCalls />} />
+                <Route path="/chat"         element={<Chat />} />
+                <Route path="/secure-calls" element={<SecureCalls />} />
 
-          {/* Content */}
-          <Route path="/banners" element={<SponsorBanners />} />
+                <Route path="/banners" element={<SponsorBanners />} />
 
-          {/* Governance */}
-          <Route path="/alerts"        element={<Alerts />} />
-          <Route path="/audit-logs"    element={<AuditLogs />} />
-          <Route path="/team-roles"    element={<TeamRoles />} />
-          <Route path="/system-health" element={<SystemHealth />} />
-          <Route path="/settings"      element={<Settings />} />
+                <Route path="/alerts"        element={<Alerts />} />
+                <Route path="/audit-logs"    element={<AuditLogs />} />
+                <Route path="/team-roles"    element={<TeamRoles />} />
+                <Route path="/system-health" element={<SystemHealth />} />
+                <Route path="/settings"      element={<Settings />} />
 
-          <Route path="*" element={<Navigate to="/dashboard" replace />} />
-        </Route>
-      </Routes>
+                <Route path="*" element={<Navigate to="/dashboard" replace />} />
+              </Route>
+            </Route>
+          </Routes>
+        </SocketProvider>
+      </AuthProvider>
     </BrowserRouter>
   );
 }

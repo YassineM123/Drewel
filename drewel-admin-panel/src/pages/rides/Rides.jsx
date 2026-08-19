@@ -1,56 +1,55 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Link } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import PropTypes from "prop-types";
+import { Search, Download, RefreshCw } from "lucide-react";
 import { getRides, ridesErrorMessage } from "../../api/domains/rides";
 import { useSocket } from "../../context/SocketContext";
-import "../../assets/css/admin-rides.css";
+import {
+  Button, Card, Select, Th, Td, Tr, Pagination,
+  EmptyState, ErrorState, LoadingState, SectionHeader, TabBar,
+} from "../../components/ui";
 
 const FILTERS = [
-  ["live", "Live"],
-  ["requested", "Requested"],
-  ["searching", "Searching"],
-  ["assigned", "Assigned"],
-  ["active", "Active"],
-  ["completed", "Completed"],
-  ["cancelled", "Cancelled"],
-  ["disputed", "Disputes"],
-  ["stuck", "Stuck"],
-  ["all", "All reservations"],
+  { id: "live", label: "Live" },
+  { id: "requested", label: "Requested" },
+  { id: "searching", label: "Searching" },
+  { id: "assigned", label: "Assigned" },
+  { id: "active", label: "Active" },
+  { id: "completed", label: "Completed" },
+  { id: "cancelled", label: "Cancelled" },
+  { id: "disputed", label: "Disputes" },
+  { id: "stuck", label: "Stuck" },
+  { id: "all", label: "All reservations" },
 ];
 
 const ACTIVE = new Set([
-  "confirmed",
-  "driver_on_the_way",
-  "driver_arrived",
-  "pickup_confirmed",
-  "in_progress",
-  "accepted",
-  "driver_arriving",
-  "disputed",
+  "confirmed", "driver_on_the_way", "driver_arrived", "pickup_confirmed",
+  "in_progress", "accepted", "driver_arriving", "disputed",
 ]);
 
 const STALE_LOCATION_SECONDS = 120;
 
 const date = (value) => {
   const parsed = new Date(value);
-  return value && !Number.isNaN(parsed.getTime()) ? parsed.toLocaleString() : "-";
+  return value && !Number.isNaN(parsed.getTime()) ? parsed.toLocaleString() : "—";
 };
 
 const label = (value) => String(value || "unknown").replaceAll("_", " ");
 const person = (value) => value?.fullName || value?.displayName || value?.name || "Drewel participant";
-const place = (value) => value?.address || value?.label || value?.name || "-";
+const place = (value) => value?.address || value?.label || value?.name || "—";
 const csv = (value) => `"${String(value ?? "").replaceAll('"', '""')}"`;
 
-const badge = (status) => {
-  if (ACTIVE.has(status)) return "ride-status--active";
-  if (status === "completed") return "ride-status--success";
-  if (String(status).startsWith("cancelled")) return "ride-status--danger";
-  if (status === "disputed") return "ride-status--warning";
-  return "";
+const statusStyle = (status) => {
+  if (ACTIVE.has(status)) return "bg-sky-50 text-sky-700 border-sky-200";
+  if (status === "completed") return "bg-green-50 text-green-700 border-green-200";
+  if (String(status).startsWith("cancelled")) return "bg-red-50 text-red-700 border-red-200";
+  if (status === "disputed") return "bg-amber-50 text-amber-700 border-amber-200";
+  if (status === "stuck") return "bg-red-50 text-red-700 border-red-200";
+  return "bg-slate-100 text-slate-600 border-slate-200";
 };
 
 const distance = (meters) => {
-  if (!Number.isFinite(meters) || meters < 0) return "-";
+  if (!Number.isFinite(meters) || meters < 0) return "—";
   if (meters < 1000) return `${Math.round(meters)} m`;
   return `${(meters / 1000).toFixed(1)} km`;
 };
@@ -63,39 +62,16 @@ const locationWarning = (ride) => {
 };
 
 const viewCopy = {
-  live: {
-    eyebrow: "Operations",
-    title: "Live Reservations",
-    description: "Monitor active ride states, routes, remaining distance, GPS freshness and exceptions in real time.",
-  },
-  all: {
-    eyebrow: "Operations",
-    title: "All Reservations",
-    description: "Search and export backend-authoritative Drewel ride records.",
-  },
-  completed: {
-    eyebrow: "Operations",
-    title: "Completed Reservations",
-    description: "Review finished reservations and final audit evidence.",
-  },
-  cancelled: {
-    eyebrow: "Operations",
-    title: "Cancelled Reservations",
-    description: "Inspect cancellation reasons, review state and point evidence.",
-  },
-  disputed: {
-    eyebrow: "Risk",
-    title: "Disputes",
-    description: "Review disputed reservations using backend ride state and audit records.",
-  },
-  stuck: {
-    eyebrow: "Risk",
-    title: "Stuck Rides",
-    description: "Active rides whose backend state has not progressed for more than one hour.",
-  },
+  live: { title: "Live Reservations", description: "Monitor active ride states, routes, remaining distance, GPS freshness and exceptions in real time." },
+  all: { title: "All Reservations", description: "Search and export backend-authoritative Drewel ride records." },
+  completed: { title: "Completed Reservations", description: "Review finished reservations and final audit evidence." },
+  cancelled: { title: "Cancelled Reservations", description: "Inspect cancellation reasons, review state and point evidence." },
+  disputed: { title: "Disputes", description: "Review disputed reservations using backend ride state and audit records." },
+  stuck: { title: "Stuck Rides", description: "Active rides whose backend state has not progressed for more than one hour." },
 };
 
 const Rides = ({ initialFilter = "active", lockedFilter = false }) => {
+  const navigate = useNavigate();
   const [filter, setFilter] = useState(initialFilter);
   const [search, setSearch] = useState("");
   const [driver, setDriver] = useState("");
@@ -133,39 +109,23 @@ const Rides = ({ initialFilter = "active", lockedFilter = false }) => {
             vehicleType: vehicleType.trim() || undefined,
           },
           range: from || to ? { from: from || undefined, to: to || undefined } : undefined,
-          sort,
-          dir,
-          page,
-          limit,
+          sort, dir, page, limit,
         },
         signal,
       );
       const rides = Array.isArray(payload?.rides) ? payload.rides : [];
       setState({
-        loading: false,
-        error: "",
-        rides,
-        pagination: payload?.pagination || {
-          page,
-          limit,
-          total: rides.length,
-          totalPages: 1,
-        },
+        loading: false, error: "", rides,
+        pagination: payload?.pagination || { page, limit, total: rides.length, totalPages: 1 },
       });
     } catch (error) {
       if (error?.code !== "ERR_CANCELED") {
-        setState((current) => ({
-          ...current,
-          loading: false,
-          error: ridesErrorMessage(error, "Unable to load reservations."),
-        }));
+        setState((current) => ({ ...current, loading: false, error: ridesErrorMessage(error, "Unable to load reservations.") }));
       }
     }
   }, [customer, debouncedSearch, dir, driver, filter, from, limit, page, sort, to, vehicleType, city]);
 
-  useEffect(() => {
-    loadRef.current = load;
-  }, [load]);
+  useEffect(() => { loadRef.current = load; }, [load]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -182,12 +142,8 @@ const Rides = ({ initialFilter = "active", lockedFilter = false }) => {
     const refresh = () => loadRef.current?.();
     const refreshSoon = () => window.setTimeout(refresh, 250);
     const events = [
-      "ride:status_changed",
-      "ride:participants_unlocked",
-      "ride:points_refunded",
-      "ride:internal_note_added",
-      "ride:eta_updated",
-      "driver:location",
+      "ride:status_changed", "ride:participants_unlocked", "ride:points_refunded",
+      "ride:internal_note_added", "ride:eta_updated", "driver:location",
     ];
     socket.emit("driver-map:track", { on: true });
     for (const event of events) socket.on(event, refreshSoon);
@@ -197,17 +153,11 @@ const Rides = ({ initialFilter = "active", lockedFilter = false }) => {
     };
   }, [live, socket, isConnected]);
 
-  const selectFilter = (value) => {
-    setFilter(value);
-    setPage(1);
-  };
+  const selectFilter = (value) => { setFilter(value); setPage(1); };
 
   const sortBy = (field) => {
     setSort((current) => {
-      if (current === field) {
-        setDir((value) => (value === "asc" ? "desc" : "asc"));
-        return current;
-      }
+      if (current === field) { setDir((value) => (value === "asc" ? "desc" : "asc")); return current; }
       setDir("desc");
       return field;
     });
@@ -216,37 +166,14 @@ const Rides = ({ initialFilter = "active", lockedFilter = false }) => {
 
   const exportCsv = () => {
     const rows = [
-      [
-        "Reference",
-        "Status",
-        "Customer",
-        "Driver",
-        "Vehicle Type",
-        "Pickup",
-        "Destination",
-        "Updated",
-        "ETA Minutes",
-        "Remaining Distance",
-        "Last GPS",
-      ],
+      ["Reference", "Status", "Customer", "Driver", "Vehicle Type", "Pickup", "Destination", "Updated", "ETA Minutes", "Remaining Distance", "Last GPS"],
       ...state.rides.map((ride) => [
-        ride.reference || ride.id || ride._id,
-        label(ride.status),
-        person(ride.user || ride.passenger),
-        person(ride.driver),
-        ride.vehicleType || ride.driver?.vehicleType || "",
-        place(ride.pickup),
-        place(ride.destination),
-        date(ride.updatedAt),
-        ride.etaMinutes ?? "",
-        distance(ride.distanceMeters),
-        date(ride.lastGpsAt),
+        ride.reference || ride.id || ride._id, label(ride.status), person(ride.user || ride.passenger), person(ride.driver),
+        ride.vehicleType || ride.driver?.vehicleType || "", place(ride.pickup), place(ride.destination),
+        date(ride.updatedAt), ride.etaMinutes ?? "", distance(ride.distanceMeters), date(ride.lastGpsAt),
       ]),
     ];
-    const blob = new Blob(
-      [rows.map((row) => row.map(csv).join(",")).join("\r\n")],
-      { type: "text/csv;charset=utf-8" },
-    );
+    const blob = new Blob([rows.map((row) => row.map(csv).join(",")).join("\r\n")], { type: "text/csv;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement("a");
     anchor.href = url;
@@ -259,272 +186,132 @@ const Rides = ({ initialFilter = "active", lockedFilter = false }) => {
 
   const pagination = state.pagination;
   const totalPages = Math.max(1, Number(pagination.totalPages || 1));
-  const copy = viewCopy[initialFilter] || {
-    eyebrow: "Operations",
-    title: "Reservations",
-    description: "Monitor the live booking lifecycle, exceptions, point activity and audit evidence.",
-  };
+  const copy = viewCopy[initialFilter] || { title: "Reservations", description: "Monitor the live booking lifecycle, exceptions, point activity and audit evidence." };
 
   return (
-    <main className="app-content admin-rides">
-      <header className="app-title tile p-3 ride-heading">
-        <div>
-          <span className="points-eyebrow">{copy.eyebrow}</span>
-          <h1>{copy.title}</h1>
-          <p>{copy.description}</p>
-        </div>
-        <div className="ride-heading__actions">
-          {live && (
-            <span className={`ride-live-indicator${isConnected ? " ride-live-indicator--on" : ""}`}>
-              {isConnected ? "Live updates connected" : "Live updates reconnecting…"}
-            </span>
-          )}
-          <button type="button" className="btn btn-light" onClick={() => load()} disabled={state.loading}>
-            Refresh
-          </button>
-          <button type="button" className="btn btn-outline-primary" onClick={exportCsv} disabled={state.loading || state.rides.length === 0}>
-            Export CSV
-          </button>
-        </div>
-      </header>
+    <div className="flex flex-col gap-6">
+      <SectionHeader
+        title={copy.title}
+        description={copy.description}
+        actions={
+          <>
+            {live && (
+              <span className={`inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1.5 rounded-full border
+                ${isConnected ? "bg-green-50 text-green-700 border-green-200" : "bg-amber-50 text-amber-700 border-amber-200"}`}>
+                <span className={`w-1.5 h-1.5 rounded-full ${isConnected ? "bg-green-500 live-pulse" : "bg-amber-500"}`} />
+                {isConnected ? "Live updates connected" : "Live updates reconnecting…"}
+              </span>
+            )}
+            <Button variant="secondary" size="sm" icon={<RefreshCw size={14} />} onClick={() => load()} disabled={state.loading}>Refresh</Button>
+            <Button variant="secondary" size="sm" icon={<Download size={14} />} onClick={exportCsv} disabled={state.loading || state.rides.length === 0}>Export CSV</Button>
+          </>
+        }
+      />
 
       {!lockedFilter && (
-        <nav className="tile ride-tabs" aria-label="Reservation status">
-          {FILTERS.map(([value, text]) => (
-            <button
-              type="button"
-              key={value}
-              className={`ride-tab${filter === value ? " active" : ""}`}
-              aria-pressed={filter === value}
-              onClick={() => selectFilter(value)}
-            >
-              {text}
-            </button>
-          ))}
-        </nav>
+        <TabBar
+          tabs={FILTERS.map((f) => ({ id: f.id, label: f.label }))}
+          active={filter}
+          onChange={selectFilter}
+        />
       )}
 
-      <section className="tile ride-toolbar" aria-label="Reservation filters">
-        <label>
-          Search bookings
-          <input
-            type="search"
-            value={search}
-            onChange={(event) => {
-              setSearch(event.target.value);
-              setPage(1);
-            }}
-            placeholder="Reference, booking ID, driver or customer"
-          />
-        </label>
-        <label>
-          Driver
-          <input
-            type="search"
-            value={driver}
-            onChange={(event) => {
-              setDriver(event.target.value);
-              setPage(1);
-            }}
-            placeholder="Name or ID"
-          />
-        </label>
-        <label>
-          Customer
-          <input
-            type="search"
-            value={customer}
-            onChange={(event) => {
-              setCustomer(event.target.value);
-              setPage(1);
-            }}
-            placeholder="Name or ID"
-          />
-        </label>
-        <label>
-          City
-          <input
-            type="search"
-            value={city}
-            onChange={(event) => {
-              setCity(event.target.value);
-              setPage(1);
-            }}
-            placeholder="Dubai, Abu Dhabi…"
-          />
-        </label>
-        <label>
-          Vehicle type
-          <input
-            type="search"
-            value={vehicleType}
-            onChange={(event) => {
-              setVehicleType(event.target.value);
-              setPage(1);
-            }}
-            placeholder="Large Pickup"
-          />
-        </label>
-        <label>
-          From
-          <input
-            type="date"
-            value={from}
-            onChange={(event) => {
-              setFrom(event.target.value);
-              setPage(1);
-            }}
-          />
-        </label>
-        <label>
-          To
-          <input
-            type="date"
-            value={to}
-            onChange={(event) => {
-              setTo(event.target.value);
-              setPage(1);
-            }}
-          />
-        </label>
-        <label>
-          Rows per page
-          <select
-            value={limit}
-            onChange={(event) => {
-              setLimit(Number(event.target.value));
-              setPage(1);
-            }}
-          >
-            <option>10</option>
-            <option>20</option>
-            <option>50</option>
-          </select>
-        </label>
-        <label>
-          Sort by
-          <select
-            value={`${sort}:${dir}`}
-            onChange={(event) => {
-              const [nextSort, nextDir] = event.target.value.split(":");
-              setSort(nextSort);
-              setDir(nextDir);
-              setPage(1);
-            }}
-          >
-            <option value="updatedAt:desc">Updated newest</option>
-            <option value="updatedAt:asc">Updated oldest</option>
-            <option value="createdAt:desc">Created newest</option>
-            <option value="createdAt:asc">Created oldest</option>
-            <option value="status:asc">Status A-Z</option>
-            <option value="vehicleType:asc">Vehicle A-Z</option>
-          </select>
-        </label>
-      </section>
+      <Card className="p-4">
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="relative flex-1 min-w-52">
+            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+            <input value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+              placeholder="Reference, booking ID, driver or customer"
+              className="w-full h-10 bg-slate-50 border border-slate-200 rounded-[10px] pl-9 pr-4 text-sm text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-red-700/20 focus:border-red-400 transition-all" />
+          </div>
+          <input value={driver} onChange={(e) => { setDriver(e.target.value); setPage(1); }} placeholder="Driver name or ID"
+            className="h-10 w-40 bg-white border border-slate-200 rounded-[10px] px-3 text-sm text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-red-700/20 focus:border-red-400" />
+          <input value={customer} onChange={(e) => { setCustomer(e.target.value); setPage(1); }} placeholder="Customer name or ID"
+            className="h-10 w-40 bg-white border border-slate-200 rounded-[10px] px-3 text-sm text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-red-700/20 focus:border-red-400" />
+          <input value={city} onChange={(e) => { setCity(e.target.value); setPage(1); }} placeholder="Dubai, Abu Dhabi…"
+            className="h-10 w-32 bg-white border border-slate-200 rounded-[10px] px-3 text-sm text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-red-700/20 focus:border-red-400" />
+          <input value={vehicleType} onChange={(e) => { setVehicleType(e.target.value); setPage(1); }} placeholder="Vehicle type"
+            className="h-10 w-36 bg-white border border-slate-200 rounded-[10px] px-3 text-sm text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-red-700/20 focus:border-red-400" />
+          <input type="date" value={from} onChange={(e) => { setFrom(e.target.value); setPage(1); }}
+            className="h-10 bg-white border border-slate-200 rounded-[10px] px-3 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-red-700/20 focus:border-red-400" />
+          <input type="date" value={to} onChange={(e) => { setTo(e.target.value); setPage(1); }}
+            className="h-10 bg-white border border-slate-200 rounded-[10px] px-3 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-red-700/20 focus:border-red-400" />
+          <Select value={String(limit)} onChange={(v) => { setLimit(Number(v)); setPage(1); }} className="w-24"
+            options={[{ value: "10", label: "10 rows" }, { value: "20", label: "20 rows" }, { value: "50", label: "50 rows" }]} />
+          <Select value={`${sort}:${dir}`} onChange={(v) => { const [s, d] = v.split(":"); setSort(s); setDir(d); setPage(1); }} className="w-44"
+            options={[
+              { value: "updatedAt:desc", label: "Updated newest" },
+              { value: "updatedAt:asc", label: "Updated oldest" },
+              { value: "createdAt:desc", label: "Created newest" },
+              { value: "createdAt:asc", label: "Created oldest" },
+              { value: "status:asc", label: "Status A-Z" },
+              { value: "vehicleType:asc", label: "Vehicle A-Z" },
+            ]} />
+        </div>
+      </Card>
 
-      <section className="tile" aria-live="polite">
+      <Card>
         {state.loading ? (
-          <div className="ride-state">
-            <div className="loader" />
-            <span>Loading reservations...</span>
-          </div>
+          <LoadingState label="Loading reservations…" />
         ) : state.error ? (
-          <div className="ride-state" role="alert">
-            <h2>Reservations unavailable</h2>
-            <p>{state.error}</p>
-            <button type="button" className="btn btn-outline-danger" onClick={() => load()}>
-              Retry
-            </button>
-          </div>
+          <ErrorState title="Reservations unavailable" description={state.error} action={<Button variant="secondary" size="sm" onClick={() => load()}>Retry</Button>} />
         ) : state.rides.length === 0 ? (
-          <div className="ride-state">
-            <h2>No reservations found</h2>
-            <p>There are no records matching this status and search.</p>
-          </div>
+          <EmptyState title="No reservations found" description="There are no records matching this status and search." />
         ) : (
-          <div className="ride-table-wrap">
-            <table className="ride-table">
-              <caption className="sr-only">Drewel reservation records</caption>
-              <thead>
-                <tr>
-                  <th>Reservation</th>
-                  <th><button type="button" className="ride-sort-button" onClick={() => sortBy("status")}>Status</button></th>
-                  <th>Customer</th>
-                  <th>Driver</th>
-                  <th>Pickup</th>
-                  <th>Destination</th>
-                  <th><button type="button" className="ride-sort-button" onClick={() => sortBy("updatedAt")}>Updated</button></th>
-                  <th>Route / ETA</th>
-                  <th>Remaining</th>
-                  <th>GPS</th>
-                  <th>Action</th>
-                </tr>
-              </thead>
-              <tbody>
-                {state.rides.map((ride) => {
-                  const warning = live ? locationWarning(ride) : null;
-                  return (
-                    <tr key={ride.id || ride._id}>
-                      <td>
-                        <strong>{ride.reference || ride.id || ride._id}</strong>
-                      </td>
-                      <td>
-                        <span className={`ride-status ${badge(ride.status)}`}>{label(ride.status)}</span>
-                      </td>
-                      <td>{person(ride.user || ride.passenger)}</td>
-                      <td>{person(ride.driver)}</td>
-                      <td>{place(ride.pickup)}</td>
-                      <td>{place(ride.destination)}</td>
-                      <td>{date(ride.updatedAt)}</td>
-                      <td>
-                        {ride.etaMinutes != null ? `${ride.etaMinutes} min` : "-"}
-                        <br />
-                        <small>{ride.routeUpdatedAt ? `as of ${date(ride.routeUpdatedAt)}` : "No fresh route"}</small>
-                      </td>
-                      <td>{distance(ride.distanceMeters)}</td>
-                      <td>
-                        {ride.lastGpsAt ? date(ride.lastGpsAt) : "-"}
-                        {warning && <span className="ride-stale-location">{label(warning)}</span>}
-                      </td>
-                      <td>
-                        <Link className="btn btn-sm btn-outline-primary" to={`/reservations/${ride.id || ride._id}`}>
-                          View details
-                        </Link>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
-
-        {!state.loading && !state.error && state.rides.length > 0 && (
-          <nav className="ride-pagination" aria-label="Reservation pagination">
-            <span>{Number(pagination.total || state.rides.length)} reservations</span>
-            <div>
-              <button
-                type="button"
-                className="btn btn-light"
-                disabled={page <= 1}
-                onClick={() => setPage((value) => value - 1)}
-              >
-                Previous
-              </button>
-              <span>Page {page} of {totalPages}</span>
-              <button
-                type="button"
-                className="btn btn-light"
-                disabled={page >= totalPages}
-                onClick={() => setPage((value) => value + 1)}
-              >
-                Next
-              </button>
+          <>
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr>
+                    <Th>Reservation</Th>
+                    <Th><button type="button" onClick={() => sortBy("status")} className="hover:text-slate-600">Status</button></Th>
+                    <Th>Customer</Th>
+                    <Th>Driver</Th>
+                    <Th>Pickup</Th>
+                    <Th>Destination</Th>
+                    <Th><button type="button" onClick={() => sortBy("updatedAt")} className="hover:text-slate-600">Updated</button></Th>
+                    <Th>Route / ETA</Th>
+                    <Th>Remaining</Th>
+                    <Th>GPS</Th>
+                    <Th>Action</Th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {state.rides.map((ride) => {
+                    const warning = live ? locationWarning(ride) : null;
+                    return (
+                      <Tr key={ride.id || ride._id}>
+                        <Td><strong className="font-mono text-xs text-slate-700">{ride.reference || ride.id || ride._id}</strong></Td>
+                        <Td><span className={`inline-flex items-center text-xs font-semibold px-2 py-0.5 rounded-full border ${statusStyle(ride.status)}`}>{label(ride.status)}</span></Td>
+                        <Td>{person(ride.user || ride.passenger)}</Td>
+                        <Td>{person(ride.driver)}</Td>
+                        <Td className="max-w-[160px] truncate">{place(ride.pickup)}</Td>
+                        <Td className="max-w-[160px] truncate">{place(ride.destination)}</Td>
+                        <Td>{date(ride.updatedAt)}</Td>
+                        <Td>
+                          {ride.etaMinutes != null ? `${ride.etaMinutes} min` : "—"}
+                          <div className="text-[11px] text-slate-400">{ride.routeUpdatedAt ? `as of ${date(ride.routeUpdatedAt)}` : "No fresh route"}</div>
+                        </Td>
+                        <Td>{distance(ride.distanceMeters)}</Td>
+                        <Td>
+                          {ride.lastGpsAt ? date(ride.lastGpsAt) : "—"}
+                          {warning && <div className="text-[11px] text-amber-600 font-medium">{label(warning)}</div>}
+                        </Td>
+                        <Td>
+                          <Button variant="secondary" size="sm" onClick={() => navigate(`/rides/${ride.id || ride._id}`)}>View details</Button>
+                        </Td>
+                      </Tr>
+                    );
+                  })}
+                </tbody>
+              </table>
             </div>
-          </nav>
+            <Pagination page={page} total={Number(pagination.total || state.rides.length)} perPage={limit} onChange={setPage} />
+            <p className="text-xs text-slate-400 px-4 pb-3">Page {page} of {totalPages}</p>
+          </>
         )}
-      </section>
-    </main>
+      </Card>
+    </div>
   );
 };
 

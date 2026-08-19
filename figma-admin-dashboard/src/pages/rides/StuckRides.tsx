@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   AlertTriangle, CheckCircle, Clock, MapPin, Navigation,
@@ -6,7 +6,40 @@ import {
   ChevronUp, ArrowRight
 } from "lucide-react";
 import { Button, SectionHeader, Toast, Select } from "../../components/ui";
-import { mockStuckRides, type StuckRide, type StuckSeverity, type StuckReason } from "../../data/mockDisputes";
+import { getRides } from "../../api";
+import {
+  type StuckRide, type StuckSeverity, type StuckReason,
+} from "../../data/mockDisputes";
+
+function mapApiStuckRide(r: any): StuckRide {
+  return {
+    id: r._id || r.id || "",
+    rideId: r.rideId || r._id || r.id || "",
+    severity: (r.severity || "medium") as StuckSeverity,
+    reason: (r.reason || "state_timeout") as StuckReason,
+    title: r.title || `${r.status || "Unknown"} ride stuck`,
+    detail: r.detail || r.description || "",
+    recommendedAction: r.recommendedAction || "Review and resolve manually.",
+    detectedAt: r.detectedAt || r.createdAt || new Date().toISOString(),
+    rideStatus: r.status || r.rideStatus || "unknown",
+    driverName: r.driver?.name || r.driverName || "Unknown",
+    driverId: r.driver?._id || r.driver?.id || r.driverId || "",
+    driverAvatar: r.driver?.avatar || r.driver?.name?.charAt(0) || r.driverAvatar || "?",
+    userName: r.user?.name || r.userName || "Unknown",
+    userId: r.user?._id || r.user?.id || r.userId || "",
+    userAvatar: r.user?.avatar || r.user?.name?.charAt(0) || r.userAvatar || "?",
+    city: r.city || "",
+    minutesInState: r.minutesInState || 0,
+    pointsAtRisk: r.pointsAtRisk || 0,
+    resolved: r.resolved || false,
+    resolvedAt: r.resolvedAt,
+    resolvedBy: r.resolvedBy,
+    resolveNote: r.resolveNote,
+    pickup: r.pickup_location?.address || r.pickup?.address || r.pickup || "",
+    destination: r.destination?.address || r.destination || "",
+    fareNGN: r.fare || r.fareNGN || 0,
+  };
+}
 
 // ─── Config ───────────────────────────────────────────────────────────────────
 
@@ -379,21 +412,41 @@ export default function StuckRides() {
   const [severityF, setSeverityF] = useState("all");
   const [reasonF, setReasonF] = useState("all");
   const [showResolved, setShowResolved] = useState(false);
-  const [expanded, setExpanded] = useState<Set<string>>(new Set(["STK-1001", "STK-1002"]));
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [pendingAction, setPendingAction] = useState<{ ride: StuckRide; action: QuickActionId } | null>(null);
-  const [resolvedIds, setResolvedIds] = useState<Set<string>>(new Set(["STK-1000"]));
+  const [resolvedIds, setResolvedIds] = useState<Set<string>>(new Set());
   const [toast, setToast] = useState<string | null>(null);
 
-  const filtered = useMemo(() => mockStuckRides.filter(r => {
+  const [stuckRides, setStuckRides] = useState<StuckRide[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    getRides({ isStuck: true, limit: 100 })
+      .then(({ rides: apiRides }) => {
+        if (cancelled) return;
+        setStuckRides((apiRides || []).map(mapApiStuckRide));
+      })
+      .catch((err) => {
+        console.error("Failed to load stuck rides", err);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, []);
+
+  const filtered = useMemo(() => stuckRides.filter(r => {
     const isRes = r.resolved || resolvedIds.has(r.id);
     if (!showResolved && isRes) return false;
     if (showResolved && !isRes) return false;
     if (severityF !== "all" && r.severity !== severityF) return false;
     if (reasonF !== "all" && r.reason !== reasonF) return false;
     return true;
-  }), [severityF, reasonF, showResolved, resolvedIds]);
+  }), [stuckRides, severityF, reasonF, showResolved, resolvedIds]);
 
-  const active = mockStuckRides.filter(r => !r.resolved && !resolvedIds.has(r.id));
+  const active = stuckRides.filter(r => !r.resolved && !resolvedIds.has(r.id));
   const counts = { critical: 0, high: 0, medium: 0, low: 0 };
   active.forEach(r => { counts[r.severity]++; });
 
@@ -481,7 +534,12 @@ export default function StuckRides() {
       </div>
 
       {/* ── Rides list ── */}
-      {filtered.length === 0 ? (
+      {loading ? (
+        <div className="bg-white rounded-[16px] border border-slate-200 flex items-center justify-center py-20">
+          <div className="w-5 h-5 border-2 border-[#BE1B2C] border-t-transparent rounded-full animate-spin" />
+          <span className="ml-3 text-sm text-slate-400">Loading stuck rides…</span>
+        </div>
+      ) : filtered.length === 0 ? (
         <div className="bg-white rounded-[16px] border border-slate-200 flex flex-col items-center gap-3 py-20 px-8 text-center">
           <div className="w-14 h-14 rounded-[14px] bg-green-50 flex items-center justify-center">
             <CheckCircle size={24} className="text-green-500" />

@@ -1841,12 +1841,22 @@ class UserHomeController extends GetxController
     increment();
   }
 
+  bool _isRetryingUserDetails = false;
+
   void clickOnMenu() {
     if (userData.isNotEmpty) {
       scaffoldKey.currentState?.openEndDrawer();
-    } else {
-      CommonWidgets.showMyToastMessage('User data is loading please wait ....');
+      return;
     }
+    CommonWidgets.showMyToastMessage('User data is loading please wait ....');
+    if (_isRetryingUserDetails) return;
+    _isRetryingUserDetails = true;
+    callingGetUserDetails().then((_) {
+      _isRetryingUserDetails = false;
+      if (userData.isNotEmpty) {
+        scaffoldKey.currentState?.openEndDrawer();
+      }
+    });
   }
 
   Future<bool> checkPermission() async {
@@ -2132,16 +2142,13 @@ class UserHomeController extends GetxController
 
   Future<void> callingGetUserDetails() async {
     try {
-      SharedPreferences pref = await SharedPreferences.getInstance();
       if (!_canUpdateView) return;
-      String userId = pref.getString(ApiKeyConstants.userId) ?? '';
       if (!await AuthSessionManager.hasStoredSession()) {
         await AuthSessionManager.clearExpiredSession();
         return;
       }
       int? responseStatus;
-      LoginModel? loginModel = await ApiMethods.getUserDetailsApi(
-        userId: userId,
+      LoginModel? loginModel = await ApiMethods.getCurrentUserApi(
         checkResponse: (int status) => responseStatus = status,
       );
       if (!_canUpdateView) return;

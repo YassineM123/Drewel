@@ -1,7 +1,7 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { Search, Lock, Download, Car, CreditCard, FileText, Navigation } from "lucide-react";
 import { Card, SectionHeader, Th, Td, Tr, Pagination, Select, EmptyState, Toast } from "../components/ui";
-import { mockAuditLogs } from "../data/mockRides";
+import { getAuditLogs } from "../api";
 
 const ACTION_STYLES: Record<string, string> = {
   add_points:               "bg-green-50 text-green-700 border-green-200",
@@ -53,17 +53,39 @@ export default function AuditLogs() {
   const [dateRange, setDateRange] = useState("all");
   const [page, setPage] = useState(1);
   const [toast, setToast] = useState<string | null>(null);
+  const [logs, setLogs] = useState<any[]>([]);
+  const [total, setTotal] = useState(0);
+  const [_fetching, setFetching] = useState(true);
 
-  const filtered = useMemo(() => mockAuditLogs.filter(log => {
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      setFetching(true);
+      try {
+        const res = await getAuditLogs({ page, limit: 10 });
+        if (!cancelled) {
+          setLogs(res.items ?? []);
+          setTotal(res.pagination?.total ?? (res.items ?? []).length);
+        }
+      } catch (err) {
+        console.error("Failed to load audit logs", err);
+      } finally {
+        if (!cancelled) setFetching(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [page]);
+
+  const filtered = useMemo(() => logs.filter(log => {
     const matchSearch = !search
-      || log.actor.toLowerCase().includes(search.toLowerCase())
-      || log.action.toLowerCase().includes(search.toLowerCase())
-      || log.entityId.toLowerCase().includes(search.toLowerCase());
+      || (log.actor ?? "").toLowerCase().includes(search.toLowerCase())
+      || (log.action ?? "").toLowerCase().includes(search.toLowerCase())
+      || (log.entityId ?? "").toLowerCase().includes(search.toLowerCase());
     const matchAction = actionFilter === "all" || log.action === actionFilter;
     const matchEntity = entityFilter === "all" || log.entityType === entityFilter;
     const matchDate = inRange(log.createdAt, dateRange);
     return matchSearch && matchAction && matchEntity && matchDate;
-  }), [search, actionFilter, entityFilter, dateRange]);
+  }), [logs, search, actionFilter, entityFilter, dateRange]);
 
   const perPage = 10;
   const paginated = filtered.slice((page - 1) * perPage, page * perPage);
@@ -137,8 +159,8 @@ export default function AuditLogs() {
           { value: "PointRequest", label: "Point Request" },
           { value: "Ride", label: "Ride" },
         ]} className="w-44" />
-        {filtered.length !== mockAuditLogs.length && (
-          <span className="text-xs text-slate-400 tabular-nums">{filtered.length} of {mockAuditLogs.length}</span>
+        {filtered.length !== total && (
+          <span className="text-xs text-slate-400 tabular-nums">{filtered.length} of {total}</span>
         )}
       </div>
 

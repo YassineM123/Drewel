@@ -1,12 +1,11 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import {
-  RefreshCw, CheckCircle2, AlertTriangle, XCircle, Clock,
-  Database, MessageSquare, Phone, Bell, HardDrive,
-  Wifi, Map, Route, Server, Activity
+  RefreshCw, CheckCircle2, AlertTriangle, XCircle, Clock, Activity
 } from "lucide-react";
 import { Card, Button, SectionHeader } from "../components/ui";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
+import { getSystemHealth } from "../api";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -43,239 +42,6 @@ interface Incident {
 
 // ─── Data ─────────────────────────────────────────────────────────────────────
 
-const T = (offsetMinutes: number) =>
-  new Date(Date.now() - offsetMinutes * 60 * 1000).toISOString();
-
-const SERVICES: Service[] = [
-  {
-    id: "main-api",
-    name: "Main API",
-    description: "Core REST API for all client apps",
-    status: "operational",
-    latencyMs: 67,
-    errorRatePct: 0.04,
-    lastSuccessfulRequest: T(0.3),
-    lastIncidentId: "INC-0039",
-    lastIncidentTitle: "Cold start delay — 3d ago",
-    dataFreshnessMinutes: null,
-    dataFreshnessThresholdMinutes: null,
-    uptimePct: "99.95%",
-    icon: <Server size={16} />,
-    errorTrend: [0, 0, 1, 0, 0, 2, 0, 0, 0, 0, 0, 1],
-  },
-  {
-    id: "database",
-    name: "Database",
-    description: "PostgreSQL write-primary cluster",
-    status: "operational",
-    latencyMs: 12,
-    errorRatePct: 0.0,
-    lastSuccessfulRequest: T(0.1),
-    lastIncidentId: null,
-    lastIncidentTitle: null,
-    dataFreshnessMinutes: 0,
-    dataFreshnessThresholdMinutes: 5,
-    uptimePct: "100%",
-    icon: <Database size={16} />,
-    errorTrend: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-  },
-  {
-    id: "socketio",
-    name: "Socket.IO",
-    description: "Real-time WebSocket dispatch cluster",
-    status: "degraded",
-    latencyMs: 310,
-    errorRatePct: 2.4,
-    lastSuccessfulRequest: T(1),
-    lastIncidentId: "INC-0042",
-    lastIncidentTitle: "ws-02 node disconnected — 14m ago",
-    dataFreshnessMinutes: null,
-    dataFreshnessThresholdMinutes: null,
-    uptimePct: "99.21%",
-    icon: <Wifi size={16} />,
-    errorTrend: [0, 0, 0, 1, 0, 1, 2, 3, 8, 14, 22, 24],
-  },
-  {
-    id: "driver-location",
-    name: "Driver Location Stream",
-    description: "Real-time GPS tracking pipeline",
-    status: "degraded",
-    latencyMs: 480,
-    errorRatePct: 1.2,
-    lastSuccessfulRequest: T(2),
-    lastIncidentId: "INC-0041",
-    lastIncidentTitle: "Elevated latency — 2h ago",
-    dataFreshnessMinutes: 18,
-    dataFreshnessThresholdMinutes: 10,
-    uptimePct: "99.61%",
-    icon: <Activity size={16} />,
-    errorTrend: [1, 1, 2, 1, 2, 3, 3, 4, 5, 6, 8, 9],
-  },
-  {
-    id: "google-maps",
-    name: "Google Maps",
-    description: "Maps rendering and geocoding",
-    status: "operational",
-    latencyMs: 145,
-    errorRatePct: 0.1,
-    lastSuccessfulRequest: T(0.5),
-    lastIncidentId: null,
-    lastIncidentTitle: null,
-    dataFreshnessMinutes: null,
-    dataFreshnessThresholdMinutes: null,
-    uptimePct: "99.90%",
-    icon: <Map size={16} />,
-    errorTrend: [0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0],
-  },
-  {
-    id: "google-routes",
-    name: "Google Routes",
-    description: "ETA calculation and route planning",
-    status: "operational",
-    latencyMs: 220,
-    errorRatePct: 0.8,
-    lastSuccessfulRequest: T(0.5),
-    lastIncidentId: "INC-0043",
-    lastIncidentTitle: "503 errors batch — 4h ago",
-    dataFreshnessMinutes: null,
-    dataFreshnessThresholdMinutes: null,
-    uptimePct: "99.72%",
-    icon: <Route size={16} />,
-    errorTrend: [0, 0, 0, 0, 6, 4, 2, 0, 0, 0, 0, 0],
-  },
-  {
-    id: "in-app-chat",
-    name: "In-App Chat",
-    description: "Driver–passenger messaging",
-    status: "operational",
-    latencyMs: 88,
-    errorRatePct: 0.0,
-    lastSuccessfulRequest: T(0.3),
-    lastIncidentId: null,
-    lastIncidentTitle: null,
-    dataFreshnessMinutes: 0,
-    dataFreshnessThresholdMinutes: 30,
-    uptimePct: "99.98%",
-    icon: <MessageSquare size={16} />,
-    errorTrend: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-  },
-  {
-    id: "secure-calls",
-    name: "Secure Calls",
-    description: "Masked phone call relay",
-    status: "operational",
-    latencyMs: 110,
-    errorRatePct: 0.2,
-    lastSuccessfulRequest: T(5),
-    lastIncidentId: null,
-    lastIncidentTitle: null,
-    dataFreshnessMinutes: null,
-    dataFreshnessThresholdMinutes: null,
-    uptimePct: "99.88%",
-    icon: <Phone size={16} />,
-    errorTrend: [0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0],
-  },
-  {
-    id: "notifications",
-    name: "Notifications",
-    description: "Push, SMS, and email delivery",
-    status: "operational",
-    latencyMs: 220,
-    errorRatePct: 0.3,
-    lastSuccessfulRequest: T(0.5),
-    lastIncidentId: "INC-0040",
-    lastIncidentTitle: "Lagos delivery delay — 26h ago",
-    dataFreshnessMinutes: null,
-    dataFreshnessThresholdMinutes: null,
-    uptimePct: "99.88%",
-    icon: <Bell size={16} />,
-    errorTrend: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-  },
-  {
-    id: "file-storage",
-    name: "File Storage",
-    description: "Driver documents and media assets",
-    status: "operational",
-    latencyMs: 190,
-    errorRatePct: 0.0,
-    lastSuccessfulRequest: T(2),
-    lastIncidentId: null,
-    lastIncidentTitle: null,
-    dataFreshnessMinutes: 2,
-    dataFreshnessThresholdMinutes: 60,
-    uptimePct: "99.99%",
-    icon: <HardDrive size={16} />,
-    errorTrend: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-  },
-];
-
-const INCIDENTS: Incident[] = [
-  {
-    id: "INC-0042",
-    serviceId: "socketio",
-    title: "Socket.IO cluster node ws-02 disconnected",
-    severity: "critical",
-    status: "investigating",
-    start: T(14),
-    updates: [
-      { text: "ws-02 node lost heartbeat at 09:41. Active connections migrating to ws-01 and ws-03.", at: T(14) },
-      { text: "63 of 63 connections migrated. Dispatch latency elevated ~180ms. Root cause investigation underway.", at: T(12) },
-    ],
-  },
-  {
-    id: "INC-0043",
-    serviceId: "google-routes",
-    title: "Google Routes API 503 errors — batch failure",
-    severity: "warning",
-    status: "monitoring",
-    start: T(240),
-    updates: [
-      { text: "6 route calls failed with HTTP 503 between 09:12–09:41. Rides proceeded without ETA.", at: T(240) },
-      { text: "Error rate returned to baseline at 09:45. Google confirmed transient us-central1 issue.", at: T(225) },
-    ],
-  },
-  {
-    id: "INC-0041",
-    serviceId: "driver-location",
-    title: "Driver Location API elevated latency",
-    severity: "warning",
-    status: "investigating",
-    start: T(120),
-    updates: [
-      { text: "P95 latency at 480ms vs 120ms baseline. GPS updates delayed for 8 active drivers.", at: T(120) },
-      { text: "Engineering team investigating. Possible TCP connection pool exhaustion on ws-shard-3.", at: T(105) },
-    ],
-  },
-  {
-    id: "INC-0040",
-    serviceId: "notifications",
-    title: "Push notification delivery delays — Lagos region",
-    severity: "info",
-    status: "resolved",
-    start: T(1560),
-    resolved: T(1320),
-    updates: [
-      { text: "Delayed push notifications for Lagos drivers, averaging 4–8 minute delay.", at: T(1560) },
-      { text: "Root cause: SMS gateway provider maintenance window ran 2h overtime.", at: T(1440) },
-      { text: "Delivery fully restored. No messages lost. 812 queued messages delivered.", at: T(1320) },
-    ],
-  },
-  {
-    id: "INC-0039",
-    serviceId: "main-api",
-    title: "Main API cold start delay during peak hour",
-    severity: "warning",
-    status: "resolved",
-    start: T(4320),
-    resolved: T(4260),
-    updates: [
-      { text: "Dispatch matching latency increased 8–12s during peak at 18:00.", at: T(4320) },
-      { text: "Auto-scaling triggered. New instances spun up in 4 minutes.", at: T(4300) },
-      { text: "Service fully restored. Post-mortem scheduled for next sprint.", at: T(4260) },
-    ],
-  },
-];
-
 // ─── Status config ─────────────────────────────────────────────────────────────
 
 const STATUS_CFG: Record<ServiceStatus, { label: string; color: string; bg: string; border: string; icon: React.ReactNode }> = {
@@ -285,7 +51,7 @@ const STATUS_CFG: Record<ServiceStatus, { label: string; color: string; bg: stri
   maintenance: { label: "Maintenance",  color: "text-sky-700",   bg: "bg-sky-50",   border: "border-sky-200",   icon: <Clock size={14} className="text-sky-500" /> },
 };
 
-const INCIDENT_SEV: Record<Incident["severity"], { dot: string; badge: string; border: string }> = {
+const INCIDENT_SEV: Record<string, { dot: string; badge: string; border: string }> = {
   critical: { dot: "bg-red-500",   badge: "bg-red-50 text-red-700 border-red-200",     border: "border-red-200" },
   warning:  { dot: "bg-amber-500", badge: "bg-amber-50 text-amber-700 border-amber-200", border: "border-amber-200" },
   info:     { dot: "bg-sky-400",  badge: "bg-sky-50 text-sky-700 border-sky-200",   border: "border-sky-100" },
@@ -313,25 +79,6 @@ function Sparkline({ data, danger }: { data: number[]; danger: boolean }) {
       <polyline points={pts} fill="none" stroke={danger ? "#EF4444" : "#94A3B8"} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
-}
-
-// ─── Error trend chart ──────────────────────────────────────────────────────────
-
-function buildTrendData(range: TimeRange) {
-  const buckets = range === "1h" ? 12 : range === "6h" ? 12 : range === "24h" ? 12 : 14;
-  const labels = Array.from({ length: buckets }, (_, i) => {
-    if (range === "7d") return `${i + 1}d`;
-    const ago = (buckets - 1 - i);
-    return range === "1h" ? `${ago * 5}m` : `${ago * (range === "6h" ? 30 : 120)}m`;
-  });
-
-  return labels.map((label, i) => ({
-    label,
-    socketio: SERVICES.find(s => s.id === "socketio")!.errorTrend[i] ?? 0,
-    driverLocation: SERVICES.find(s => s.id === "driver-location")!.errorTrend[i] ?? 0,
-    googleRoutes: SERVICES.find(s => s.id === "google-routes")!.errorTrend[i] ?? 0,
-    other: Math.max(0, Math.floor(Math.random() * 2)),
-  }));
 }
 
 // ─── Service Card ─────────────────────────────────────────────────────────────
@@ -430,21 +177,57 @@ export default function SystemHealth() {
   const [lastRefresh, setLastRefresh] = useState(new Date().toISOString());
   const [timeRange, setTimeRange] = useState<TimeRange>("1h");
   const [expandedIncident, setExpandedIncident] = useState<string | null>("INC-0042");
+  const [services, setServices] = useState<Service[]>([]);
+  const [incidents, setIncidents] = useState<Incident[]>([]);
+  const [_fetching, setFetching] = useState(true);
 
-  const trendData = useMemo(() => buildTrendData(timeRange), [timeRange]);
+  const fetchHealth = async () => {
+    try {
+      const data = await getSystemHealth();
+      setServices(data.services ?? data.Service ?? []);
+      setIncidents(data.incidents ?? data.Incident ?? []);
+    } catch (err) {
+      console.error("Failed to load system health", err);
+    } finally {
+      setFetching(false);
+    }
+  };
 
-  const operational = SERVICES.filter(s => s.status === "operational").length;
-  const degraded = SERVICES.filter(s => s.status === "degraded").length;
-  const outage = SERVICES.filter(s => s.status === "outage").length;
-  const staleServices = SERVICES.filter(s =>
+  useEffect(() => {
+    fetchHealth();
+  }, []);
+
+  const trendData = useMemo(() => {
+    const buckets = timeRange === "1h" ? 12 : timeRange === "6h" ? 12 : timeRange === "24h" ? 12 : 14;
+    const labels = Array.from({ length: buckets }, (_, i) => {
+      if (timeRange === "7d") return `${i + 1}d`;
+      const ago = (buckets - 1 - i);
+      return timeRange === "1h" ? `${ago * 5}m` : `${ago * (timeRange === "6h" ? 30 : 120)}m`;
+    });
+
+    return labels.map((label, i) => ({
+      label,
+      socketio: services.find(s => s.id === "socketio")?.errorTrend?.[i] ?? 0,
+      driverLocation: services.find(s => s.id === "driver-location")?.errorTrend?.[i] ?? 0,
+      googleRoutes: services.find(s => s.id === "google-routes")?.errorTrend?.[i] ?? 0,
+      other: Math.max(0, Math.floor(Math.random() * 2)),
+    }));
+  }, [timeRange, services]);
+
+  const operational = services.filter(s => s.status === "operational").length;
+  const degraded = services.filter(s => s.status === "degraded").length;
+  const outage = services.filter(s => s.status === "outage").length;
+  const staleServices = services.filter(s =>
     s.dataFreshnessMinutes !== null &&
     s.dataFreshnessThresholdMinutes !== null &&
     s.dataFreshnessMinutes > s.dataFreshnessThresholdMinutes
   );
 
-  const handleRefresh = () => {
+  const handleRefresh = async () => {
     setRefreshing(true);
-    setTimeout(() => { setRefreshing(false); setLastRefresh(new Date().toISOString()); }, 1400);
+    await fetchHealth();
+    setLastRefresh(new Date().toISOString());
+    setRefreshing(false);
   };
 
 
@@ -478,7 +261,7 @@ export default function SystemHealth() {
               : "All systems operational"}
           </p>
           <p className={`text-xs mt-0.5 ${outage > 0 ? "text-red-600" : degraded > 0 ? "text-amber-700" : "text-green-600"}`}>
-            {operational}/{SERVICES.length} services fully operational
+            {operational}/{services.length} services fully operational
             {staleServices.length > 0 && ` · ${staleServices.length} stale data stream(s)`}
           </p>
         </div>
@@ -511,9 +294,9 @@ export default function SystemHealth() {
 
       {/* Services grid */}
       <div>
-        <h2 className="text-sm font-bold text-slate-800 mb-3">Services ({SERVICES.length})</h2>
+        <h2 className="text-sm font-bold text-slate-800 mb-3">Services ({services.length})</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
-          {SERVICES.map(svc => <ServiceCard key={svc.id} svc={svc} />)}
+          {services.map(svc => <ServiceCard key={svc.id} svc={svc} />)}
         </div>
       </div>
 
@@ -572,9 +355,9 @@ export default function SystemHealth() {
         <div className="flex items-center justify-between mb-3">
           <h2 className="text-sm font-bold text-slate-800">Service Incidents</h2>
           <div className="flex items-center gap-2">
-            {INCIDENTS.some(i => i.status !== "resolved") && (
+            {incidents.some(i => i.status !== "resolved") && (
               <span className="text-xs font-bold text-amber-700 bg-amber-50 border border-amber-200 px-2.5 py-1 rounded-full">
-                {INCIDENTS.filter(i => i.status !== "resolved").length} active
+                {incidents.filter(i => i.status !== "resolved").length} active
               </span>
             )}
             <button
@@ -586,9 +369,9 @@ export default function SystemHealth() {
         </div>
 
         <div className="flex flex-col gap-3">
-          {INCIDENTS.map(incident => {
+          {incidents.map(incident => {
             const sev = INCIDENT_SEV[incident.severity];
-            const svc = SERVICES.find(s => s.id === incident.serviceId);
+            const svc = services.find(s => s.id === incident.serviceId);
             const isExpanded = expandedIncident === incident.id;
 
             return (

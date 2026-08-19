@@ -10,11 +10,27 @@ import {
   PieChart, Pie, Cell,
 } from "recharts";
 import { KpiCard, Card, AlertBanner, Button, Avatar, Select } from "../components/ui";
-import { mockRides, mockAlerts, mockPointTransactions, mockRideTrend, mockDriverPointBalances } from "../data/mockRides";
+import { getDashboard } from "../api";
+import { apiErrorMessage } from "../api/errors";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 type DataState = "live" | "loading" | "stale" | "error";
+
+interface DashboardData {
+  activeRides?: number;
+  onlineDrivers?: number;
+  busyDrivers?: number;
+  completedToday?: number;
+  cancelledToday?: number;
+  openDisputes?: number;
+  lowBalanceDrivers?: number;
+  stuckRides?: number;
+  recentReservations?: Record<string, unknown>[];
+  health?: Record<string, unknown>;
+  rideTrend?: { date: string; completed: number; cancelled: number; disputed: number }[];
+  [key: string]: unknown;
+}
 
 // ─── Static chart / health data ───────────────────────────────────────────────
 
@@ -115,10 +131,30 @@ export default function Dashboard() {
   const [cityFilter, setCityFilter] = useState("all");
   const [vehicleFilter, setVehicleFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
-  const [dataState, setDataState] = useState<DataState>("live");
+  const [dataState, setDataState] = useState<DataState>("loading");
   const [lastUpdated, setLastUpdated] = useState<Date>(() => new Date());
   const [dismissedAlerts, setDismissedAlerts] = useState<Set<number>>(new Set());
   const [secondsSince, setSecondsSince] = useState(0);
+  const [dashboardData, setDashboardData] = useState<DashboardData>({});
+
+  // Fetch dashboard data
+  const fetchDashboard = useCallback(async () => {
+    try {
+      setDataState(prev => prev === "stale" ? "loading" : prev);
+      const data = await getDashboard();
+      setDashboardData(data);
+      setDataState("live");
+      setLastUpdated(new Date());
+      setSecondsSince(0);
+    } catch (err) {
+      console.error("Dashboard fetch error:", apiErrorMessage(err));
+      setDataState("error");
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchDashboard();
+  }, [fetchDashboard]);
 
   // Track freshness
   useEffect(() => {
@@ -132,51 +168,20 @@ export default function Dashboard() {
 
   const handleRefresh = useCallback(() => {
     setDataState("loading");
-    setTimeout(() => {
-      setDataState("live");
-      setLastUpdated(new Date());
-      setSecondsSince(0);
-    }, 1200);
-  }, []);
+    fetchDashboard();
+  }, [fetchDashboard]);
 
-  // Derived data
-  const activeRides = mockRides.filter(r =>
-    ["ride_started", "driver_on_way", "driver_arrived", "pickup_confirmed", "offer_accepted"].includes(r.status)
-  );
-  const stuckRides    = mockRides.filter(r => r.isStuck);
-  const disputes      = mockRides.filter(r => r.isDisputed);
-  const openAlerts    = mockAlerts.filter(a => a.status === "open");
-  const critAlerts    = openAlerts.filter(a => a.severity === "critical");
-  const lowBalDrivrers = mockDriverPointBalances.filter(d => d.available < 20).length;
-  const onlineDrivers  = 284;
-
-  const recentRideEvents = mockRides
-    .flatMap(ride =>
-      ride.timeline.map(t => ({
-        rideId: ride.id,
-        driverName: ride.driver.name,
-        driverAvatar: ride.driver.avatar,
-        userName: ride.user.name,
-        status: t.status,
-        actor: t.actor,
-        at: t.at,
-      }))
-    )
-    .sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime())
-    .slice(0, 7);
-
-  const pageAlerts = [
-    critAlerts.length > 0 && {
-      id: 1, type: "danger" as const,
-      title: `${critAlerts.length} critical alert${critAlerts.length > 1 ? "s" : ""} require immediate attention`,
-      message: critAlerts.map(a => a.title).join(" · "),
-    },
-    disputes.length > 0 && {
-      id: 2, type: "warning" as const,
-      title: `${disputes.length} open dispute${disputes.length > 1 ? "s" : ""} awaiting resolution`,
-      message: disputes.map(d => d.id).join(", "),
-    },
-  ].filter(Boolean) as { id: number; type: "danger" | "warning"; title: string; message: string }[];
+  // Derived data from API
+  const activeRidesCount = dashboardData.activeRides ?? 0;
+  const onlineDrivers = dashboardData.onlineDrivers ?? 0;
+  const busyDrivers = dashboardData.busyDrivers ?? activeRidesCount;
+  const completedToday = dashboardData.completedToday ?? 0;
+  const cancelledToday = dashboardData.cancelledToday ?? 0;
+  const openDisputes = dashboardData.openDisputes ?? 0;
+  const lowBalanceDrivers = dashboardData.lowBalanceDrivers ?? 0;
+  const stuckRidesCount = dashboardData.stuckRides ?? 0;
+  const recentReservations = (dashboardData.recentReservations || []) as Record<string, unknown>[];
+  const rideTrend = (dashboardData.rideTrend || []) as { date: string; completed: number; cancelled: number; disputed: number }[];
 
   const freshnessLabel = () => {
     if (dataState === "loading") return "Refreshing…";
@@ -298,10 +303,6 @@ export default function Dashboard() {
           onClose={() => setDataState("live")}
         />
       )}
-      {pageAlerts.filter(a => !dismissedAlerts.has(a.id)).map(alert => (
-        <AlertBanner key={alert.id} type={alert.type} title={alert.title} message={alert.message}
-          onClose={() => setDismissedAlerts(p => new Set([...p, alert.id]))} />
-      ))}
 
       {/* ── 8 KPI Cards ───────────────────────────────────────────────── */}
       {dataState === "loading" ? (
@@ -316,43 +317,41 @@ export default function Dashboard() {
         </div>
       ) : (
         <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-8 gap-3">
-          <KpiCard label="Active Rides" value={activeRides.length}
-            sparkline={[2,3,2,4,3,5,activeRides.length]}
+          <KpiCard label="Active Rides" value={activeRidesCount}
+            sparkline={[2,3,2,4,3,5,activeRidesCount]}
             trend="up" delta="+1 from 1h ago"
             tooltip="Rides currently in progress"
             onClick={() => navigate("/rides/live")} />
           <KpiCard label="Online Drivers" value={onlineDrivers}
             sparkline={[240,255,261,270,278,280,onlineDrivers]}
-            trend="up" delta="↑ 23 since yesterday"
+            trend="up" delta="↑ since yesterday"
             tooltip="Drivers currently online and accepting rides"
             onClick={() => navigate("/online-drivers")} />
-          <KpiCard label="Busy Drivers" value={activeRides.length}
-            sparkline={[3,4,3,5,4,6,activeRides.length]}
+          <KpiCard label="Busy Drivers" value={busyDrivers}
+            sparkline={[3,4,3,5,4,6,busyDrivers]}
             tooltip="Drivers currently on an active trip" />
-          <KpiCard label="Completed Today" value={74}
-            sparkline={[148,162,141,175,158,169,74]}
-            trend="up" delta="69 at this time yesterday"
-            tooltip="Rides completed today"
-            onClick={() => navigate("/rides/all?tab=completed")} />
-          <KpiCard label="Cancelled Today" value={8}
-            sparkline={[18,14,21,12,16,11,8]}
-            trend="down" delta="3 fewer than yesterday"
-            tooltip="Rides cancelled today"
-            onClick={() => navigate("/rides/all?tab=cancelled")} />
-          <KpiCard label="Open Disputes" value={disputes.length}
-            urgent={disputes.length > 0}
-            sparkline={[2,1,3,1,4,2,disputes.length]}
+          <KpiCard label="Completed Today" value={completedToday}
+            sparkline={[148,162,141,175,158,169,completedToday]}
+            trend="up" tooltip="Rides completed today"
+            onClick={() => navigate("/rides/completed")} />
+          <KpiCard label="Cancelled Today" value={cancelledToday}
+            sparkline={[18,14,21,12,16,11,cancelledToday]}
+            trend="down" tooltip="Rides cancelled today"
+            onClick={() => navigate("/rides/cancelled")} />
+          <KpiCard label="Open Disputes" value={openDisputes}
+            urgent={openDisputes > 0}
+            sparkline={[2,1,3,1,4,2,openDisputes]}
             tooltip="Rides with unresolved passenger or driver disputes"
             onClick={() => navigate("/rides/disputes")} />
-          <KpiCard label="Low Bal Drivers" value={lowBalDrivrers}
-            urgent={lowBalDrivrers > 0}
+          <KpiCard label="Low Bal Drivers" value={lowBalanceDrivers}
+            urgent={lowBalanceDrivers > 0}
             tooltip="Drivers with fewer than 20 available points — cannot accept rides"
             onClick={() => navigate("/points/balances")} />
-          <KpiCard label="Stuck Rides" value={stuckRides.length}
-            urgent={stuckRides.length > 0}
-            sparkline={[0,0,1,0,1,1,stuckRides.length]}
+          <KpiCard label="Stuck Rides" value={stuckRidesCount}
+            urgent={stuckRidesCount > 0}
+            sparkline={[0,0,1,0,1,1,stuckRidesCount]}
             tooltip="Rides in the same state for an abnormally long time"
-            onClick={() => navigate("/rides/live")} />
+            onClick={() => navigate("/rides/stuck")} />
         </div>
       )}
 
@@ -376,7 +375,7 @@ export default function Dashboard() {
             </div>
           </div>
           <ResponsiveContainer width="100%" height={184}>
-            <AreaChart data={mockRideTrend} margin={{ top: 4, right: 4, bottom: 0, left: -24 }}>
+            <AreaChart data={rideTrend.length > 0 ? rideTrend : [{ date: "No data", completed: 0, cancelled: 0, disputed: 0 }]} margin={{ top: 4, right: 4, bottom: 0, left: -24 }}>
               <defs>
                 <linearGradient id="gCompleted" x1="0" y1="0" x2="0" y2="1">
                   <stop offset="5%" stopColor="#BE1B2C" stopOpacity={0.12} />
@@ -436,7 +435,7 @@ export default function Dashboard() {
             <div className="flex items-center gap-2.5">
               <span className="live-pulse w-2 h-2 rounded-full bg-green-500" />
               <h2 className="text-sm font-bold text-slate-800">Live Operations</h2>
-              <span className="text-xs bg-[#BE1B2C] text-white px-2 py-0.5 rounded-full font-semibold">{activeRides.length}</span>
+              <span className="text-xs bg-[#BE1B2C] text-white px-2 py-0.5 rounded-full font-semibold">{activeRidesCount}</span>
             </div>
             <button onClick={() => navigate("/rides/live")}
               className="flex items-center gap-1 text-xs font-medium text-[#BE1B2C] hover:text-[#A31725] transition-colors">
@@ -458,14 +457,14 @@ export default function Dashboard() {
                 </p>
               </div>
               <div className="bg-slate-50 rounded-[10px] p-3 text-center">
-                <p className="text-[22px] font-bold text-slate-800 tabular-nums leading-none">{activeRides.length}</p>
+                <p className="text-[22px] font-bold text-slate-800 tabular-nums leading-none">{busyDrivers}</p>
                 <p className="text-[11px] text-slate-400 mt-1 flex items-center justify-center gap-1">
                   <Navigation size={10} /> On trip
                 </p>
               </div>
               <div className="bg-slate-50 rounded-[10px] p-3 text-center">
-                <p className={`text-[22px] font-bold tabular-nums leading-none ${stuckRides.length > 0 ? "text-red-600" : "text-slate-800"}`}>
-                  {stuckRides.length}
+                <p className={`text-[22px] font-bold tabular-nums leading-none ${stuckRidesCount > 0 ? "text-red-600" : "text-slate-800"}`}>
+                  {stuckRidesCount}
                 </p>
                 <p className="text-[11px] text-slate-400 mt-1 flex items-center justify-center gap-1">
                   <AlertTriangle size={10} /> Stuck
@@ -475,21 +474,19 @@ export default function Dashboard() {
 
             {/* Active ride list */}
             <div className="flex flex-col gap-1 mt-3">
-              {activeRides.length === 0 ? (
+              {recentReservations.length === 0 ? (
                 <p className="text-xs text-slate-400 text-center py-3">No active rides right now.</p>
-              ) : activeRides.map(ride => (
-                <div key={ride.id}
+              ) : recentReservations.slice(0, 5).map((ride: Record<string, unknown>, i: number) => (
+                <div key={i}
                   className="flex items-center gap-3 px-3 py-2 rounded-[8px] hover:bg-slate-50 cursor-pointer transition-colors"
                   onClick={() => navigate("/rides/live")}>
-                  <span className="font-mono text-[11px] text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded">{ride.id}</span>
-                  <RideStatusBadge status={ride.isStuck ? "stuck" : ride.status} />
-                  <span className="text-xs text-slate-600 flex-1 truncate">{ride.driver.name} → {ride.user.name}</span>
-                  {ride.eta !== null && (
-                    <span className="text-xs font-bold text-slate-700 tabular-nums shrink-0">{ride.eta}m ETA</span>
-                  )}
-                  {ride.isStuck && (
-                    <span className="text-xs font-bold text-red-600 shrink-0">4h 30m !</span>
-                  )}
+                  <span className="font-mono text-[11px] text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded">{String(ride._id || ride.id || "N/A").slice(-8)}</span>
+                  <RideStatusBadge status={String(ride.status || "unknown")} />
+                  <span className="text-xs text-slate-600 flex-1 truncate">
+                    {(ride.driver as Record<string, unknown>)?.name ? String((ride.driver as Record<string, unknown>).name) : "Driver"}
+                    {" → "}
+                    {(ride.user as Record<string, unknown>)?.name ? String((ride.user as Record<string, unknown>).name) : "Passenger"}
+                  </span>
                 </div>
               ))}
             </div>
@@ -561,33 +558,36 @@ export default function Dashboard() {
             </button>
           </div>
 
-          {recentRideEvents.length === 0 ? (
+          {recentReservations.length === 0 ? (
             <div className="py-10 text-center">
               <p className="text-sm text-slate-400">No recent ride activity.</p>
             </div>
           ) : (
             <div className="divide-y divide-slate-100">
-              {recentRideEvents.map((ev, i) => (
-                <div key={i} className="flex items-center gap-3 px-5 py-3 hover:bg-slate-50 transition-colors cursor-pointer"
-                  onClick={() => navigate("/rides/all")}>
-                  <Avatar initials={ev.driverAvatar} size="xs" />
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="text-xs font-semibold text-slate-700">{ev.driverName}</span>
-                      <span className="text-slate-300 text-xs">→</span>
-                      <span className="text-xs text-slate-500">{ev.userName}</span>
+              {recentReservations.slice(0, 7).map((ev: Record<string, unknown>, i: number) => {
+                const driver = ev.driver as Record<string, unknown> | undefined;
+                const user = ev.user as Record<string, unknown> | undefined;
+                return (
+                  <div key={i} className="flex items-center gap-3 px-5 py-3 hover:bg-slate-50 transition-colors cursor-pointer"
+                    onClick={() => navigate("/rides/live")}>
+                    <Avatar initials={String(driver?.name || "D").split(" ").map((n: string) => n[0]).join("").slice(0, 2)} size="xs" />
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-xs font-semibold text-slate-700">{String(driver?.name || "Driver")}</span>
+                        <span className="text-slate-300 text-xs">→</span>
+                        <span className="text-xs text-slate-500">{String(user?.name || "Passenger")}</span>
+                      </div>
+                      <div className="flex items-center gap-2 mt-0.5">
+                        <RideStatusBadge status={String(ev.status || "unknown")} />
+                        <span className="text-[11px] text-slate-400 font-mono">{String(ev._id || ev.id || "").slice(-8)}</span>
+                      </div>
                     </div>
-                    <div className="flex items-center gap-2 mt-0.5">
-                      <RideStatusBadge status={ev.status} />
-                      <span className="text-[11px] text-slate-400 font-mono">{ev.rideId}</span>
+                    <div className="text-right shrink-0">
+                      <p className="text-[11px] text-slate-400">{formatRelTime(String(ev.updatedAt || ev.createdAt || ""))}</p>
                     </div>
                   </div>
-                  <div className="text-right shrink-0">
-                    <p className="text-[11px] text-slate-400">{formatRelTime(ev.at)}</p>
-                    <p className="text-[10px] text-slate-300">{ev.actor}</p>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </Card>
@@ -605,32 +605,10 @@ export default function Dashboard() {
             </button>
           </div>
 
-          {mockPointTransactions.length === 0 ? (
-            <div className="py-10 text-center">
+          <div className="py-10 text-center">
               <p className="text-sm text-slate-400">No recent point transactions.</p>
+              <button onClick={() => navigate("/points/transactions")} className="text-xs text-[#BE1B2C] font-medium mt-2 hover:underline">View all transactions →</button>
             </div>
-          ) : (
-            <div className="divide-y divide-slate-100">
-              {mockPointTransactions.slice(0, 7).map(tx => (
-                <div key={tx.id}
-                  className="flex items-center gap-3 px-5 py-3 hover:bg-slate-50 transition-colors cursor-pointer"
-                  onClick={() => navigate("/points/transactions")}>
-                  <TxIcon type={tx.type} />
-                  <Avatar initials={tx.driverAvatar} size="xs" />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-xs font-semibold text-slate-700 truncate">{tx.driverName}</p>
-                    <p className="text-[11px] text-slate-400 truncate">{txTypeLabel(tx.type)}</p>
-                  </div>
-                  <div className="text-right shrink-0">
-                    <p className={`text-sm font-bold tabular-nums ${tx.amount > 0 ? "text-green-600" : "text-red-600"}`}>
-                      {tx.amount > 0 ? "+" : ""}{tx.amount} pts
-                    </p>
-                    <p className="text-[11px] text-slate-400">{formatRelTime(tx.createdAt)}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
         </Card>
       </div>
 

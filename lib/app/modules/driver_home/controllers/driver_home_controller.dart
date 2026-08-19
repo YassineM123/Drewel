@@ -575,13 +575,23 @@ class DriverHomeController extends GetxController with WidgetsBindingObserver {
     increment();
   }
 
+  bool _isRetryingDriverDetails = false;
+
   void clickOnMenu() {
     if (userData.isNotEmpty) {
       scaffoldKey.currentState?.openEndDrawer();
-    } else {
-      CommonWidgets.showMyToastMessage(
-          'Driver data is loading please wait ....');
+      return;
     }
+    CommonWidgets.showMyToastMessage(
+        'Driver data is loading please wait ....');
+    if (_isRetryingDriverDetails) return;
+    _isRetryingDriverDetails = true;
+    callingGetDriverDetails().then((_) {
+      _isRetryingDriverDetails = false;
+      if (userData.isNotEmpty) {
+        scaffoldKey.currentState?.openEndDrawer();
+      }
+    });
   }
 
   Future<void> checkPermission() async {

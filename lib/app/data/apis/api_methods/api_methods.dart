@@ -479,6 +479,21 @@ class ApiMethods {
     return null;
   }
 
+  /// Lightweight current-user fetch (name/phone/photo only) — used by
+  /// screens like splash and the nav drawer that don't need the full
+  /// rides/messages/saved-places payload from getUserDetailsApi.
+  static Future<LoginModel?> getCurrentUserApi(
+      {void Function(int)? checkResponse}) async {
+    http.Response? response = await MyHttp.getMethod(
+      url: ApiUrlConstants.endPointOfCurrentUser,
+      checkResponse: checkResponse,
+    );
+    if (response != null) {
+      return LoginModel.fromJson(jsonDecode(response.body));
+    }
+    return null;
+  }
+
   ///  User get details api....
   static Future<LoginModel?> getUserDetailsApi(
       {void Function(int)? checkResponse, required String userId}) async {

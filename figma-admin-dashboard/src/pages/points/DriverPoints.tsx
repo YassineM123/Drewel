@@ -1,10 +1,10 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Search, Plus, AlertTriangle } from "lucide-react";
 import {
   Card, Button, SectionHeader, Th, Td, Tr, Pagination,
   Avatar, Badge, EmptyState, Modal, Toast, StatRow
 } from "../../components/ui";
-import { mockDriverPointBalances, type DriverPointBalance } from "../../data/mockRides";
+import { getDriverWallets } from "../../api";
 
 const ROLE = "owner"; // In production, derive from auth context
 
@@ -12,7 +12,7 @@ export default function DriverPoints() {
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("all");
   const [page, setPage] = useState(1);
-  const [addModal, setAddModal] = useState<DriverPointBalance | null>(null);
+  const [addModal, setAddModal] = useState<any | null>(null);
   const [addPts, setAddPts] = useState("");
   const [addRef, setAddRef] = useState("");
   const [addMethod, setAddMethod] = useState("bank_transfer");
@@ -20,10 +20,32 @@ export default function DriverPoints() {
   const [loading, setLoading] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const [step, setStep] = useState<"form" | "confirm">("form");
+  const [drivers, setDrivers] = useState<any[]>([]);
+  const [_total, setTotal] = useState(0);
+  const [_fetching, setFetching] = useState(true);
 
-  const filtered = mockDriverPointBalances.filter(d => {
-    const matchSearch = !search || d.driverName.toLowerCase().includes(search.toLowerCase()) || d.driverId.toLowerCase().includes(search.toLowerCase());
-    const matchFilter = filter === "all" || (filter === "low" ? d.available < 20 : filter === "zero" ? d.available === 0 : filter === "reserved" ? d.reserved > 0 : filter === "approved" ? d.approvalStatus === "approved" : filter === "blocked" ? d.restricted : true);
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      setFetching(true);
+      try {
+        const res = await getDriverWallets({ page, limit: 8 });
+        if (!cancelled) {
+          setDrivers(res.drivers ?? []);
+          setTotal(res.pagination?.total ?? (res.drivers ?? []).length);
+        }
+      } catch (err) {
+        console.error("Failed to load driver wallets", err);
+      } finally {
+        if (!cancelled) setFetching(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [page]);
+
+  const filtered = drivers.filter(d => {
+    const matchSearch = !search || (d.driverName ?? d.name ?? "").toLowerCase().includes(search.toLowerCase()) || (d.driverId ?? d.id ?? "").toLowerCase().includes(search.toLowerCase());
+    const matchFilter = filter === "all" || (filter === "low" ? (d.available ?? 0) < 20 : filter === "zero" ? (d.available ?? 0) === 0 : filter === "reserved" ? (d.reserved ?? 0) > 0 : filter === "approved" ? d.approvalStatus === "approved" : filter === "blocked" ? d.restricted : true);
     return matchSearch && matchFilter;
   });
 
@@ -60,9 +82,9 @@ export default function DriverPoints() {
       {/* KPIs */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         {[
-          { label: "Total Drivers", value: mockDriverPointBalances.length },
-          { label: "Low Balance (<20)", value: mockDriverPointBalances.filter(d => d.available < 20).length, urgent: true },
-          { label: "Points Reserved", value: mockDriverPointBalances.reduce((s, d) => s + d.reserved, 0) },
+          { label: "Total Drivers", value: drivers.length },
+          { label: "Low Balance (<20)", value: drivers.filter(d => (d.available ?? 0) < 20).length, urgent: true },
+          { label: "Points Reserved", value: drivers.reduce((s, d) => s + (d.reserved ?? 0), 0) },
           { label: "Points Sold (Month)", value: "350 pts" },
         ].map(k => (
           <Card key={k.label} className={`p-4 ${k.urgent ? "border-amber-200 bg-amber-50/30" : ""}`}>

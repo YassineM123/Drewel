@@ -1,19 +1,8 @@
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Coins, ArrowLeftRight, FileText, Package, TrendingUp, TrendingDown, AlertTriangle, ChevronRight } from "lucide-react";
 import { Card, KpiCard, SectionHeader } from "../../components/ui";
-import { mockDriverPointBalances, mockPointTransactions } from "../../data/mockRides";
-
-const now = Date.now();
-
-// Derived stats from mock data
-const totalWallets = mockDriverPointBalances.length;
-const totalAvailable = mockDriverPointBalances.reduce((s, d) => s + d.available, 0);
-const totalReserved  = mockDriverPointBalances.reduce((s, d) => s + d.reserved,  0);
-const lowBalCount    = mockDriverPointBalances.filter(d => d.available < 20).length;
-const zeroBalCount   = mockDriverPointBalances.filter(d => d.available === 0).length;
-const restrictedCount = mockDriverPointBalances.filter(d => d.restricted).length;
-
-const recentTx = mockPointTransactions.slice(0, 10);
+import { getPointsOverview } from "../../api";
 
 const TX_LABEL: Record<string, string> = {
   welcome_credit:       "Welcome Credit",
@@ -36,7 +25,7 @@ function txSign(type: string) {
 }
 
 function relTime(iso: string) {
-  const diff = now - new Date(iso).getTime();
+  const diff = Date.now() - new Date(iso).getTime();
   const m = Math.floor(diff / 60000);
   if (m < 60) return `${m}m ago`;
   const h = Math.floor(m / 60);
@@ -46,6 +35,32 @@ function relTime(iso: string) {
 
 export default function PointsOverview() {
   const navigate = useNavigate();
+  const [overview, setOverview] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const data = await getPointsOverview();
+        if (!cancelled) setOverview(data);
+      } catch (err) {
+        console.error("Failed to load points overview", err);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  const wallets = overview?.wallets ?? overview?.drivers ?? [];
+  const recentTx = overview?.recentTransactions ?? overview?.transactions ?? [];
+  const totalWallets = overview?.totalWallets ?? wallets.length;
+  const totalAvailable = overview?.totalAvailable ?? wallets.reduce((s: number, d: any) => s + (d.available ?? 0), 0);
+  const totalReserved = overview?.totalReserved ?? wallets.reduce((s: number, d: any) => s + (d.reserved ?? 0), 0);
+  const lowBalCount = overview?.lowBalanceCount ?? wallets.filter((d: any) => (d.available ?? 0) < 20).length;
+  const zeroBalCount = overview?.zeroBalanceCount ?? wallets.filter((d: any) => (d.available ?? 0) === 0).length;
+  const restrictedCount = overview?.restrictedCount ?? wallets.filter((d: any) => d.restricted).length;
 
   return (
     <div className="flex flex-col gap-6">
@@ -99,9 +114,9 @@ export default function PointsOverview() {
           </div>
           <div className="space-y-3">
             {[
-              { label: "≥ 100 pts (healthy)",     count: mockDriverPointBalances.filter(d => d.available >= 100).length, color: "bg-green-500" },
-              { label: "20–99 pts (caution)",      count: mockDriverPointBalances.filter(d => d.available >= 20 && d.available < 100).length, color: "bg-amber-400" },
-              { label: "1–19 pts (low balance)",   count: mockDriverPointBalances.filter(d => d.available >= 1 && d.available < 20).length, color: "bg-orange-500" },
+              { label: "≥ 100 pts (healthy)",     count: wallets.filter((d: any) => (d.available ?? 0) >= 100).length, color: "bg-green-500" },
+              { label: "20–99 pts (caution)",      count: wallets.filter((d: any) => (d.available ?? 0) >= 20 && (d.available ?? 0) < 100).length, color: "bg-amber-400" },
+              { label: "1–19 pts (low balance)",   count: wallets.filter((d: any) => (d.available ?? 0) >= 1 && (d.available ?? 0) < 20).length, color: "bg-orange-500" },
               { label: "0 pts (cannot ride)",      count: zeroBalCount, color: "bg-red-600" },
             ].map(band => (
               <div key={band.label}>

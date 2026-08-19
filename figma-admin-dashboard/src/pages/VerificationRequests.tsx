@@ -1,11 +1,45 @@
-import { useState } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { Search, Download, RefreshCw, X } from "lucide-react";
 import {
   Badge, SlaBadge, Avatar, Button, Card, Select, KpiCard,
   Th, Td, Tr, Pagination, FilterChip, EmptyState, SectionHeader
 } from "../components/ui";
-import { mockVerificationRequests } from "../data/mock";
+import { getRequests } from "../api";
+
+interface VerificationRequest {
+  id: string;
+  type: string;
+  driver: { name: string; avatar: string; id: string };
+  submittedAt: string;
+  approval1: { status: string; admin: string | null; at: string | null };
+  approval2: { status: string; admin: string | null; at: string | null };
+  status: string;
+  responsible: string;
+  slaHours: number;
+  slaBreached: boolean;
+  documents: string[];
+}
+
+function mapApiRequest(r: any): VerificationRequest {
+  return {
+    id: r._id || r.id || "",
+    type: r.type || r.requestType || "New Driver",
+    driver: {
+      name: r.driver?.name || "Unknown",
+      avatar: r.driver?.avatar || r.driver?.name?.charAt(0) || "?",
+      id: r.driver?._id || r.driver?.id || "",
+    },
+    submittedAt: r.createdAt || r.submittedAt || new Date().toISOString(),
+    approval1: r.approval1 || { status: "pending", admin: null, at: null },
+    approval2: r.approval2 || { status: "not_submitted", admin: null, at: null },
+    status: r.status || "pending",
+    responsible: r.responsible || "Unassigned",
+    slaHours: r.slaHours || 0,
+    slaBreached: r.slaBreached || false,
+    documents: r.documents || [],
+  };
+}
 
 const STATUS_OPTIONS = [
   { value: "all", label: "All Statuses" },
@@ -38,13 +72,33 @@ export default function VerificationRequests({ defaultStatus }: { defaultStatus?
   const [page, setPage] = useState(1);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
 
-  const filtered = mockVerificationRequests.filter(r => {
+  const [requests, setRequests] = useState<VerificationRequest[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    getRequests({ page, limit: 50, status: status !== "all" ? status : undefined, search: search || undefined })
+      .then(({ requests: apiRequests }) => {
+        if (cancelled) return;
+        setRequests((apiRequests || []).map(mapApiRequest));
+      })
+      .catch((err) => {
+        console.error("Failed to load verification requests", err);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, [page, status, search]);
+
+  const filtered = useMemo(() => requests.filter(r => {
     const matchSearch = !search || r.id.toLowerCase().includes(search.toLowerCase()) || r.driver.name.toLowerCase().includes(search.toLowerCase());
     const matchStatus = status === "all" || r.status === status;
     const matchType = type === "all" || r.type === type;
     const matchSla = sla === "all" || (sla === "breached" ? r.slaBreached : !r.slaBreached);
     return matchSearch && matchStatus && matchType && matchSla;
-  });
+  }), [requests, search, status, type, sla]);
 
   const activeFilters: { label: string; clear: () => void }[] = [];
   if (status !== "all") activeFilters.push({ label: `Status: ${status}`, clear: () => setStatus("all") });
@@ -58,9 +112,9 @@ export default function VerificationRequests({ defaultStatus }: { defaultStatus?
     setSelectedIds(p => p.includes(id) ? p.filter(x => x !== id) : [...p, id]);
   };
 
-  const pending = mockVerificationRequests.filter(r => r.status === "pending").length;
-  const completed = mockVerificationRequests.filter(r => r.status === "completed").length;
-  const approvedToday = mockVerificationRequests.filter(r => r.status === "completed").length;
+  const pending = requests.filter(r => r.status === "pending").length;
+  const completed = requests.filter(r => r.status === "completed").length;
+  const approvedToday = requests.filter(r => r.status === "completed").length;
 
   return (
     <div className="flex flex-col gap-6">
@@ -144,10 +198,19 @@ export default function VerificationRequests({ defaultStatus }: { defaultStatus?
               </tr>
             </thead>
             <tbody>
-              {paginated.length === 0 ? (
+              {loading ? (
                 <tr>
                   <td colSpan={11}>
-                    {filtered.length === 0 && mockVerificationRequests.length > 0
+                    <div className="flex items-center justify-center py-16">
+                      <div className="w-5 h-5 border-2 border-[#BE1B2C] border-t-transparent rounded-full animate-spin" />
+                      <span className="ml-3 text-sm text-slate-400">Loading requests…</span>
+                    </div>
+                  </td>
+                </tr>
+              ) : paginated.length === 0 ? (
+                <tr>
+                  <td colSpan={11}>
+                    {filtered.length === 0 && requests.length > 0
                       ? <EmptyState title="No results match your filters" description="Try adjusting your search or clearing the active filters." action={<Button variant="secondary" size="sm" onClick={() => { setSearch(""); setStatus("all"); setType("all"); setSla("all"); }}>Clear filters</Button>} />
                       : <EmptyState title="No verification requests" description="Requests will appear here as drivers submit their documents." />}
                   </td>

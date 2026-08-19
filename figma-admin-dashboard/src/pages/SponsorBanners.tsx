@@ -1,22 +1,22 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { Plus, LayoutGrid, List, Eye, Pencil, Trash2, Archive, ToggleLeft, ToggleRight, Image } from "lucide-react";
 import {
   Badge, Button, Card, Modal, ConfirmDialog, Toast, SectionHeader, EmptyState, StatRow
 } from "../components/ui";
-import { mockBanners } from "../data/mock";
+import { getBanners, addBanner, updateBanner, deleteBanner as apiDeleteBanner, toggleBannerStatus } from "../api";
 
-type Banner = typeof mockBanners[0];
 type ViewMode = "grid" | "list";
 
 export default function SponsorBanners() {
   const [view, setView] = useState<ViewMode>("grid");
-  const [banners, setBanners] = useState(mockBanners);
-  const [previewBanner, setPreviewBanner] = useState<Banner | null>(null);
-  const [deleteBanner, setDeleteBanner] = useState<Banner | null>(null);
-  const [archiveBanner, setArchiveBanner] = useState<Banner | null>(null);
+  const [banners, setBanners] = useState<any[]>([]);
+  const [previewBanner, setPreviewBanner] = useState<any | null>(null);
+  const [deleteBanner, setDeleteBanner] = useState<any | null>(null);
+  const [archiveBanner, setArchiveBanner] = useState<any | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
   const [toast, setToast] = useState<{ msg: string; type: "success" | "error" } | null>(null);
   const [loading, setLoading] = useState(false);
+  const [_fetching, setFetching] = useState(true);
 
   // Create form state
   const [createTitle, setCreateTitle] = useState("");
@@ -29,34 +29,67 @@ export default function SponsorBanners() {
   const resetCreate = () => { setCreateTitle(""); setCreateBrand(""); setCreateStart(""); setCreateEnd(""); setFileName(""); };
   const createValid = createTitle.trim() && createBrand.trim() && createStart && createEnd;
 
-  const active = banners.filter(b => b.status === "active").length;
-  const inactive = banners.filter(b => b.status === "inactive").length;
-  const draft = banners.filter(b => b.status === "draft").length;
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const data = await getBanners();
+        if (!cancelled) setBanners(data);
+      } catch (err) {
+        console.error("Failed to load banners", err);
+      } finally {
+        if (!cancelled) setFetching(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
 
-  const handleDelete = () => {
+  const active = banners.filter(b => (b.status ?? "draft") === "active").length;
+  const inactive = banners.filter(b => (b.status ?? "draft") === "inactive").length;
+  const draft = banners.filter(b => (b.status ?? "draft") === "draft").length;
+
+  const handleDelete = async () => {
+    if (!deleteBanner) return;
     setLoading(true);
-    setTimeout(() => {
-      setBanners(prev => prev.filter(b => b.id !== deleteBanner?.id));
+    try {
+      await apiDeleteBanner(deleteBanner.id);
+      setBanners(prev => prev.filter(b => b.id !== deleteBanner.id));
+      setToast({ msg: "Banner deleted successfully.", type: "success" });
+    } catch (err) {
+      console.error("Failed to delete banner", err);
+      setToast({ msg: "Failed to delete banner.", type: "error" });
+    } finally {
       setLoading(false);
       setDeleteBanner(null);
-      setToast({ msg: "Banner deleted successfully.", type: "success" });
-    }, 900);
+    }
   };
 
-  const handleArchive = () => {
+  const handleArchive = async () => {
+    if (!archiveBanner) return;
     setLoading(true);
-    setTimeout(() => {
-      setBanners(prev => prev.map(b => b.id === archiveBanner?.id ? { ...b, status: "inactive" } : b));
+    try {
+      await toggleBannerStatus(archiveBanner.id, false);
+      setBanners(prev => prev.map(b => b.id === archiveBanner.id ? { ...b, status: "inactive" } : b));
+      setToast({ msg: "Banner archived.", type: "success" });
+    } catch (err) {
+      console.error("Failed to archive banner", err);
+      setToast({ msg: "Failed to archive banner.", type: "error" });
+    } finally {
       setLoading(false);
       setArchiveBanner(null);
-      setToast({ msg: "Banner archived.", type: "success" });
-    }, 900);
+    }
   };
 
-  const toggleStatus = (id: string) => {
-    setBanners(prev => prev.map(b =>
-      b.id === id ? { ...b, status: b.status === "active" ? "inactive" : "active" } : b
-    ));
+  const toggleStatus = async (id: string) => {
+    const banner = banners.find(b => b.id === id);
+    if (!banner) return;
+    const newActive = (banner.status ?? "draft") !== "active";
+    try {
+      await toggleBannerStatus(id, newActive);
+      setBanners(prev => prev.map(b => b.id === id ? { ...b, status: newActive ? "active" : "inactive" } : b));
+    } catch (err) {
+      console.error("Failed to toggle banner status", err);
+    }
   };
 
   return (
@@ -260,7 +293,7 @@ export default function SponsorBanners() {
 }
 
 function BannerCard({ banner, onPreview, onToggle, onArchive, onDelete }: {
-  banner: Banner; onPreview: () => void; onToggle: () => void; onArchive: () => void; onDelete: () => void;
+  banner: any; onPreview: () => void; onToggle: () => void; onArchive: () => void; onDelete: () => void;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
   return (
@@ -332,7 +365,7 @@ function BannerCard({ banner, onPreview, onToggle, onArchive, onDelete }: {
 }
 
 function BannerRow({ banner, onPreview, onDelete }: {
-  banner: Banner; onPreview: () => void; onToggle?: () => void; onArchive?: () => void; onDelete: () => void;
+  banner: any; onPreview: () => void; onToggle?: () => void; onArchive?: () => void; onDelete: () => void;
 }) {
   return (
     <div className="flex items-center gap-4 px-5 py-3.5 hover:bg-slate-50 transition-colors">

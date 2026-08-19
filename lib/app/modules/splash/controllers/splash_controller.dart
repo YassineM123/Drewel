@@ -73,8 +73,7 @@ class SplashController extends GetxController with GetTickerProviderStateMixin {
       }
       if (prefs.getString(ApiKeyConstants.type) == ApiKeyConstants.user) {
         int? responseStatus;
-        await ApiMethods.getUserDetailsApi(
-          userId: prefs.getString(ApiKeyConstants.userId) ?? '',
+        await ApiMethods.getCurrentUserApi(
           checkResponse: (int status) => responseStatus = status,
         );
         if (responseStatus == 401) {

@@ -2,6 +2,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import Swal from "sweetalert2";
 import PropTypes from "prop-types";
+import {
+  ArrowLeft, CheckCircle2, XCircle, RotateCw, AlertTriangle,
+  FileText, Eye, Download, X, Clock,
+} from "lucide-react";
 import SafeImage from "../components/SafeImage";
 import { updateDriverReviewStatus } from "../utils/api";
 import { isTrustedApiAssetUrl, normalizeAssetUrl } from "../utils/media";
@@ -16,7 +20,9 @@ import {
   reopenProfileRequest,
   reopenRequest,
 } from "../utils/requestsApi";
-import "../assets/css/requests.css";
+import {
+  Badge, Button, Card, StatRow, ConfirmDialog, Modal, Toast, LoadingState, ErrorState,
+} from "../components/ui";
 
 const documentFields = [
   { key: "companyLicense", label: "Company licence", group: "Company" },
@@ -29,13 +35,6 @@ const documentFields = [
   { key: "passportCopy", label: "Passport copy", group: "Identity" },
   { key: "profileImage", label: "Profile image", group: "Profile" },
 ];
-
-const statusBadgeClass = (status) => ({
-  approved: "badge-success",
-  completed: "badge-primary",
-  rejected: "badge-danger",
-  pending: "badge-warning",
-}[String(status || "pending").toLowerCase()] || "badge-secondary");
 
 const stageStatus = (request, stage) => {
   const nested = request?.stages?.[stage]?.status;
@@ -53,13 +52,13 @@ const stageStatus = (request, stage) => {
 
 const stageActorName = (request, stage) => {
   const actor = request?.stages?.[stage]?.approvedBy || (stage === "profile" ? request?.profileApprovedBy : request?.approvedBy);
-  return actor?.fullName || actor?.name || actor?.email || (stage === "profile" ? request?.profileApprovedByName : request?.approvedByName) || "Not available";
+  return actor?.fullName || actor?.name || actor?.email || (stage === "profile" ? request?.profileApprovedByName : request?.approvedByName) || "—";
 };
 
 const formatDate = (value) => value ? new Intl.DateTimeFormat(undefined, {
   dateStyle: "medium",
   timeStyle: "short",
-}).format(new Date(value)) : "Not available";
+}).format(new Date(value)) : "—";
 const formatNumber = (value) => Number(value || 0).toLocaleString();
 const compactStatus = (value) => String(value || "not available").replaceAll("_", " ");
 const gpsAge = (driver) => {
@@ -98,6 +97,74 @@ const saveBlob = (blob, filename) => {
   window.setTimeout(() => URL.revokeObjectURL(objectUrl), 0);
 };
 
+function Stepper({ steps }) {
+  const stateStyles = {
+    complete: { dot: "bg-green-500 text-white", line: "bg-green-500", text: "text-slate-700" },
+    "in-progress": { dot: "bg-[#BE1B2C] text-white", line: "bg-slate-200", text: "text-slate-700" },
+    attention: { dot: "bg-red-500 text-white", line: "bg-slate-200", text: "text-red-700" },
+    waiting: { dot: "bg-slate-200 text-slate-500", line: "bg-slate-200", text: "text-slate-400" },
+  };
+  return (
+    <div className="flex items-center">
+      {steps.map((step, index) => {
+        const style = stateStyles[step.state] || stateStyles.waiting;
+        return (
+          <div key={step.title} className={`flex items-center ${index < steps.length - 1 ? "flex-1" : ""}`}>
+            <div className="flex flex-col items-center gap-1.5 shrink-0">
+              <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold ${style.dot}`}>
+                {step.state === "complete" ? <CheckCircle2 size={16} /> : index + 1}
+              </div>
+              <div className="text-center">
+                <p className={`text-xs font-semibold ${style.text}`}>{step.title}</p>
+                <p className="text-[10px] text-slate-400 max-w-[110px]">{step.meta}</p>
+              </div>
+            </div>
+            {index < steps.length - 1 && <div className={`h-0.5 flex-1 mx-2 rounded-full ${style.line}`} />}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+Stepper.propTypes = { steps: PropTypes.array.isRequired };
+
+function DocumentCard({ document, busyDocument, onPreview, onDownload }) {
+  const available = Boolean(document.url);
+  return (
+    <div className={`rounded-[12px] p-4 border flex items-start gap-3 ${available ? "border-slate-200 bg-white" : "border-red-200 bg-red-50/30"}`}>
+      <div className="w-9 h-9 rounded-[8px] bg-slate-100 flex items-center justify-center shrink-0">
+        {available ? <FileText size={16} className="text-slate-400" /> : <AlertTriangle size={16} className="text-red-400" />}
+      </div>
+      <div className="flex-1 min-w-0">
+        <p className="text-xs text-slate-400">{document.group}{document.side ? ` · ${document.side}` : ""}</p>
+        <p className="text-sm font-semibold text-slate-800">{document.label}</p>
+        <span className={`inline-flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded-full border mt-1
+          ${available ? "text-green-700 bg-green-50 border-green-200" : "text-red-700 bg-red-50 border-red-200"}`}>
+          {available ? "Available" : "Missing"}
+        </span>
+      </div>
+      {available && (
+        <div className="flex flex-col gap-1.5 shrink-0">
+          <button type="button" disabled={Boolean(busyDocument)} onClick={(event) => onPreview(document, event)}
+            className="p-1.5 rounded-[6px] text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors disabled:opacity-50" title="Preview" aria-label={`Preview ${document.label}`}>
+            {busyDocument === `preview-${document.key}` ? <span className="w-3.5 h-3.5 border-2 border-slate-300 border-t-slate-600 rounded-full animate-spin block" /> : <Eye size={14} />}
+          </button>
+          <button type="button" disabled={Boolean(busyDocument)} onClick={() => onDownload(document)}
+            className="p-1.5 rounded-[6px] text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors disabled:opacity-50" title="Download" aria-label={`Download ${document.label}`}>
+            {busyDocument === `download-${document.key}` ? <span className="w-3.5 h-3.5 border-2 border-slate-300 border-t-slate-600 rounded-full animate-spin block" /> : <Download size={14} />}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+DocumentCard.propTypes = {
+  document: PropTypes.shape({ key: PropTypes.string, label: PropTypes.string, group: PropTypes.string, side: PropTypes.string, url: PropTypes.string }).isRequired,
+  busyDocument: PropTypes.string,
+  onPreview: PropTypes.func.isRequired,
+  onDownload: PropTypes.func.isRequired,
+};
+
 const PreviewDialog = ({ preview, onClose }) => {
   const closeButtonRef = useRef(null);
 
@@ -110,28 +177,28 @@ const PreviewDialog = ({ preview, onClose }) => {
     return () => document.removeEventListener("keydown", onKeyDown);
   }, [onClose]);
 
-  return <div className="request-preview" role="presentation" onMouseDown={onClose}>
-    <section
-      className="request-preview__dialog"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="document-preview-title"
-      onMouseDown={(event) => event.stopPropagation()}
-    >
-      <header className="request-preview__header">
-        <div>
-          <span>Document preview</span>
-          <h2 id="document-preview-title">{preview.label}</h2>
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm" role="presentation" onMouseDown={onClose}>
+      <div className="relative bg-white rounded-[16px] shadow-2xl w-full max-w-3xl flex flex-col max-h-[90vh]" role="dialog" aria-modal="true" aria-labelledby="document-preview-title" onMouseDown={(event) => event.stopPropagation()}>
+        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 shrink-0">
+          <h3 id="document-preview-title" className="text-base font-bold text-slate-900">{preview.label}</h3>
+          <button ref={closeButtonRef} type="button" onClick={onClose} aria-label="Close document preview"
+            className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-[8px] transition-colors">
+            <X size={16} />
+          </button>
         </div>
-        <button ref={closeButtonRef} type="button" className="btn btn-light" onClick={onClose} aria-label="Close document preview">Close</button>
-      </header>
-      <div className="request-preview__body">
-        {preview.isPdf ? <object data={preview.objectUrl} type="application/pdf" aria-label={preview.label}>
-          <p>PDF preview is unavailable in this browser.</p>
-        </object> : <SafeImage src={preview.objectUrl} alt={preview.label} fallbackLabel={`${preview.label} unavailable`} />}
+        <div className="flex-1 overflow-auto bg-slate-50 p-6 flex items-center justify-center">
+          {preview.isPdf ? (
+            <object data={preview.objectUrl} type="application/pdf" aria-label={preview.label} className="w-full h-[70vh]">
+              <p className="text-sm text-slate-500">PDF preview is unavailable in this browser.</p>
+            </object>
+          ) : (
+            <SafeImage src={preview.objectUrl} alt={preview.label} fallbackLabel={`${preview.label} unavailable`} className="max-h-[70vh] rounded-[10px]" />
+          )}
+        </div>
       </div>
-    </section>
-  </div>;
+    </div>
+  );
 };
 
 PreviewDialog.propTypes = {
@@ -154,6 +221,9 @@ const DriverDetail = () => {
   const [busyAction, setBusyAction] = useState("");
   const [busyDocument, setBusyDocument] = useState("");
   const [preview, setPreview] = useState(null);
+  const [rejectDialog, setRejectDialog] = useState(null);
+  const [rejectReason, setRejectReason] = useState("");
+  const [toastMsg, setToastMsg] = useState(null);
   const previewTriggerRef = useRef(null);
 
   const closePreview = useCallback(() => {
@@ -203,29 +273,21 @@ const DriverDetail = () => {
   const status = String(request?.status || "pending").toLowerCase();
   const basicStatus = stageStatus(request, "basic");
   const profileStatus = stageStatus(request, "profile");
+  const initials = fullName.split(/\s+/).filter(Boolean).map((p) => p[0]?.toUpperCase()).slice(0, 2).join("") || "?";
 
-  const steps = useMemo(() => {
-    return [
-      { title: "Request 1", description: "Initial application approval", state: basicStatus === "approved" ? "complete" : basicStatus === "rejected" ? "attention" : "in-progress", meta: basicStatus.replaceAll("_", " ") },
-      { title: "Request 2", description: "Profile and documents approval", state: profileStatus === "approved" ? "complete" : profileStatus === "rejected" ? "attention" : profileStatus === "pending" ? "in-progress" : "waiting", meta: profileStatus === "not_submitted" ? `${availableDocuments}/${documents.length} documents available` : profileStatus.replaceAll("_", " ") },
-      { title: "Completed", description: "Both approvals granted", state: status === "completed" ? "complete" : "waiting", meta: status === "completed" ? formatDate(request?.completedAt || request?.profileApprovedAt) : "Waiting for both approvals" },
-    ];
-  }, [availableDocuments, basicStatus, documents.length, profileStatus, request, status]);
+  const steps = useMemo(() => [
+    { title: "Request 1", description: "Initial application approval", state: basicStatus === "approved" ? "complete" : basicStatus === "rejected" ? "attention" : "in-progress", meta: basicStatus.replaceAll("_", " ") },
+    { title: "Request 2", description: "Profile and documents approval", state: profileStatus === "approved" ? "complete" : profileStatus === "rejected" ? "attention" : profileStatus === "pending" ? "in-progress" : "waiting", meta: profileStatus === "not_submitted" ? `${availableDocuments}/${documents.length} documents available` : profileStatus.replaceAll("_", " ") },
+    { title: "Completed", description: "Both approvals granted", state: status === "completed" ? "complete" : "waiting", meta: status === "completed" ? formatDate(request?.completedAt || request?.profileApprovedAt) : "Waiting for both approvals" },
+  ], [availableDocuments, basicStatus, documents.length, profileStatus, request, status]);
 
-  const toast = (icon, title) => Swal.fire({
-    toast: true,
-    position: "top-end",
-    icon,
-    title,
-    showConfirmButton: false,
-    timer: 2500,
-  });
+  const toast = (icon, title) => Swal.fire({ toast: true, position: "top-end", icon, title, showConfirmButton: false, timer: 2500 });
 
   const runMutation = async (name, action, successMessage) => {
     try {
       setBusyAction(name);
       await action();
-      toast("success", successMessage);
+      setToastMsg(successMessage);
       await loadDetail();
     } catch (mutationError) {
       Swal.fire("Error", mutationError?.response?.data?.message || "The request could not be updated.", "error");
@@ -235,19 +297,21 @@ const DriverDetail = () => {
   };
 
   const approve = () => runMutation("basic-approve", () => approveRequest(id), "Request 1 approved");
+  const approveProfile = () => runMutation("profile-approve", () => approveProfileRequest(id), "Request 2 approved");
 
-  const reject = async () => {
-    const result = await Swal.fire({
-      title: "Reject request",
-      input: "text",
-      inputLabel: "Reason (optional)",
-      showCancelButton: true,
-      confirmButtonText: "Reject",
-      confirmButtonColor: "#dc3545",
-    });
-    if (result.isConfirmed) {
-      runMutation("basic-reject", () => updateDriverReviewStatus(id, { status: "rejected", rejection_reason: result.value || "" }), "Request 1 rejected");
+  const reject = () => setRejectDialog("basic");
+  const rejectProfile = () => setRejectDialog("profile");
+
+  const submitReject = () => {
+    if (rejectDialog === "profile" && !rejectReason.trim()) return;
+    const stage = rejectDialog;
+    setRejectDialog(null);
+    if (stage === "basic") {
+      runMutation("basic-reject", () => updateDriverReviewStatus(id, { status: "rejected", rejection_reason: rejectReason || "" }), "Request 1 rejected");
+    } else {
+      runMutation("profile-reject", () => rejectProfileRequest(id, rejectReason.trim()), "Request 2 rejected");
     }
+    setRejectReason("");
   };
 
   const reopen = async () => {
@@ -257,25 +321,9 @@ const DriverDetail = () => {
       icon: "warning",
       showCancelButton: true,
       confirmButtonText: "Reopen request",
-      confirmButtonColor: "#00489d",
+      confirmButtonColor: "#BE1B2C",
     });
     if (result.isConfirmed) runMutation("basic-reopen", () => reopenRequest(id), "Request 1 reopened");
-  };
-
-  const approveProfile = () => runMutation("profile-approve", () => approveProfileRequest(id), "Request 2 approved");
-
-  const rejectProfile = async () => {
-    const result = await Swal.fire({
-      title: "Reject Request 2",
-      input: "textarea",
-      inputLabel: "Reason",
-      inputPlaceholder: "Explain what the driver needs to correct",
-      inputValidator: (value) => value.trim() ? undefined : "A rejection reason is required.",
-      showCancelButton: true,
-      confirmButtonText: "Reject Request 2",
-      confirmButtonColor: "#dc3545",
-    });
-    if (result.isConfirmed) runMutation("profile-reject", () => rejectProfileRequest(id, result.value.trim()), "Request 2 rejected");
   };
 
   const reopenProfile = async () => {
@@ -283,13 +331,11 @@ const DriverDetail = () => {
       title: "Reopen Request 2?",
       text: "The profile and documents will return to pending review. Its history will be preserved.",
       icon: "warning",
-      input: "text",
-      inputLabel: "Reason (optional)",
       showCancelButton: true,
       confirmButtonText: "Reopen Request 2",
-      confirmButtonColor: "#00489d",
+      confirmButtonColor: "#BE1B2C",
     });
-    if (result.isConfirmed) runMutation("profile-reopen", () => reopenProfileRequest(id, result.value || ""), "Request 2 reopened");
+    if (result.isConfirmed) runMutation("profile-reopen", () => reopenProfileRequest(id, ""), "Request 2 reopened");
   };
 
   const getDocumentBlob = async (document) => {
@@ -336,158 +382,264 @@ const DriverDetail = () => {
     }
   };
 
-  if (loading) return <main className="app-content requests-page"><div className="tile requests-detail-state" aria-live="polite"><div className="loader"/><span>Loading request details...</span></div></main>;
-  if (error || !request) return <main className="app-content requests-page"><div className="tile requests-detail-state" role="alert"><i className="fa fa-exclamation-circle" aria-hidden="true"/><h1>Request unavailable</h1><p>{error || "Request not found."}</p><div><button type="button" className="btn btn-outline-secondary mr-2" onClick={() => navigate(-1)}>Back</button><button type="button" className="btn btn-primary" onClick={loadDetail}>Retry</button></div></div></main>;
-
-  return <main className="app-content requests-page request-detail-page">
-    <header className="app-title tile p-3 request-detail-header">
-      <div>
-        <button type="button" className="request-back-link" onClick={() => navigate(-1)}><i className="fa fa-arrow-left" aria-hidden="true"/> Back to requests</button>
-        <div className="request-detail-title"><div><span>Driver verification</span><h1>{fullName}</h1><p>Request ID: <strong>{request.requestId || request._id || id}</strong></p></div><span className={`badge ${statusBadgeClass(status)}`}>{status.toUpperCase()}</span></div>
-      </div>
-      <div className="request-detail-actions" aria-label="Request actions" aria-busy={Boolean(busyAction)}>
-        <button type="button" className="btn btn-outline-primary" disabled={loading || Boolean(busyAction)} onClick={loadDetail}>Refresh</button>
-      </div>
-    </header>
-
-    <section className="tile p-4 request-progress-section" aria-labelledby="request-progress-title">
-      <h2 id="request-progress-title">Request progress</h2>
-      <ol className="request-stepper">
-        {steps.map((step, index) => <li key={step.title} className={`request-step request-step--${step.state}`}>
-          <span className="request-step__number" aria-hidden="true">{step.state === "complete" ? <i className="fa fa-check"/> : index + 1}</span>
-          <div><strong>{step.title}</strong><span>{step.description}</span><small>{step.meta}</small></div>
-          <span className="sr-only">{step.state.replace("-", " ")}</span>
-        </li>)}
-      </ol>
-    </section>
-
-    <div className="request-detail-layout">
-      <div>
-        <section className="tile p-4 request-detail-section" aria-labelledby="request-one-title">
-          <div className="request-section-heading"><div><span>Request 1</span><h2 id="request-one-title">Initial application</h2></div><span className={`badge ${statusBadgeClass(basicStatus)}`}>{basicStatus.replaceAll("_", " ").toUpperCase()}</span></div>
-          <dl className="request-info-grid">
-            <div><dt>Full name</dt><dd>{fullName}</dd></div><div><dt>Phone</dt><dd>{request.countryCode || ""} {request.phone || "Not available"}</dd></div>
-            <div><dt>WhatsApp</dt><dd>{request.whatsappNumber || "Not available"}</dd></div><div><dt>Email</dt><dd>{request.email || "Not available"}</dd></div>
-          </dl>
-        </section>
-
-        <section className="tile p-4 request-detail-section" aria-labelledby="request-two-title">
-          <div className="request-section-heading"><div><span>Request 2</span><h2 id="request-two-title">Driver profile and documents</h2></div><div className="request-stage-heading-status"><span className={`badge ${statusBadgeClass(profileStatus)}`}>{profileStatus.replaceAll("_", " ").toUpperCase()}</span><strong>{availableDocuments}/{documents.length} available</strong></div></div>
-          {request.isUpdate && ["pending", "rejected"].includes(profileStatus) && <div className="alert alert-info" role="status">This section shows the driver&apos;s latest submitted changes. Approving Request 2 will apply them to the live profile.</div>}
-          <dl className="request-info-grid">
-            <div><dt>Address</dt><dd>{request.address || request.driverLogs?.address || "Not available"}</dd></div><div><dt>City</dt><dd>{request.city || request.driverLogs?.city || "Not available"}</dd></div>
-            <div><dt>Vehicle type</dt><dd>{request.vehicleType || request.driverLogs?.vehicleType || "Not available"}</dd></div><div><dt>Contract number</dt><dd>{request.contractNumber || "Not available"}</dd></div>
-            <div><dt>Licence company</dt><dd>{request.licenseCompany || "Not available"}</dd></div><div><dt>Completed at</dt><dd>{formatDate(request.completedAt)}</dd></div>
-          </dl>
-
-          <h3 className="request-documents-title">Documents</h3>
-          <div className="request-documents-grid">
-            {documents.map((document) => <article className={`request-document-card ${document.url ? "is-available" : "is-missing"}`} key={document.key}>
-              <div className="request-document-thumb">
-                <i className={`fa ${document.url ? "fa-file-text-o" : "fa-file-o"}`} aria-hidden="true"/>
+  if (loading) return <div className="flex flex-col gap-6"><Card className="p-0"><LoadingState label="Loading request details…" /></Card></div>;
+  if (error || !request) {
+    return (
+      <div className="flex flex-col gap-6">
+        <Card className="p-0">
+          <ErrorState title="Request unavailable" description={error || "Request not found."}
+            action={
+              <div className="flex gap-2">
+                <Button variant="secondary" size="sm" onClick={() => navigate(-1)}>Back</Button>
+                <Button variant="primary" size="sm" onClick={loadDetail}>Retry</Button>
               </div>
-              <div className="request-document-content"><span>{document.group}{document.side ? ` · ${document.side}` : ""}</span><h4>{document.label}</h4><span className={`request-document-availability ${document.url ? "available" : "missing"}`}><i className={`fa ${document.url ? "fa-check-circle" : "fa-minus-circle"}`} aria-hidden="true"/> {document.url ? "Available" : "Missing"}</span></div>
-              {document.url && <div className="request-document-actions"><button type="button" className="btn btn-sm btn-outline-primary" disabled={Boolean(busyDocument)} aria-busy={busyDocument === `preview-${document.key}`} onClick={(event) => openDocument(document, event)}>{busyDocument === `preview-${document.key}` ? "Opening..." : "Preview"}</button><button type="button" className="btn btn-sm btn-outline-secondary" disabled={Boolean(busyDocument)} aria-busy={busyDocument === `download-${document.key}`} onClick={() => downloadDocument(document)}>{busyDocument === `download-${document.key}` ? "Downloading..." : "Download"}</button></div>}
-            </article>)}
-          </div>
-        </section>
+            } />
+        </Card>
+      </div>
+    );
+  }
 
-        <section className="tile p-4 request-detail-section" aria-labelledby="driver-operations-title">
-          <div className="request-section-heading">
-            <div><span>Operations</span><h2 id="driver-operations-title">Driver activity</h2></div>
-            <span className={`badge ${request.isDiscoverable ? "badge-success" : "badge-warning"}`}>
-              {request.isDiscoverable ? "DISCOVERABLE" : "NOT DISCOVERABLE"}
-            </span>
-          </div>
-          <dl className="request-info-grid">
-            <div><dt>Availability</dt><dd>{request.availabilityStatus || "Offline"}</dd></div>
-            <div><dt>Presence</dt><dd>{request.presenceStatus || "Offline"}</dd></div>
-            <div><dt>Last GPS</dt><dd>{gpsAge(request)}{request.locationAccuracyM !== null && request.locationAccuracyM !== undefined ? ` / +/-${Math.round(Number(request.locationAccuracyM))}m` : ""}</dd></div>
-            <div><dt>Service area</dt><dd>{request.currentServiceArea || "Not available"}</dd></div>
-            <div><dt>Points available</dt><dd>{formatNumber(request.pointsWallet?.availablePoints)}</dd></div>
-            <div><dt>Reserved points</dt><dd>{formatNumber(request.pointsWallet?.reservedPoints)}</dd></div>
-            <div><dt>Completed rides</dt><dd>{formatNumber(request.rideSummary?.completed)}</dd></div>
-            <div><dt>Pending TripOffers</dt><dd>{formatNumber(request.tripOfferSummary?.pending)}</dd></div>
-          </dl>
-          {!request.isDiscoverable && (
-            <div className="alert alert-warning mt-3" role="status">
-              {(request.discoverabilityReasons || []).map(compactStatus).join(", ") || "Driver is blocked from passenger discovery."}
+  return (
+    <div className="flex flex-col gap-6">
+      <div>
+        <button type="button" onClick={() => navigate(-1)}
+          className="flex items-center gap-2 text-sm text-slate-500 hover:text-slate-700 mb-4 transition-colors">
+          <ArrowLeft size={15} /> Back
+        </button>
+        <div className="flex items-start justify-between gap-4 flex-wrap">
+          <div className="flex items-center gap-4">
+            <div className="w-14 h-14 rounded-full bg-[#BE1B2C]/10 flex items-center justify-center text-lg font-bold text-[#BE1B2C]">{initials}</div>
+            <div>
+              <h1 className="text-xl font-semibold text-slate-800">{fullName}</h1>
+              <div className="flex items-center gap-2 mt-1 flex-wrap">
+                <span className="font-mono text-xs text-slate-500 bg-slate-100 px-2 py-0.5 rounded">{request.requestId || request._id || id}</span>
+                <Badge variant={status} />
+              </div>
             </div>
-          )}
-        </section>
-
-        <section className="tile p-4 request-detail-section" aria-labelledby="driver-recent-title">
-          <div className="request-section-heading"><div><span>Activity</span><h2 id="driver-recent-title">Recent rides and offers</h2></div></div>
-          <div className="request-documents-grid">
-            <article className="request-document-card is-available">
-              <div className="request-document-content">
-                <span>Active ride</span>
-                <h4>{request.rideSummary?.activeRide?.reference || "None"}</h4>
-                <span className="request-document-availability available">{compactStatus(request.rideSummary?.activeRide?.status || "No active ride")}</span>
-              </div>
-            </article>
-            <article className="request-document-card is-available">
-              <div className="request-document-content">
-                <span>TripOffers</span>
-                <h4>{formatNumber(request.tripOfferSummary?.total)} total</h4>
-                <span className="request-document-availability available">{formatNumber(request.tripOfferSummary?.pending)} pending</span>
-              </div>
-            </article>
           </div>
-          {request.recentRides?.length ? (
-            <ol className="request-history mt-3">
-              {request.recentRides.slice(0, 5).map((ride) => (
-                <li key={ride._id}>
-                  <span className="request-history__dot badge-primary" aria-hidden="true"/>
-                  <div>
-                    <strong>{ride.reference || ride._id} / {compactStatus(ride.status)}</strong>
-                    <span>{ride.pickup?.address || "Pickup not available"} to {ride.destination?.address || "Destination not available"}</span>
-                    <small>{formatDate(ride.updatedAt || ride.requestedAt)}</small>
-                  </div>
-                </li>
-              ))}
-            </ol>
-          ) : <p className="request-muted mt-3">No ride history returned for this driver.</p>}
-        </section>
+          <Button variant="secondary" size="sm" icon={<RotateCw size={14} />} onClick={loadDetail} loading={loading}>Refresh</Button>
+        </div>
       </div>
 
-      <aside>
-        <section className="tile p-4 request-detail-section request-approval-card" aria-labelledby="approval-one-title">
-          <div className="request-section-heading"><div><span>Approval 1</span><h2 id="approval-one-title">Initial request decision</h2></div><span className={`badge ${statusBadgeClass(basicStatus)}`}>{basicStatus.replaceAll("_", " ").toUpperCase()}</span></div>
-          <dl className="request-review-list"><div><dt>Submitted</dt><dd>{formatDate(request.basicRequestSubmittedAt || request.submittedAt)}</dd></div><div><dt>Approved</dt><dd>{formatDate(request.stages?.basic?.approvedAt || request.approvedAt)}</dd></div><div><dt>Approved by</dt><dd>{stageActorName(request, "basic")}</dd></div>{request.rejectionReason && <div><dt>Rejection reason</dt><dd>{request.rejectionReason}</dd></div>}</dl>
-          <div className="request-stage-actions" aria-label="Request 1 approval actions" aria-busy={busyAction.startsWith("basic-")}>
-            {["pending", "rejected"].includes(basicStatus) && <button type="button" className="btn btn-success" disabled={Boolean(busyAction)} onClick={approve}>{busyAction === "basic-approve" ? "Approving..." : "Approve Request 1"}</button>}
-            {basicStatus === "pending" && <button type="button" className="btn btn-danger" disabled={Boolean(busyAction)} onClick={reject}>{busyAction === "basic-reject" ? "Rejecting..." : "Reject Request 1"}</button>}
-            {basicStatus === "approved" && <button type="button" className="btn btn-warning" disabled={Boolean(busyAction)} onClick={reopen}>{busyAction === "basic-reopen" ? "Reopening..." : "Reopen Request 1"}</button>}
+      <Card className="px-8 py-5">
+        <Stepper steps={steps} />
+      </Card>
+
+      <div className="flex flex-col xl:flex-row gap-5 items-start">
+        <div className="flex-1 min-w-0 flex flex-col gap-4">
+          <Card className="p-5">
+            <h2 className="text-sm font-semibold text-slate-800 mb-3">Request 1 — Initial Application</h2>
+            <div className="grid grid-cols-2 gap-x-8">
+              <StatRow label="Full name" value={fullName} />
+              <StatRow label="Phone" value={`${request.countryCode || ""} ${request.phone || "—"}`.trim()} />
+              <StatRow label="WhatsApp" value={request.whatsappNumber || "—"} />
+              <StatRow label="Email" value={request.email || "—"} />
+              <StatRow label="Submitted" value={formatDate(request.basicRequestSubmittedAt || request.submittedAt)} />
+            </div>
+          </Card>
+
+          <Card className="p-5">
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="text-sm font-semibold text-slate-800">Request 2 — Profile &amp; Documents</h2>
+              <span className="text-xs text-slate-400">{availableDocuments}/{documents.length} available</span>
+            </div>
+            {request.isUpdate && ["pending", "rejected"].includes(profileStatus) && (
+              <div className="mb-3 bg-sky-50 border border-sky-200 rounded-[10px] px-3.5 py-2.5 text-xs text-sky-700">
+                This section shows the driver&apos;s latest submitted changes. Approving Request 2 will apply them to the live profile.
+              </div>
+            )}
+            <div className="grid grid-cols-2 gap-x-8 mb-4">
+              <StatRow label="Address" value={request.address || request.driverLogs?.address || "—"} />
+              <StatRow label="City" value={request.city || request.driverLogs?.city || "—"} />
+              <StatRow label="Vehicle type" value={request.vehicleType || request.driverLogs?.vehicleType || "—"} />
+              <StatRow label="Contract number" value={request.contractNumber || "—"} />
+              <StatRow label="Licence company" value={request.licenseCompany || "—"} />
+              <StatRow label="Completed at" value={formatDate(request.completedAt)} />
+            </div>
+            <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">Documents</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {documents.map((document) => (
+                <DocumentCard key={document.key} document={document} busyDocument={busyDocument} onPreview={openDocument} onDownload={downloadDocument} />
+              ))}
+            </div>
+          </Card>
+
+          <Card className="p-5">
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="text-sm font-semibold text-slate-800">Driver Activity</h2>
+              <Badge variant={request.isDiscoverable ? "active" : "restricted"} label={request.isDiscoverable ? "Discoverable" : "Not discoverable"} />
+            </div>
+            <div className="grid grid-cols-2 gap-x-8">
+              <StatRow label="Availability" value={request.availabilityStatus || "Offline"} />
+              <StatRow label="Presence" value={request.presenceStatus || "Offline"} />
+              <StatRow label="Last GPS" value={`${gpsAge(request)}${request.locationAccuracyM !== null && request.locationAccuracyM !== undefined ? ` / ±${Math.round(Number(request.locationAccuracyM))}m` : ""}`} />
+              <StatRow label="Service area" value={request.currentServiceArea || "—"} />
+              <StatRow label="Points available" value={formatNumber(request.pointsWallet?.availablePoints)} />
+              <StatRow label="Reserved points" value={formatNumber(request.pointsWallet?.reservedPoints)} />
+              <StatRow label="Completed rides" value={formatNumber(request.rideSummary?.completed)} />
+              <StatRow label="Pending trip offers" value={formatNumber(request.tripOfferSummary?.pending)} />
+            </div>
+            {!request.isDiscoverable && (
+              <div className="mt-3 bg-amber-50 border border-amber-200 rounded-[10px] px-3.5 py-2.5 text-xs text-amber-700">
+                {(request.discoverabilityReasons || []).map(compactStatus).join(", ") || "Driver is blocked from passenger discovery."}
+              </div>
+            )}
+          </Card>
+
+          <Card className="p-5">
+            <h2 className="text-sm font-semibold text-slate-800 mb-3">Recent Rides &amp; Offers</h2>
+            <div className="grid grid-cols-2 gap-3 mb-3">
+              <div className="bg-slate-50 rounded-[10px] p-3 border border-slate-100">
+                <p className="text-[10px] text-slate-400 uppercase tracking-wider mb-1">Active ride</p>
+                <p className="text-sm font-semibold text-slate-700">{request.rideSummary?.activeRide?.reference || "None"}</p>
+                <p className="text-xs text-slate-400">{compactStatus(request.rideSummary?.activeRide?.status || "No active ride")}</p>
+              </div>
+              <div className="bg-slate-50 rounded-[10px] p-3 border border-slate-100">
+                <p className="text-[10px] text-slate-400 uppercase tracking-wider mb-1">Trip offers</p>
+                <p className="text-sm font-semibold text-slate-700">{formatNumber(request.tripOfferSummary?.total)} total</p>
+                <p className="text-xs text-slate-400">{formatNumber(request.tripOfferSummary?.pending)} pending</p>
+              </div>
+            </div>
+            {request.recentRides?.length ? (
+              <div className="flex flex-col gap-2">
+                {request.recentRides.slice(0, 5).map((ride) => (
+                  <div key={ride._id} className="flex items-start gap-3 bg-white rounded-[10px] border border-slate-100 px-3.5 py-2.5">
+                    <Clock size={14} className="text-slate-300 shrink-0 mt-0.5" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-semibold text-slate-700">{ride.reference || ride._id} · {compactStatus(ride.status)}</p>
+                      <p className="text-xs text-slate-400 truncate">{ride.pickup?.address || "Pickup not available"} → {ride.destination?.address || "Destination not available"}</p>
+                    </div>
+                    <span className="text-[11px] text-slate-400 shrink-0">{formatDate(ride.updatedAt || ride.requestedAt)}</span>
+                  </div>
+                ))}
+              </div>
+            ) : <p className="text-xs text-slate-400">No ride history returned for this driver.</p>}
+          </Card>
+        </div>
+
+        <div className="w-full xl:w-80 shrink-0 flex flex-col gap-4">
+          <Card className="p-5">
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="text-sm font-semibold text-slate-800">Approval 1</h2>
+              <Badge variant={basicStatus} />
+            </div>
+            <StatRow label="Approved" value={formatDate(request.stages?.basic?.approvedAt || request.approvedAt)} />
+            <StatRow label="Approved by" value={stageActorName(request, "basic")} />
+            {request.rejectionReason && <StatRow label="Rejection reason" value={request.rejectionReason} />}
+            <div className="flex flex-col gap-2 mt-3">
+              {["pending", "rejected"].includes(basicStatus) && (
+                <Button variant="primary" size="sm" disabled={Boolean(busyAction)} loading={busyAction === "basic-approve"} icon={<CheckCircle2 size={13} />} onClick={approve}>Approve Request 1</Button>
+              )}
+              {basicStatus === "pending" && (
+                <Button variant="danger" size="sm" disabled={Boolean(busyAction)} icon={<XCircle size={13} />} onClick={reject}>Reject Request 1</Button>
+              )}
+              {basicStatus === "approved" && (
+                <Button variant="warning" size="sm" disabled={Boolean(busyAction)} loading={busyAction === "basic-reopen"} icon={<RotateCw size={13} />} onClick={reopen}>Reopen Request 1</Button>
+              )}
+            </div>
+          </Card>
+
+          <Card className="p-5">
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="text-sm font-semibold text-slate-800">Approval 2</h2>
+              <Badge variant={profileStatus} />
+            </div>
+            <StatRow label="Approved" value={formatDate(request.stages?.profile?.approvedAt || request.profileApprovedAt)} />
+            <StatRow label="Approved by" value={stageActorName(request, "profile")} />
+            {request.profileRejectionReason && <StatRow label="Rejection reason" value={request.profileRejectionReason} />}
+            {profileStatus === "not_submitted" ? (
+              <p className="text-xs text-slate-400 mt-2">The driver has not submitted Request 2 yet.</p>
+            ) : (
+              <div className="flex flex-col gap-2 mt-3">
+                {profileStatus === "pending" && (
+                  <Button variant="primary" size="sm" disabled={Boolean(busyAction)} loading={busyAction === "profile-approve"} icon={<CheckCircle2 size={13} />} onClick={approveProfile}>Approve Request 2</Button>
+                )}
+                {profileStatus === "pending" && (
+                  <Button variant="danger" size="sm" disabled={Boolean(busyAction)} icon={<XCircle size={13} />} onClick={rejectProfile}>Reject Request 2</Button>
+                )}
+                {profileStatus === "approved" && (
+                  <Button variant="warning" size="sm" disabled={Boolean(busyAction)} loading={busyAction === "profile-reopen"} icon={<RotateCw size={13} />} onClick={reopenProfile}>Reopen Request 2</Button>
+                )}
+              </div>
+            )}
+          </Card>
+
+          <Card className="p-5">
+            <h2 className="text-sm font-semibold text-slate-800 mb-3">Overall Decision</h2>
+            <StatRow label="Status" value={<Badge variant={status} />} />
+            <StatRow label="Approved by" value={request.approvedBy?.fullName || request.approvedByName || "—"} />
+            <StatRow label="Completed" value={formatDate(request.completedAt)} />
+          </Card>
+
+          <Card className="p-5">
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="text-sm font-semibold text-slate-800">Audit Log</h2>
+              <span className="text-xs text-slate-400">{history.length} events</span>
+            </div>
+            {historyError ? (
+              <div className="bg-amber-50 border border-amber-200 rounded-[10px] px-3 py-2 text-xs text-amber-700">{historyError}</div>
+            ) : history.length === 0 ? (
+              <p className="text-xs text-slate-400">No status changes have been recorded yet.</p>
+            ) : (
+              <div className="relative">
+                <div className="absolute left-3 top-0 bottom-0 w-px bg-slate-200" />
+                <div className="flex flex-col gap-4">
+                  {history.map((entry) => (
+                    <div key={entry._id || `${entry.occurredAt}-${entry.action}`} className="flex items-start gap-3">
+                      <div className="w-6 h-6 rounded-full bg-white border-2 border-slate-200 flex items-center justify-center shrink-0 relative z-10">
+                        {String(entry.newStatus).includes("approv") ? <CheckCircle2 size={12} className="text-green-500" /> : String(entry.newStatus).includes("reject") ? <XCircle size={12} className="text-red-500" /> : <Clock size={12} className="text-slate-400" />}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-semibold text-slate-700">{entry.requestStage === "profile" ? "Request 2" : "Request 1"} · {String(entry.action || "status changed").replaceAll("_", " ")}</p>
+                        <p className="text-[11px] text-slate-400">{entry.oldStatus} → {entry.newStatus}</p>
+                        <p className="text-[11px] text-slate-400">{entry.actorName || entry.actorEmail || entry.actorType || "System"} · {formatDate(entry.occurredAt || entry.createdAt)}</p>
+                        {entry.reason && <p className="text-xs text-slate-500 italic mt-0.5">&quot;{entry.reason}&quot;</p>}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </Card>
+        </div>
+      </div>
+
+      {preview && <PreviewDialog preview={preview} onClose={closePreview} />}
+
+      <ConfirmDialog
+        open={rejectDialog === "basic"} onClose={() => setRejectDialog(null)}
+        onConfirm={submitReject} title="Reject Request 1" confirmLabel="Reject Request 1" variant="danger"
+        message={
+          <div className="flex flex-col gap-3">
+            <p>You are rejecting Request 1 for <strong>{fullName}</strong>.</p>
+            <textarea value={rejectReason} onChange={(e) => setRejectReason(e.target.value)} rows={3}
+              placeholder="Reason (optional)…"
+              className="w-full bg-white border border-slate-200 rounded-[10px] p-3 text-sm text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-red-700/20 focus:border-red-400 resize-none" />
           </div>
-        </section>
+        }
+      />
 
-        <section className="tile p-4 request-detail-section request-approval-card" aria-labelledby="approval-two-title">
-          <div className="request-section-heading"><div><span>Approval 2</span><h2 id="approval-two-title">Profile and documents decision</h2></div><span className={`badge ${statusBadgeClass(profileStatus)}`}>{profileStatus.replaceAll("_", " ").toUpperCase()}</span></div>
-          <dl className="request-review-list"><div><dt>Submitted</dt><dd>{formatDate(request.stages?.profile?.submittedAt || request.profileSubmittedAt)}</dd></div><div><dt>Approved</dt><dd>{formatDate(request.stages?.profile?.approvedAt || request.profileApprovedAt)}</dd></div><div><dt>Approved by</dt><dd>{stageActorName(request, "profile")}</dd></div>{request.profileRejectionReason && <div><dt>Rejection reason</dt><dd>{request.profileRejectionReason}</dd></div>}</dl>
-          {profileStatus === "not_submitted" ? <p className="request-muted">The driver has not submitted Request 2 yet.</p> : <div className="request-stage-actions" aria-label="Request 2 approval actions" aria-busy={busyAction.startsWith("profile-")}>
-            {profileStatus === "pending" && <button type="button" className="btn btn-success" disabled={Boolean(busyAction)} onClick={approveProfile}>{busyAction === "profile-approve" ? "Approving..." : "Approve Request 2"}</button>}
-            {profileStatus === "pending" && <button type="button" className="btn btn-danger" disabled={Boolean(busyAction)} onClick={rejectProfile}>{busyAction === "profile-reject" ? "Rejecting..." : "Reject Request 2"}</button>}
-            {profileStatus === "approved" && <button type="button" className="btn btn-warning" disabled={Boolean(busyAction)} onClick={reopenProfile}>{busyAction === "profile-reopen" ? "Reopening..." : "Reopen Request 2"}</button>}
-          </div>}
-        </section>
+      <Modal open={rejectDialog === "profile"} onClose={() => setRejectDialog(null)} title="Reject Request 2">
+        <div className="flex flex-col gap-4">
+          <div className="bg-red-50 border border-red-200 rounded-[10px] p-3 text-sm text-red-700">
+            You are rejecting Request 2 for <strong>{fullName}</strong>. Your reason will be sent to the driver.
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <label className="text-sm font-medium text-slate-700">Rejection reason <span className="text-red-500">*</span></label>
+            <textarea value={rejectReason} onChange={(e) => setRejectReason(e.target.value)} rows={4}
+              placeholder="Explain what the driver needs to correct…"
+              className="w-full bg-white border border-slate-200 rounded-[10px] p-3 text-sm text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-red-400/20 focus:border-red-400 resize-none" />
+          </div>
+          <div className="flex justify-end gap-3">
+            <Button variant="secondary" onClick={() => setRejectDialog(null)}>Cancel</Button>
+            <Button variant="danger" onClick={submitReject} disabled={!rejectReason.trim()} loading={busyAction === "profile-reject"}>Reject Request 2</Button>
+          </div>
+        </div>
+      </Modal>
 
-        <section className="tile p-4 request-detail-section" aria-labelledby="review-title">
-          <div className="request-section-heading"><div><span>Review</span><h2 id="review-title">Decision</h2></div><span className={`badge ${statusBadgeClass(status)}`}>{status.toUpperCase()}</span></div>
-          <dl className="request-review-list"><div><dt>Submitted</dt><dd>{formatDate(request.basicRequestSubmittedAt || request.submittedAt)}</dd></div><div><dt>Approved</dt><dd>{formatDate(request.approvedAt)}</dd></div><div><dt>Approved by</dt><dd>{request.approvedBy?.fullName || request.approvedByName || "Not available"}</dd></div><div><dt>Completed</dt><dd>{formatDate(request.completedAt)}</dd></div>{request.rejectionReason && <div><dt>Rejection reason</dt><dd>{request.rejectionReason}</dd></div>}</dl>
-        </section>
-
-        <section className="tile p-4 request-detail-section" aria-labelledby="history-title">
-          <div className="request-section-heading"><div><span>Audit log</span><h2 id="history-title">History</h2></div><span>{history.length} events</span></div>
-          {historyError ? <div className="alert alert-warning" role="alert">{historyError}</div> : history.length === 0 ? <p className="request-muted">No status changes have been recorded yet.</p> : <ol className="request-history">
-            {history.map((entry) => <li key={entry._id || `${entry.occurredAt}-${entry.action}`}><span className={`request-history__dot ${statusBadgeClass(entry.newStatus)}`} aria-hidden="true"/><div><strong>{entry.requestStage === "profile" ? "Request 2" : "Request 1"} · {String(entry.action || "status changed").replaceAll("_", " ")}</strong><span>{entry.oldStatus} → {entry.newStatus}</span><small>{entry.actorName || entry.actorEmail || entry.actorType || "System"} · {formatDate(entry.occurredAt || entry.createdAt)}</small>{entry.reason && <p>{entry.reason}</p>}</div></li>)}
-          </ol>}
-        </section>
-      </aside>
+      {toastMsg && <Toast message={toastMsg} type="success" onClose={() => setToastMsg(null)} />}
     </div>
-
-    {preview && <PreviewDialog preview={preview} onClose={closePreview}/>}
-  </main>;
+  );
 };
 
 export default DriverDetail;

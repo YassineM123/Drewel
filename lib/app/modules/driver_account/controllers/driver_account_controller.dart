@@ -19,6 +19,7 @@ import '../../../data/apis/communication_api_client.dart';
 import '../../../data/repositories/driver_account_repository.dart';
 import '../../../routes/app_pages.dart';
 import '../../communication/controllers/call_state_controller.dart';
+import '../../driver_home/controllers/driver_home_controller.dart';
 import '../../points/controllers/driver_points_controller.dart';
 
 class DriverPerformanceSummary {
@@ -317,5 +318,17 @@ class DriverAccountController extends GetxController {
       ApiKeyConstants.profileImage,
       next.profileImageUrl ?? '',
     );
+
+    // Keep the nav drawer (DriverHomeController.userData) in sync so edited
+    // name/photo show up immediately instead of only after the next
+    // full driver-details refetch.
+    if (Get.isRegistered<DriverHomeController>()) {
+      Get.find<DriverHomeController>().userData.value = <String, String>{
+        ApiKeyConstants.phone: next.phone ?? '',
+        ApiKeyConstants.countryCode: next.countryCode ?? '',
+        ApiKeyConstants.profileImage: next.profileImageUrl ?? '',
+        ApiKeyConstants.fullName: next.fullName ?? '',
+      };
+    }
   }
 }

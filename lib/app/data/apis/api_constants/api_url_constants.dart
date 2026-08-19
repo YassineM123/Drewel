@@ -68,6 +68,7 @@ class ApiUrlConstants {
   static String get endPointOfDriverDetails =>
       '${baseUrl}driver/get-driver-details';
   static String get endPointOfUserDetails => '${baseUrl}users/get-user-details';
+  static String get endPointOfCurrentUser => '${baseUrl}users/get-user';
   static String get endPointOfAllDrivers => '${baseUrl}driver/all-drivers';
   static String get endPointOfAvailableDrivers => '${baseUrl}driver/available';
   static String get endPointOfGetBanner => '${baseUrl}banner/get-all';

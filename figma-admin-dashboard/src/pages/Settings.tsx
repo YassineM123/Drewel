@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { SectionHeader, Card, StatRow, Button, Modal, Toast } from "../components/ui";
-import { mockAdminUser } from "../data/mock";
+import { getAdminSettings } from "../api";
 
 const ROLE = "owner";
 
@@ -42,6 +42,23 @@ export default function Settings() {
   const [loading, setLoading] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const [notifs, setNotifs] = useState<Record<NotifKey, boolean>>(DEFAULT_NOTIFS);
+  const [adminUser, setAdminUser] = useState<any>(null);
+  const [_fetching, setFetching] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const data = await getAdminSettings();
+        if (!cancelled) setAdminUser(data?.user ?? data?.admin ?? data);
+      } catch (err) {
+        console.error("Failed to load admin settings", err);
+      } finally {
+        if (!cancelled) setFetching(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
 
   const toggleNotif = (key: NotifKey) => {
     setNotifs(prev => {
@@ -70,9 +87,9 @@ export default function Settings() {
       {/* Account */}
       <Card className="p-5">
         <h2 className="text-sm font-semibold text-slate-700 mb-4">Account</h2>
-        <StatRow label="Full Name" value={mockAdminUser.name} />
-        <StatRow label="Email" value={mockAdminUser.email} />
-        <StatRow label="Role" value={<span className="text-amber-700 font-medium text-xs bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full">{ROLE === "owner" ? "Owner" : mockAdminUser.role}</span>} />
+        <StatRow label="Full Name" value={adminUser?.name ?? "—"} />
+        <StatRow label="Email" value={adminUser?.email ?? "—"} />
+        <StatRow label="Role" value={<span className="text-amber-700 font-medium text-xs bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full">{ROLE === "owner" ? "Owner" : (adminUser?.role ?? "—")}</span>} />
         <StatRow label="Two-Factor Auth" value={<span className="text-green-600 font-medium text-xs">Enabled</span>} />
         <div className="mt-4 flex gap-2">
           <Button variant="secondary" size="sm">Edit Profile</Button>

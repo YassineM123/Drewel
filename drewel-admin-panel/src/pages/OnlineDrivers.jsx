@@ -1,52 +1,28 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import Swal from "sweetalert2";
-import TableUser from "../components/TableUser";
+import { Search, RefreshCw, Eye, CheckCircle2, XCircle } from "lucide-react";
 import { getOnlineDriverList, updateDriverReviewStatus } from "../utils/api";
 import { useSocket } from "../context/SocketContext";
 import {
-  applyPresence,
-  mergePresenceSnapshot,
-  normalizeDriverPresence,
-  presenceIsOnline,
-  presenceVersion,
-  shouldApplyPresence,
+  applyPresence, mergePresenceSnapshot, normalizeDriverPresence,
+  presenceIsOnline, presenceVersion, shouldApplyPresence,
 } from "../utils/driverPresence";
-
-const statusBadgeClass = (status) => {
-  switch ((status || "").toLowerCase()) {
-    case "approved":
-      return "badge badge-success";
-    case "completed":
-      return "badge badge-primary";
-    case "rejected":
-      return "badge badge-danger";
-    default:
-      return "badge badge-warning";
-  }
-};
+import {
+  Badge, OnlineBadge, Button, Card, KpiCard, Select, Th, Td, Tr,
+  EmptyState, ErrorState, LoadingState, SectionHeader,
+} from "../components/ui";
 
 const reasonLabels = {
-  not_approved: "Not approved",
-  restricted: "Restricted",
-  deleted: "Deleted",
-  profile_incomplete: "Profile incomplete",
-  legacy_online_flag_off: "Online flag off",
-  not_available: "Not available",
-  active_ride: "On active ride",
-  missing_current_location: "No GPS point",
-  missing_location_time: "No GPS time",
-  stale_gps: "Stale GPS",
-  future_gps: "Future GPS",
-  missing_accuracy: "No accuracy",
-  low_accuracy: "Low GPS accuracy",
-  missing_service_area: "No service area",
+  not_approved: "Not approved", restricted: "Restricted", deleted: "Deleted",
+  profile_incomplete: "Profile incomplete", legacy_online_flag_off: "Online flag off",
+  not_available: "Not available", active_ride: "On active ride",
+  missing_current_location: "No GPS point", missing_location_time: "No GPS time",
+  stale_gps: "Stale GPS", future_gps: "Future GPS", missing_accuracy: "No accuracy",
+  low_accuracy: "Low GPS accuracy", missing_service_area: "No service area",
 };
 
-const driverName = (driver) =>
-  `${driver.firstName || ""} ${driver.lastName || ""}`.trim() ||
-  driver.fullName ||
-  "N/A";
+const driverName = (driver) => `${driver.firstName || ""} ${driver.lastName || ""}`.trim() || driver.fullName || "N/A";
 
 const maskPhone = (value) => {
   const phone = String(value || "").trim();
@@ -65,16 +41,11 @@ const formatLocationAge = (driver) => {
 
 const gpsTone = (driver) => {
   const reasons = new Set(driver.discoverabilityReasons || []);
-  if (reasons.has("stale_gps") || reasons.has("future_gps")) return "warning";
-  if (
-    reasons.has("missing_current_location") ||
-    reasons.has("missing_location_time") ||
-    reasons.has("low_accuracy") ||
-    reasons.has("missing_accuracy")
-  ) {
-    return "danger";
+  if (reasons.has("stale_gps") || reasons.has("future_gps")) return "bg-amber-50 text-amber-700 border-amber-200";
+  if (reasons.has("missing_current_location") || reasons.has("missing_location_time") || reasons.has("low_accuracy") || reasons.has("missing_accuracy")) {
+    return "bg-red-50 text-red-700 border-red-200";
   }
-  return "success";
+  return "bg-green-50 text-green-700 border-green-200";
 };
 
 const OnlineDrivers = () => {
@@ -86,29 +57,21 @@ const OnlineDrivers = () => {
   const [search, setSearch] = useState("");
   const [vehicleFilter, setVehicleFilter] = useState("all");
   const [discoverabilityFilter, setDiscoverabilityFilter] = useState("all");
-  const [openDropdown, setOpenDropdown] = useState(null);
   const presenceVersions = useRef(new Map());
   const fetchInFlight = useRef(false);
   const driversRef = useRef([]);
 
-  useEffect(() => {
-    driversRef.current = drivers;
-  }, [drivers]);
+  useEffect(() => { driversRef.current = drivers; }, [drivers]);
 
   const fetchDrivers = useCallback(async (silent = false) => {
     if (fetchInFlight.current) return;
     fetchInFlight.current = true;
     const versionsAtRequest = new Map(presenceVersions.current);
     try {
-      if (!silent) {
-        setLoading(true);
-        setLoadError("");
-      }
+      if (!silent) { setLoading(true); setLoadError(""); }
       const list = await getOnlineDriverList();
       setDrivers((current) => {
-        const currentById = new Map(
-          current.map((driver) => [String(driver._id), driver])
-        );
+        const currentById = new Map(current.map((driver) => [String(driver._id), driver]));
         const snapshotIds = new Set();
         const next = [];
         list.forEach((rawDriver) => {
@@ -117,17 +80,8 @@ const OnlineDrivers = () => {
           snapshotIds.add(driverId);
           const latestVersion = presenceVersions.current.get(driverId);
           const currentDriver = currentById.get(driverId);
-          if (
-            !currentDriver &&
-            presenceVersion(latestVersion) > snapshot.presenceVersion
-          ) {
-            return;
-          }
-          const merged = mergePresenceSnapshot(
-            currentDriver,
-            snapshot,
-            latestVersion
-          );
+          if (!currentDriver && presenceVersion(latestVersion) > snapshot.presenceVersion) return;
+          const merged = mergePresenceSnapshot(currentDriver, snapshot, latestVersion);
           if (snapshot.presenceVersion >= presenceVersion(latestVersion)) {
             presenceVersions.current.set(driverId, snapshot.presenceVersion);
           }
@@ -143,23 +97,15 @@ const OnlineDrivers = () => {
         return next;
       });
     } catch (error) {
-      const message =
-        error?.response?.data?.message ||
-        error?.message ||
-        "Failed to load online drivers.";
-      if (!silent) {
-        setDrivers([]);
-        setLoadError(message);
-      }
+      const message = error?.response?.data?.message || error?.message || "Failed to load online drivers.";
+      if (!silent) { setDrivers([]); setLoadError(message); }
     } finally {
       fetchInFlight.current = false;
       if (!silent) setLoading(false);
     }
   }, []);
 
-  useEffect(() => {
-    fetchDrivers();
-  }, [fetchDrivers]);
+  useEffect(() => { fetchDrivers(); }, [fetchDrivers]);
 
   useEffect(() => {
     const timer = window.setInterval(() => fetchDrivers(true), 30000);
@@ -177,15 +123,11 @@ const OnlineDrivers = () => {
       if (!shouldApplyPresence(currentVersion, update)) return;
       presenceVersions.current.set(driverId, presenceVersion(update.version));
 
-      const found = driversRef.current.some(
-        (driver) => String(driver._id) === driverId
-      );
+      const found = driversRef.current.some((driver) => String(driver._id) === driverId);
       setDrivers((current) => {
         const index = current.findIndex((driver) => String(driver._id) === driverId);
         if (!presenceIsOnline(update)) {
-          return index !== -1
-            ? current.filter((_, itemIndex) => itemIndex !== index)
-            : current;
+          return index !== -1 ? current.filter((_, itemIndex) => itemIndex !== index) : current;
         }
         if (index === -1) return current;
         const next = current.slice();
@@ -204,272 +146,166 @@ const OnlineDrivers = () => {
   const filteredDrivers = useMemo(() => {
     const term = search.trim().toLowerCase();
     return drivers.filter((driver) => {
-      if (
-        vehicleFilter !== "all" &&
-        String(driver.vehicleType || "").toLowerCase() !== vehicleFilter
-      ) {
-        return false;
-      }
-      if (discoverabilityFilter === "discoverable" && !driver.isDiscoverable) {
-        return false;
-      }
-      if (discoverabilityFilter === "blocked" && driver.isDiscoverable) {
-        return false;
-      }
+      if (vehicleFilter !== "all" && String(driver.vehicleType || "").toLowerCase() !== vehicleFilter) return false;
+      if (discoverabilityFilter === "discoverable" && !driver.isDiscoverable) return false;
+      if (discoverabilityFilter === "blocked" && driver.isDiscoverable) return false;
       if (!term) return true;
       const name = driverName(driver);
       const phone = `${driver.whatsappNumber || driver.phone || ""}`;
-      return (
-        name.toLowerCase().includes(term) ||
-        phone.toLowerCase().includes(term)
-      );
+      return name.toLowerCase().includes(term) || phone.toLowerCase().includes(term);
     });
   }, [drivers, search, vehicleFilter, discoverabilityFilter]);
 
   const vehicleOptions = useMemo(() => {
-    const values = new Set(
-      drivers
-        .map((driver) => String(driver.vehicleType || "").trim().toLowerCase())
-        .filter(Boolean)
-    );
-    return ["all", ...Array.from(values).sort()];
+    const values = new Set(drivers.map((driver) => String(driver.vehicleType || "").trim().toLowerCase()).filter(Boolean));
+    return [{ value: "all", label: "All vehicles" }, ...Array.from(values).sort().map((v) => ({ value: v, label: v }))];
   }, [drivers]);
 
   const kpis = useMemo(() => {
     const blocked = drivers.filter((driver) => !driver.isDiscoverable).length;
     const stale = drivers.filter((driver) =>
-      (driver.discoverabilityReasons || []).some((reason) =>
-        ["stale_gps", "missing_current_location", "missing_location_time", "low_accuracy"].includes(reason)
-      )
+      (driver.discoverabilityReasons || []).some((reason) => ["stale_gps", "missing_current_location", "missing_location_time", "low_accuracy"].includes(reason))
     ).length;
     const busy = drivers.filter((driver) => driver.availabilityStatus === "Busy").length;
-    return {
-      online: drivers.length,
-      discoverable: drivers.length - blocked,
-      busy,
-      stale,
-    };
+    return { online: drivers.length, discoverable: drivers.length - blocked, busy, stale };
   }, [drivers]);
 
   const updateStatus = async (driver, status, rejectionReason = "") => {
     try {
-      await updateDriverReviewStatus(driver._id, {
-        status,
-        rejection_reason: rejectionReason,
-      });
+      await updateDriverReviewStatus(driver._id, { status, rejection_reason: rejectionReason });
       Swal.fire("Success", "Driver status updated.", "success");
       fetchDrivers();
     } catch (error) {
-      Swal.fire(
-        "Error",
-        error?.response?.data?.message || "Failed to update status.",
-        "error"
-      );
+      Swal.fire("Error", error?.response?.data?.message || "Failed to update status.", "error");
     }
   };
 
   const handleReject = async (driver) => {
     const result = await Swal.fire({
-      title: "Reject Driver Request",
-      input: "text",
-      inputLabel: "Reason (optional)",
-      showCancelButton: true,
-      confirmButtonText: "Reject",
-      confirmButtonColor: "#dc3545",
+      title: "Reject Driver Request", input: "text", inputLabel: "Reason (optional)",
+      showCancelButton: true, confirmButtonText: "Reject", confirmButtonColor: "#dc3545",
     });
     if (!result.isConfirmed) return;
     await updateStatus(driver, "rejected", result.value || "");
   };
 
   return (
-    <main className="app-content">
-      <div className="app-title tile p-3 d-flex justify-content-between align-items-center flex-wrap gap-2">
-        <div>
-          <h1>Online Drivers</h1>
-          <p className="mb-0">
-            Live admin presence with marketplace discoverability and GPS quality checks.
-            {isConnected ? (
-              <span className="text-success ms-2">Live</span>
-            ) : (
-              <span className="text-danger ms-2">Socket disconnected</span>
-            )}
-          </p>
-        </div>
-        <button
-          type="button"
-          className="btn btn-outline-primary btn-sm"
-          onClick={() => fetchDrivers(false)}
-          disabled={loading}
-        >
-          {loading ? "Refreshing..." : "Refresh"}
-        </button>
+    <div className="flex flex-col gap-6">
+      <SectionHeader
+        title="Online Drivers"
+        description="Live admin presence with marketplace discoverability and GPS quality checks."
+        actions={
+          <>
+            <span className={`inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1.5 rounded-full border
+              ${isConnected ? "bg-green-50 text-green-700 border-green-200" : "bg-red-50 text-red-700 border-red-200"}`}>
+              <span className={`w-1.5 h-1.5 rounded-full ${isConnected ? "bg-green-500 live-pulse" : "bg-red-500"}`} />
+              {isConnected ? "Live" : "Socket disconnected"}
+            </span>
+            <Button variant="secondary" size="sm" icon={<RefreshCw size={14} className={loading ? "animate-spin" : ""} />} onClick={() => fetchDrivers(false)} disabled={loading}>Refresh</Button>
+          </>
+        }
+      />
+
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <KpiCard label="Online Now" value={kpis.online} />
+        <KpiCard label="Discoverable" value={kpis.discoverable} />
+        <KpiCard label="On Trip" value={kpis.busy} />
+        <KpiCard label="GPS warnings" value={kpis.stale} urgent={kpis.stale > 0} />
       </div>
 
-      <section className="online-driver-kpis" aria-label="Online driver status">
-        <article className="tile online-driver-kpi">
-          <span>Online now</span>
-          <strong>{kpis.online}</strong>
-        </article>
-        <article className="tile online-driver-kpi online-driver-kpi--success">
-          <span>Discoverable</span>
-          <strong>{kpis.discoverable}</strong>
-        </article>
-        <article className="tile online-driver-kpi">
-          <span>On trip</span>
-          <strong>{kpis.busy}</strong>
-        </article>
-        <article className={`tile online-driver-kpi ${kpis.stale ? "online-driver-kpi--warning" : ""}`}>
-          <span>GPS warnings</span>
-          <strong>{kpis.stale}</strong>
-        </article>
-      </section>
-
-      <div className="tile p-3 mt-3">
-        <div className="online-driver-toolbar mb-3">
-          <input
-            type="text"
-            className="form-control"
-            style={{ maxWidth: 300 }}
-            placeholder="Search name / WhatsApp"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
-          <select
-            className="form-control"
-            style={{ maxWidth: 180 }}
-            value={vehicleFilter}
-            onChange={(event) => setVehicleFilter(event.target.value)}
-            aria-label="Vehicle filter"
-          >
-            {vehicleOptions.map((option) => (
-              <option key={option} value={option}>
-                {option === "all" ? "All vehicles" : option}
-              </option>
-            ))}
-          </select>
-          <select
-            className="form-control"
-            style={{ maxWidth: 210 }}
-            value={discoverabilityFilter}
-            onChange={(event) => setDiscoverabilityFilter(event.target.value)}
-            aria-label="Discoverability filter"
-          >
-            <option value="all">All online drivers</option>
-            <option value="discoverable">Discoverable</option>
-            <option value="blocked">Blocked from discovery</option>
-          </select>
+      <Card className="p-4">
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="relative flex-1 min-w-52 max-w-sm">
+            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+            <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search name / WhatsApp"
+              className="w-full h-10 bg-white border border-slate-200 rounded-[10px] pl-9 pr-4 text-sm text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-red-700/20 focus:border-red-400 transition-all" />
+          </div>
+          <Select value={vehicleFilter} onChange={setVehicleFilter} options={vehicleOptions} className="w-40" aria-label="Vehicle filter" />
+          <Select value={discoverabilityFilter} onChange={setDiscoverabilityFilter} className="w-52" aria-label="Discoverability filter"
+            options={[{ value: "all", label: "All online drivers" }, { value: "discoverable", label: "Discoverable" }, { value: "blocked", label: "Blocked from discovery" }]} />
         </div>
+      </Card>
 
+      <Card>
         {loading ? (
-          <div className="d-flex justify-content-center align-items-center" style={{ minHeight: 200 }}>
-            <div className="loader" />
-          </div>
+          <LoadingState label="Loading online drivers…" />
         ) : loadError ? (
-          <div className="alert alert-danger text-center" role="alert">
-            <div>{loadError}</div>
-            <button
-              type="button"
-              className="btn btn-outline-danger btn-sm mt-2"
-              onClick={fetchDrivers}
-            >
-              Retry
-            </button>
-          </div>
+          <ErrorState description={loadError} action={<Button variant="secondary" size="sm" onClick={() => fetchDrivers()}>Retry</Button>} />
+        ) : filteredDrivers.length === 0 ? (
+          <EmptyState title="No online drivers found" description="Try adjusting your search or filters." />
         ) : (
-          <div className="table-responsive">
-            <table className="table table-bordered table-hover">
+          <div className="overflow-x-auto">
+            <table className="w-full">
               <thead>
                 <tr>
-                  <th>#</th>
-                  <th>Name</th>
-                  <th>Vehicle</th>
-                  <th>WhatsApp</th>
-                  <th>Status</th>
-                  <th>Presence</th>
-                  <th>Last heartbeat</th>
-                  <th>Discoverability</th>
-                  <th>GPS</th>
-                  <th>Actions</th>
+                  <Th>Name</Th>
+                  <Th>Vehicle</Th>
+                  <Th>WhatsApp</Th>
+                  <Th>Status</Th>
+                  <Th>Last Heartbeat</Th>
+                  <Th>Discoverability</Th>
+                  <Th>GPS</Th>
+                  <Th>Actions</Th>
                 </tr>
               </thead>
               <tbody>
-                {filteredDrivers.map((driver, index) => {
-                  const name = driverName(driver);
+                {filteredDrivers.map((driver) => {
                   const reasons = driver.discoverabilityReasons || [];
                   const primaryReason = reasons[0];
-                  const gpsClass = `badge badge-${gpsTone(driver)}`;
                   return (
-                    <tr key={driver._id}>
-                      <td>{index + 1}</td>
-                      <td>{name}</td>
-                      <td>
-                        <div>{driver.vehicleType || "N/A"}</div>
-                        <small className="text-muted">
-                          {driver.vehicleModel || driver.registration || ""}
-                        </small>
-                      </td>
-                      <td>{maskPhone(driver.whatsappNumber || driver.phone)}</td>
-                      <td>
-                        <span className={statusBadgeClass(driver.status)}>
-                          {(driver.status || "pending").toUpperCase()}
-                        </span>
-                      </td>
-                      <td>
-                        <span className="badge badge-success">ONLINE</span>
-                      </td>
-                      <td>
-                        {driver.presenceLastHeartbeatAt
-                          ? new Date(driver.presenceLastHeartbeatAt).toLocaleTimeString()
-                          : "Active"}
-                      </td>
-                      <td>
+                    <Tr key={driver._id}>
+                      <Td>
+                        <div className="flex items-center gap-2.5">
+                          <div className="w-8 h-8 rounded-full bg-[#BE1B2C]/10 flex items-center justify-center text-[11px] font-bold text-[#BE1B2C] shrink-0">
+                            {driverName(driver).split(/\s+/).filter(Boolean).map((p) => p[0]?.toUpperCase()).slice(0, 2).join("") || "?"}
+                          </div>
+                          <span className="text-sm font-medium text-slate-800">{driverName(driver)}</span>
+                        </div>
+                      </Td>
+                      <Td>
+                        <div className="text-sm text-slate-700">{driver.vehicleType || "N/A"}</div>
+                        <div className="text-xs text-slate-400">{driver.vehicleModel || driver.registration || ""}</div>
+                      </Td>
+                      <Td><span className="font-mono text-xs text-slate-600">{maskPhone(driver.whatsappNumber || driver.phone)}</span></Td>
+                      <Td><Badge variant={String(driver.status || "pending").toLowerCase()} /></Td>
+                      <Td>{driver.presenceLastHeartbeatAt ? new Date(driver.presenceLastHeartbeatAt).toLocaleTimeString() : "Active"}</Td>
+                      <Td>
                         {driver.isDiscoverable ? (
-                          <span className="badge badge-success">DISCOVERABLE</span>
+                          <OnlineBadge status="online_available" />
                         ) : (
-                          <div className="online-driver-reasons">
-                            <span className="badge badge-warning">BLOCKED</span>
-                            <small title={reasons.map((reason) => reasonLabels[reason] || reason).join(", ")}>
-                              {reasonLabels[primaryReason] || "Review required"}
-                              {reasons.length > 1 ? ` +${reasons.length - 1}` : ""}
-                            </small>
+                          <div className="flex flex-col gap-0.5">
+                            <span className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded-full w-fit">BLOCKED</span>
+                            <span className="text-[11px] text-slate-400" title={reasons.map((reason) => reasonLabels[reason] || reason).join(", ")}>
+                              {reasonLabels[primaryReason] || "Review required"}{reasons.length > 1 ? ` +${reasons.length - 1}` : ""}
+                            </span>
                           </div>
                         )}
-                      </td>
-                      <td>
-                        <span className={gpsClass}>{formatLocationAge(driver)}</span>
+                      </Td>
+                      <Td>
+                        <span className={`inline-flex items-center text-xs font-semibold px-2 py-0.5 rounded-full border ${gpsTone(driver)}`}>{formatLocationAge(driver)}</span>
                         {Number.isFinite(Number(driver.locationAccuracyM)) && (
-                          <small className="text-muted d-block">
-                            +/-{Math.round(Number(driver.locationAccuracyM))}m
-                          </small>
+                          <div className="text-[11px] text-slate-400 mt-0.5">±{Math.round(Number(driver.locationAccuracyM))}m</div>
                         )}
-                      </td>
-                      <td>
-                        <TableUser
-                          user={driver}
-                          openDropdown={openDropdown}
-                          setOpenDropdown={setOpenDropdown}
-                          handleView={() => navigate(`/driver-detail/${driver._id}`)}
-                          handleApprove={() => updateStatus(driver, "approved")}
-                          handleReject={() => handleReject(driver)}
-                          driver
-                        />
-                      </td>
-                    </tr>
+                      </Td>
+                      <Td>
+                        <div className="flex items-center gap-1.5">
+                          <button type="button" title="View" onClick={() => navigate(`/driver-detail/${driver._id}`)}
+                            className="p-1.5 rounded-[6px] text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors"><Eye size={14} /></button>
+                          <button type="button" title="Approve" onClick={() => updateStatus(driver, "approved")}
+                            className="p-1.5 rounded-[6px] text-green-500 hover:text-green-700 hover:bg-green-50 transition-colors"><CheckCircle2 size={14} /></button>
+                          <button type="button" title="Reject" onClick={() => handleReject(driver)}
+                            className="p-1.5 rounded-[6px] text-red-500 hover:text-red-700 hover:bg-red-50 transition-colors"><XCircle size={14} /></button>
+                        </div>
+                      </Td>
+                    </Tr>
                   );
                 })}
-                {filteredDrivers.length === 0 && (
-                  <tr>
-                    <td colSpan={10} className="text-center">
-                      No online drivers found.
-                    </td>
-                  </tr>
-                )}
               </tbody>
             </table>
           </div>
         )}
-      </div>
-    </main>
+      </Card>
+    </div>
   );
 };
 

@@ -1,13 +1,47 @@
-import { useState, useMemo } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useSearchParams } from "react-router-dom";
 import { Search, Download, X, ArrowUp, ArrowDown } from "lucide-react";
 import {
   Card, Button, SectionHeader, Th, Td, Tr, Pagination, Avatar,
   Select, EmptyState, Drawer, Toast, TabBar
 } from "../../components/ui";
-import { mockRides, type Ride } from "../../data/mockRides";
+import { getRides } from "../../api";
+import { type Ride, type RideStatus } from "../../data/mockRides";
 import { RideStatusBadge } from "../Dashboard";
 import RideDetails from "./RideDetails";
+
+function mapApiRide(r: any): Ride {
+  return {
+    id: r._id || r.id || "",
+    offerId: r.offerId || "",
+    driver: { id: r.driver?._id || r.driver?.id || "", name: r.driver?.name || "Unknown", avatar: r.driver?.avatar || r.driver?.name?.charAt(0) || "?", phone: r.driver?.phone || "" },
+    user: { id: r.user?._id || r.user?.id || "", name: r.user?.name || "Unknown", avatar: r.user?.avatar || r.user?.name?.charAt(0) || "?", phone: r.user?.phone || "" },
+    pickup: { address: r.pickup_location?.address || r.pickup?.address || "", lat: r.pickup_location?.lat || r.pickup?.lat || 0, lng: r.pickup_location?.lng || r.pickup?.lng || 0 },
+    destination: { address: r.destination?.address || "", lat: r.destination?.lat || 0, lng: r.destination?.lng || 0 },
+    status: (r.status || "offer_sent") as RideStatus,
+    fareNGN: r.fare || r.fareNGN || 0,
+    vehicleType: r.vehicleType || "sedan",
+    pointsCharged: r.pointsCharged || 0,
+    pointsReserved: r.pointsReserved || 0,
+    startedAt: r.startedAt || null,
+    completedAt: r.completedAt || null,
+    cancelledAt: r.cancelledAt || null,
+    cancelReason: r.cancelReason || null,
+    cancelledBy: r.cancelledBy || null,
+    createdAt: r.createdAt || new Date().toISOString(),
+    eta: r.eta ?? null,
+    distanceKm: r.distanceKm ?? null,
+    lastLocationUpdate: r.lastLocationUpdate || null,
+    isStuck: r.isStuck || false,
+    isStaleLocation: r.isStaleLocation || false,
+    isDisputed: r.isDisputed || r.status === "disputed",
+    disputeNote: r.disputeNote || null,
+    city: r.city || "",
+    adminNote: r.adminNote || null,
+    internalNotes: r.internalNotes || [],
+    timeline: r.timeline || [],
+  };
+}
 
 type TabId = "all" | "active" | "completed" | "cancelled" | "disputes";
 
@@ -51,22 +85,48 @@ export default function AllRides({ defaultTab = "all" }: { defaultTab?: TabId })
   const [vehicleF, setVehicleF] = useState("all");
   const [sortKey, setSortKey] = useState<SortKey>("createdAt");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
-  const [selectedRide, setSelectedRide] = useState<Ride | null>(
-    preSelected ? (mockRides.find(r => r.id === preSelected) ?? null) : null
-  );
   const [page, setPage] = useState(1);
   const [toast, setToast] = useState<string | null>(null);
 
-  const tabCounts = {
-    all: mockRides.length,
-    active: mockRides.filter(r => matchesTab(r, "active")).length,
-    completed: mockRides.filter(r => matchesTab(r, "completed")).length,
-    cancelled: mockRides.filter(r => matchesTab(r, "cancelled")).length,
-    disputes: mockRides.filter(r => matchesTab(r, "disputes")).length,
-  };
+  const [rides, setRides] = useState<Ride[]>([]);
+  const [loading, setLoading] = useState(true);
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    getRides({ page, limit: 50 })
+      .then(({ rides: apiRides }) => {
+        if (cancelled) return;
+        setRides((apiRides || []).map(mapApiRide));
+      })
+      .catch((err) => {
+        console.error("Failed to load rides", err);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, [page]);
+
+  const [selectedRide, setSelectedRide] = useState<Ride | null>(
+    preSelected ? null : null
+  );
+
+  useEffect(() => {
+    if (preSelected && rides.length > 0) {
+      setSelectedRide(rides.find(r => r.id === preSelected) ?? null);
+    }
+  }, [preSelected, rides]);
+
+  const tabCounts = useMemo(() => ({
+    all: rides.length,
+    active: rides.filter(r => matchesTab(r, "active")).length,
+    completed: rides.filter(r => matchesTab(r, "completed")).length,
+    cancelled: rides.filter(r => matchesTab(r, "cancelled")).length,
+    disputes: rides.filter(r => matchesTab(r, "disputes")).length,
+  }), [rides]);
 
   const filtered = useMemo(() => {
-    const base = mockRides.filter(r => {
+    const base = rides.filter(r => {
       const matchSearch = !search ||
         r.id.toLowerCase().includes(search.toLowerCase()) ||
         r.driver.name.toLowerCase().includes(search.toLowerCase()) ||
@@ -170,7 +230,16 @@ export default function AllRides({ defaultTab = "all" }: { defaultTab?: TabId })
               </tr>
             </thead>
             <tbody>
-              {paginated.length === 0 ? (
+              {loading ? (
+                <tr>
+                  <td colSpan={10}>
+                    <div className="flex items-center justify-center py-16">
+                      <div className="w-5 h-5 border-2 border-[#BE1B2C] border-t-transparent rounded-full animate-spin" />
+                      <span className="ml-3 text-sm text-slate-400">Loading rides…</span>
+                    </div>
+                  </td>
+                </tr>
+              ) : paginated.length === 0 ? (
                 <tr>
                   <td colSpan={10}>
                     <EmptyState
