@@ -83,6 +83,7 @@ const navGroups = [
     collapsible: true,
     items: [
       { to: "/alerts",        label: "Alerts",        icon: <Bell       size={16} /> },
+      { to: "/notifications", label: "Notifications",  icon: <Bell       size={16} /> },
       { to: "/audit-logs",    label: "Audit Logs",    icon: <ScrollText size={16} /> },
       { to: "/team-roles",    label: "Team & Roles",  icon: <UserCog    size={16} /> },
       { to: "/system-health", label: "System Health", icon: <Activity   size={16} /> },

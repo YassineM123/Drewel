@@ -21,6 +21,7 @@ import DriverMap from "./pages/DriverMap";
 import TeamRoles from "./pages/TeamRoles";
 import SystemHealth from "./pages/SystemHealth";
 import Settings from "./pages/Settings";
+import Notifications from "./pages/Notifications";
 import AuditLogs from "./pages/AuditLogs";
 import PendingRequests from "./pages/PendingRequests";
 import ApprovedRequests from "./pages/ApprovedRequests";
@@ -91,6 +92,7 @@ function App() {
                 <Route path="/secure-calls" element={<SecureCalls />} />
                 <Route path="/banners" element={<Sponsor />} />
                 <Route path="/alerts" element={<Alerts />} />
+                <Route path="/notifications" element={<Notifications />} />
                 <Route path="/audit-logs" element={<AuditLogs />} />
                 <Route path="/team-roles" element={<TeamRoles />} />
                 <Route path="/system-health" element={<SystemHealth />} />

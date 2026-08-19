@@ -443,7 +443,7 @@ function DriverDetailDrawer({ driver, onToast, onChanged }) {
                   </button>
                 )}
                 {access.canAddPurchasedPoints && (
-                  <button type="button" onClick={() => navigate(`/driver-points/wallets/${d._id}`)}
+                  <button type="button" onClick={() => navigate(`/points/balances/${d._id}`)}
                     className="h-9 inline-flex items-center gap-2 px-3.5 rounded-[10px] bg-green-600 text-xs font-semibold text-white hover:bg-green-700 transition-all">
                     <Plus size={13} /> Add Points
                   </button>

@@ -3,12 +3,12 @@ import { NavLink } from "react-router-dom";
 import "../../assets/css/points-admin.css";
 
 const links = [
-  ["/driver-points", "Overview", false],
-  ["/driver-points/wallets", "Driver Wallets", false],
-  ["/driver-points/purchase-requests", "Purchase Requests", false],
-  ["/driver-points/transactions", "Transactions", false],
-  ["/driver-points/packs", "Point Packs", true],
-  ["/driver-points/settings", "Settings", true],
+  ["/points/overview", "Overview", false],
+  ["/points/balances", "Driver Wallets", false],
+  ["/points/requests", "Purchase Requests", false],
+  ["/points/transactions", "Transactions", false],
+  ["/points/packs", "Point Packs", true],
+  ["/points/settings", "Settings", true],
 ];
 
 const PointsPageShell = ({ title, description, isOwner, actions, children }) => (
@@ -28,7 +28,7 @@ const PointsPageShell = ({ title, description, isOwner, actions, children }) => 
           <NavLink
             key={to}
             to={to}
-            end={to === "/driver-points"}
+            end={to === "/points/overview"}
             className={({ isActive }) =>
               `points-tab${isActive ? " active" : ""}`
             }
