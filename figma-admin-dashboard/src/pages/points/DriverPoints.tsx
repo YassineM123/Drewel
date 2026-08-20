@@ -21,23 +21,17 @@ export default function DriverPoints() {
   const [toast, setToast] = useState<string | null>(null);
   const [step, setStep] = useState<"form" | "confirm">("form");
   const [drivers, setDrivers] = useState<any[]>([]);
-  const [_total, setTotal] = useState(0);
-  const [_fetching, setFetching] = useState(true);
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      setFetching(true);
       try {
         const res = await getDriverWallets({ page, limit: 8 });
         if (!cancelled) {
           setDrivers(res.drivers ?? []);
-          setTotal(res.pagination?.total ?? (res.drivers ?? []).length);
         }
       } catch (err) {
         console.error("Failed to load driver wallets", err);
-      } finally {
-        if (!cancelled) setFetching(false);
       }
     })();
     return () => { cancelled = true; };

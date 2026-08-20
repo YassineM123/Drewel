@@ -13,19 +13,15 @@ export default function SecureCalls() {
   const [selectedCall, setSelectedCall] = useState<any | null>(null);
   const [page, setPage] = useState(1);
   const [calls, setCalls] = useState<any[]>([]);
-  const [_fetching, setFetching] = useState(true);
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      setFetching(true);
       try {
         const res = await getSecureCalls({ page, limit: 50 });
         if (!cancelled) setCalls(res.events ?? []);
       } catch (err) {
         console.error("Failed to load secure calls", err);
-      } finally {
-        if (!cancelled) setFetching(false);
       }
     })();
     return () => { cancelled = true; };

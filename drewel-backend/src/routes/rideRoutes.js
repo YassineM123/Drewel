@@ -1,7 +1,8 @@
 import express from "express";
 import { requireSignIn } from "../middlewares/authMiddleware.js";
-import { cancelRide, createDriverContact, confirmMission, createSafetyAction, getActiveRide, getRide, getRideRoute, listMyRides, listRideMessages, postRideLocation, sendRideMessage, submitRideReview, transitionRide, updateMessageReceipt } from "../controllers/rideController.js";
+import { cancelRide, createDriverContact, confirmMission, createSafetyAction, getActiveRide, getRide, getRideMessageAudio, getRideRoute, listMyRides, listRideMessages, postRideLocation, sendRideMessage, sendRideVoiceMessage, submitRideReview, transitionRide, updateMessageReceipt } from "../controllers/rideController.js";
 import { contactRateLimit, messageRateLimit, rideActionRateLimit, rideLocationRateLimit } from "../middlewares/marketplaceRateLimit.js";
+import { chatAudioUpload, handleChatAudioUpload } from "../utils/chatAudioUpload.js";
 
 const router = express.Router();
 router.use(requireSignIn);
@@ -17,6 +18,13 @@ router.get("/:rideId/route", getRideRoute);
 router.post("/:rideId/location", rideLocationRateLimit, postRideLocation);
 router.get("/:rideId/messages", listRideMessages);
 router.post("/:rideId/messages", messageRateLimit, sendRideMessage);
+router.post(
+  "/:rideId/messages/voice",
+  messageRateLimit,
+  handleChatAudioUpload(chatAudioUpload.single("audio")),
+  sendRideVoiceMessage
+);
+router.get("/:rideId/messages/:messageId/audio", getRideMessageAudio);
 router.patch("/:rideId/messages/:messageId/receipt", updateMessageReceipt);
 router.post("/:rideId/report", createSafetyAction("report"));
 router.post("/:rideId/block", createSafetyAction("block"));

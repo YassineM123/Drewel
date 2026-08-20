@@ -3,6 +3,7 @@ import DriverPointsWallet from "../models/DriverPointsWallet.js";
 import PointTransaction from "../models/PointTransaction.js";
 import PointsOutboxEvent from "../models/PointsOutboxEvent.js";
 import PointsSettings from "../models/PointsSettings.js";
+import { calculateRideCommission } from "./commissionService.js";
 
 export class PointsError extends Error {
   constructor(message, statusCode = 409, code = "POINTS_CONFLICT") {
@@ -18,10 +19,12 @@ const totalAvailable = (wallet) =>
 const totalReserved = (wallet) =>
   wallet.reservedBonusPoints + wallet.reservedPurchasedPoints;
 
-export const toWalletDto = (wallet, offerCost = null) => {
+export const toWalletDto = (wallet, settings = null) => {
   const availablePoints = totalAvailable(wallet);
   const reservedPoints = totalReserved(wallet);
-  const canSendOffer = offerCost !== null && availablePoints >= offerCost;
+  const pointsPerAED = settings?.pointsPerAED ?? 10;
+  const commissionRate = settings?.commissionRate ?? 0.10;
+  const equivalentAED = availablePoints / pointsPerAED;
   return {
     driverId: String(wallet.driverId),
     availableBonusPoints: wallet.availableBonusPoints,
@@ -39,22 +42,9 @@ export const toWalletDto = (wallet, offerCost = null) => {
     welcomeBonusGrantedAt: wallet.welcomeBonusGrantedAt,
     version: wallet.version,
     updatedAt: wallet.updatedAt,
-    ...(offerCost === null
-      ? {}
-      : {
-          offerPointsCost: offerCost,
-          canSendOffer,
-          equivalentAvailableRides: Math.floor(availablePoints / offerCost),
-          availablePointsAfterOfferReservation: canSendOffer
-            ? availablePoints - offerCost
-            : null,
-          balanceState:
-            availablePoints === 0
-              ? "zero"
-              : availablePoints < offerCost
-                ? "low"
-                : "normal",
-        }),
+    pointsPerAED,
+    commissionRate,
+    equivalentAED: Math.round(equivalentAED * 100) / 100,
   };
 };
 
@@ -403,6 +393,91 @@ export const captureOfferPointsInSession = async ({
     session
   );
   return { wallet: updated, idempotent: false, transaction };
+};
+
+export const chargeRideCommissionInSession = async ({
+  driverId,
+  rideId,
+  ridePriceAED,
+  settings,
+  idempotencyKey,
+  session,
+}) => {
+  const existing = await PointTransaction.findOne({ idempotencyKey }).session(session);
+  if (existing) {
+    const wallet = await DriverPointsWallet.findOne({ driverId }).session(session);
+    return { wallet, idempotent: true, transaction: existing };
+  }
+
+  const commission = calculateRideCommission(ridePriceAED, settings);
+  const pointsToCharge = Math.ceil(commission.pointsToDeduct);
+
+  const wallet = await ensureWallet(driverId, session);
+  if (totalAvailable(wallet) < pointsToCharge) {
+    throw new PointsError(
+      "Insufficient points for ride commission",
+      409,
+      "INSUFFICIENT_AVAILABLE_POINTS"
+    );
+  }
+
+  const bonusPoints = Math.min(wallet.availableBonusPoints, pointsToCharge);
+  const purchasedPoints = pointsToCharge - bonusPoints;
+  const updated = await updateWalletWithVersion(
+    wallet,
+    {
+      $inc: {
+        availableBonusPoints: -bonusPoints,
+        availablePurchasedPoints: -purchasedPoints,
+        totalConsumed: pointsToCharge,
+      },
+    },
+    session
+  );
+
+  const transaction = await addLedgerEntry(
+    {
+      driverId,
+      type: "RIDE_COMMISSION",
+      status: "COMPLETED",
+      points: pointsToCharge,
+      bonusPoints,
+      purchasedPoints,
+      previousAvailableBalance: totalAvailable(wallet),
+      newAvailableBalance: totalAvailable(updated),
+      previousReservedBalance: totalReserved(wallet),
+      newReservedBalance: totalReserved(updated),
+      rideId,
+      reason: "Ride commission charge",
+      idempotencyKey,
+      metadata: {
+        ridePriceAED: commission.ridePriceAED,
+        commissionRate: commission.commissionRate,
+        commissionAED: commission.commissionAED,
+        pointsPerAED: commission.pointsPerAED,
+        pointsToDeduct: commission.pointsToDeduct,
+        driverNetAED: commission.driverNetAED,
+      },
+    },
+    session
+  );
+
+  return { wallet: updated, idempotent: false, transaction, commission };
+};
+
+export const estimateCommissionBalance = async (driverId, ridePriceAED, session = null) => {
+  const settings = await PointsSettings.getEffective(session ? { session } : {});
+  const commission = calculateRideCommission(ridePriceAED, settings);
+  const pointsRequired = Math.ceil(commission.pointsToDeduct);
+  const wallet = await ensureWallet(driverId, session);
+  const available = totalAvailable(wallet);
+  return {
+    availablePoints: available,
+    pointsRequired,
+    hasEnoughPoints: available >= pointsRequired,
+    commission,
+    settings,
+  };
 };
 
 export const creditPointsInSession = async ({

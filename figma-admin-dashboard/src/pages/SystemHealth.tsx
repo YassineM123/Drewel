@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import {
-  RefreshCw, CheckCircle2, AlertTriangle, XCircle, Clock, Activity
+  RefreshCw, CheckCircle2, AlertTriangle, XCircle, Clock
 } from "lucide-react";
 import { Card, Button, SectionHeader } from "../components/ui";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
@@ -179,7 +179,6 @@ export default function SystemHealth() {
   const [expandedIncident, setExpandedIncident] = useState<string | null>("INC-0042");
   const [services, setServices] = useState<Service[]>([]);
   const [incidents, setIncidents] = useState<Incident[]>([]);
-  const [_fetching, setFetching] = useState(true);
 
   const fetchHealth = async () => {
     try {
@@ -188,8 +187,6 @@ export default function SystemHealth() {
       setIncidents(data.incidents ?? data.Incident ?? []);
     } catch (err) {
       console.error("Failed to load system health", err);
-    } finally {
-      setFetching(false);
     }
   };
 

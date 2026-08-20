@@ -255,6 +255,22 @@ const RideDetail = () => {
         </div>
       </Card>
 
+      {ride.commission && (
+        <Card className="p-5">
+          <h2 className="text-sm font-semibold text-slate-800 mb-3">Commission Breakdown</h2>
+          <div className="grid grid-cols-2 gap-x-8">
+            <StatRow label="Ride price" value={money(ride.commission.ridePriceAED)} />
+            <StatRow label="Commission rate" value={ride.commission.commissionRate != null ? `${(ride.commission.commissionRate * 100).toFixed(0)}%` : "—"} />
+            <StatRow label="Commission (AED)" value={money(ride.commission.commissionAED)} />
+            <StatRow label="Points per AED" value={ride.commission.pointsPerAED != null ? String(ride.commission.pointsPerAED) : "—"} />
+            <StatRow label="Points charged" value={ride.commission.pointsCharged != null ? `${ride.commission.pointsCharged} points` : "—"} />
+            <StatRow label="Driver net (AED)" value={money(ride.commission.driverNetAED)} />
+            <StatRow label="Charged at" value={date(ride.commission.chargedAt)} />
+            <StatRow label="Transaction ID" value={ride.commission.transactionId || "—"} />
+          </div>
+        </Card>
+      )}
+
       {cancel?.reason && (
         <Card className="p-5">
           <h2 className="text-sm font-semibold text-slate-800 mb-3">Cancellation Details</h2>

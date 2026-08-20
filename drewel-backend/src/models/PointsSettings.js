@@ -8,9 +8,16 @@ const positiveSafeIntegerFromEnv = (name, fallback, { allowZero = false } = {}) 
   return Number.isSafeInteger(value) && value >= minimum ? value : fallback;
 };
 
+const positiveNumberFromEnv = (name, fallback) => {
+  const rawValue = process.env[name];
+  if (rawValue === undefined || rawValue === "") return fallback;
+  const value = Number(rawValue);
+  return Number.isFinite(value) && value > 0 ? value : fallback;
+};
+
 export const DEFAULT_WELCOME_DRIVER_POINTS = positiveSafeIntegerFromEnv(
   "WELCOME_DRIVER_POINTS",
-  100,
+  1000,
   { allowZero: true }
 );
 export const DEFAULT_RIDE_OFFER_POINTS_COST = positiveSafeIntegerFromEnv(
@@ -32,6 +39,14 @@ export const DEFAULT_MAXIMUM_CONCURRENT_OFFERS = positiveSafeIntegerFromEnv(
 );
 export const DEFAULT_POINTS_LARGE_ADJUSTMENT_THRESHOLD =
   positiveSafeIntegerFromEnv("POINTS_LARGE_ADJUSTMENT_THRESHOLD", 1000);
+export const DEFAULT_COMMISSION_RATE = positiveNumberFromEnv(
+  "COMMISSION_RATE",
+  0.10
+);
+export const DEFAULT_POINTS_PER_AED = positiveNumberFromEnv(
+  "POINTS_PER_AED",
+  10
+);
 export const GLOBAL_POINTS_SETTINGS_KEY = "global";
 
 const pointsSettingsSchema = new mongoose.Schema(
@@ -55,6 +70,19 @@ const pointsSettingsSchema = new mongoose.Schema(
       default: DEFAULT_RIDE_OFFER_POINTS_COST,
       required: true,
       min: 1,
+    },
+    commissionRate: {
+      type: Number,
+      default: DEFAULT_COMMISSION_RATE,
+      required: true,
+      min: 0,
+      max: 1,
+    },
+    pointsPerAED: {
+      type: Number,
+      default: DEFAULT_POINTS_PER_AED,
+      required: true,
+      min: 0.01,
     },
     lowBalanceThreshold: {
       type: Number,
@@ -105,6 +133,14 @@ pointsSettingsSchema.pre("validate", function validatePointValues() {
       throw new Error(`${field} must be a safe integer`);
     }
   }
+  const commissionRate = this.get("commissionRate");
+  if (!Number.isFinite(commissionRate) || commissionRate < 0 || commissionRate > 1) {
+    throw new Error("commissionRate must be a number between 0 and 1");
+  }
+  const pointsPerAED = this.get("pointsPerAED");
+  if (!Number.isFinite(pointsPerAED) || pointsPerAED <= 0) {
+    throw new Error("pointsPerAED must be a positive number");
+  }
 });
 
 pointsSettingsSchema.statics.getEffective = async function getEffective(options = {}) {
@@ -123,6 +159,8 @@ pointsSettingsSchema.statics.getEffective = async function getEffective(options 
     largeAdjustmentThreshold:
       stored?.largeAdjustmentThreshold ??
       DEFAULT_POINTS_LARGE_ADJUSTMENT_THRESHOLD,
+    commissionRate: stored?.commissionRate ?? DEFAULT_COMMISSION_RATE,
+    pointsPerAED: stored?.pointsPerAED ?? DEFAULT_POINTS_PER_AED,
   };
 };
 

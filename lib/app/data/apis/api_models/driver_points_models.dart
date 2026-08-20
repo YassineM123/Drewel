@@ -17,6 +17,9 @@ class DriverPointsWallet {
     required this.welcomeBonusGranted,
     this.availablePointsAfterOfferReservation,
     this.welcomeBonusGrantedAt,
+    this.commissionRate,
+    this.pointsPerAED,
+    this.equivalentAED,
   });
 
   final int availablePoints;
@@ -31,6 +34,9 @@ class DriverPointsWallet {
   final int version;
   final bool welcomeBonusGranted;
   final DateTime? welcomeBonusGrantedAt;
+  final double? commissionRate;
+  final double? pointsPerAED;
+  final double? equivalentAED;
 
   factory DriverPointsWallet.fromJson(Map<String, dynamic> json) =>
       DriverPointsWallet(
@@ -49,6 +55,15 @@ class DriverPointsWallet {
         version: _integer(json['version']),
         welcomeBonusGranted: json['welcomeBonusGranted'] == true,
         welcomeBonusGrantedAt: _date(json['welcomeBonusGrantedAt']),
+        commissionRate: json['commissionRate'] is num
+            ? (json['commissionRate'] as num).toDouble()
+            : null,
+        pointsPerAED: json['pointsPerAED'] is num
+            ? (json['pointsPerAED'] as num).toDouble()
+            : null,
+        equivalentAED: json['equivalentAED'] is num
+            ? (json['equivalentAED'] as num).toDouble()
+            : null,
       );
 }
 
@@ -76,6 +91,7 @@ class PointTransaction {
   bool get isDebit => const <String>{
         'OFFER_RESERVE',
         'RIDE_CHARGE',
+        'RIDE_COMMISSION',
         'ADMIN_DEBIT',
         'PENALTY',
       }.contains(type);

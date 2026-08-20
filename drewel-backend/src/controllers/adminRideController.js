@@ -20,6 +20,8 @@ import {
 } from "../services/pointsWalletService.js";
 import { io, ADMIN_TRACKING_ROOM } from "../socket/index.js";
 import { toTripOfferDto } from "../services/tripOfferService.js";
+import { calculateRideCommission } from "../services/commissionService.js";
+import PointsSettings from "../models/PointsSettings.js";
 
 const cancelledStatuses = [
   "cancelled",
@@ -370,6 +372,27 @@ export const getAdminRide = async (req, res) => {
           : sum,
       0
     );
+
+    let commissionBreakdown = null;
+    if (ride.commission?.ridePriceAED != null) {
+      commissionBreakdown = {
+        ridePriceAED: ride.commission.ridePriceAED,
+        commissionRate: ride.commission.commissionRate,
+        commissionAED: ride.commission.commissionAED,
+        pointsPerAED: ride.commission.pointsPerAED,
+        pointsCharged: ride.commission.pointsCharged,
+        driverNetAED: ride.commission.driverNetAED,
+        chargedAt: ride.commission.chargedAt,
+        transactionId: ride.commission.transactionId,
+      };
+    } else if (ride.agreedPrice && ride.status === "completed") {
+      try {
+        const settings = await PointsSettings.getEffective();
+        commissionBreakdown = calculateRideCommission(ride.agreedPrice, settings);
+        commissionBreakdown.note = "Estimated from current settings (snapshot not saved)";
+      } catch { /* ignore */ }
+    }
+
     return res.json({
       success: true,
       ride: {
@@ -385,6 +408,7 @@ export const getAdminRide = async (req, res) => {
         pointsCharged,
         pointsTransaction: points,
         auditTrail,
+        commission: commissionBreakdown,
       },
     });
   } catch (error) {

@@ -28,23 +28,17 @@ export default function PointsTransactions() {
   const [typeFilter, setTypeFilter] = useState("all");
   const [page, setPage] = useState(1);
   const [transactions, setTransactions] = useState<any[]>([]);
-  const [_total, setTotal] = useState(0);
-  const [_fetching, setFetching] = useState(true);
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      setFetching(true);
       try {
         const res = await getPointTransactions({ page, limit: 50 });
         if (!cancelled) {
           setTransactions(res.transactions ?? []);
-          setTotal(res.pagination?.total ?? (res.transactions ?? []).length);
         }
       } catch (err) {
         console.error("Failed to load point transactions", err);
-      } finally {
-        if (!cancelled) setFetching(false);
       }
     })();
     return () => { cancelled = true; };

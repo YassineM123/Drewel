@@ -1,5 +1,9 @@
 import crypto from "node:crypto";
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import mongoose from "mongoose";
+import { GetObjectCommand } from "@aws-sdk/client-s3";
 import Ride, { ACTIVE_RIDE_STATUSES } from "../models/Ride.js";
 import Driver from "../models/Driver.js";
 import RideMessage from "../models/RideMessage.js";
@@ -36,6 +40,15 @@ import {
   notifyDriverOfNewRideRequest,
   notifyRideTransition,
 } from "../services/rideNotificationService.js";
+import { chargeRideCommissionInSession, runPointsTransaction } from "../services/pointsWalletService.js";
+import { calculateRideCommission } from "../services/commissionService.js";
+import PointsSettings from "../models/PointsSettings.js";
+import {
+  CHAT_AUDIO_MAX_DURATION_SECONDS,
+  chatAudioRootPath,
+  removeChatAudioUpload,
+} from "../utils/chatAudioUpload.js";
+import { deleteS3Object, getS3Bucket, getS3Client, isS3StorageEnabled } from "../utils/s3Storage.js";
 
 const rideDto = (ride) => ({
   id: String(ride._id),
@@ -170,6 +183,44 @@ const sendError = (res, error) => res.status(error.statusCode || 500).json({
   success: false,
   code: error.code || "INTERNAL_ERROR",
   message: error.statusCode ? error.message : "Internal server error",
+});
+
+// ---------------------------------------------------------------------------
+// Voice messages
+// ---------------------------------------------------------------------------
+
+/**
+ * Client-facing serialization for ride messages. Voice rows never expose the
+ * raw storage key — playback always goes through the participant-gated audio
+ * endpoint on this API.
+ */
+const toRideMessageDto = (message) => {
+  const plain = typeof message?.toObject === "function" ? message.toObject() : { ...message };
+  if (plain?.messageType === "voice" && plain?._id && plain?.rideId) {
+    plain.audioUrl = `/api/rides/${String(plain.rideId)}/messages/${String(plain._id)}/audio`;
+  }
+  return plain;
+};
+
+const rideMessageEventPayload = (message) => ({
+  rideId: String(message.rideId),
+  messageId: String(message._id),
+  senderId: String(message.senderId),
+  senderRole: message.senderRole,
+  text: message.text,
+  messageType: message.messageType,
+  metadata: message.metadata,
+  status: message.status,
+  clientMessageId: message.clientMessageId,
+  createdAt: message.createdAt,
+  ...(message.messageType === "voice"
+    ? {
+        audioUrl: `/api/rides/${String(message.rideId)}/messages/${String(message._id)}/audio`,
+        audioDuration: message.audioDuration,
+        audioMimeType: message.audioMimeType,
+        audioSize: message.audioSize,
+      }
+    : {}),
 });
 
 const normalizeReviewInput = (body = {}) => {
@@ -624,6 +675,43 @@ export const transitionRide = async (req, res) => {
       pickupPinVerified,
     });
     const terminal = ["completed", "cancelled_by_user", "cancelled_by_driver", "cancelled_by_admin"].includes(nextStatus);
+
+    let commissionResult = null;
+    if (nextStatus === "completed" && updated.agreedPrice) {
+      try {
+        const settings = await PointsSettings.getEffective();
+        const commission = calculateRideCommission(updated.agreedPrice, settings);
+        const chargeIdempotencyKey = `ride-commission:${updated._id}:${req.get("Idempotency-Key") || req.body?.idempotencyKey}`;
+        commissionResult = await runPointsTransaction(async (session) => {
+          return chargeRideCommissionInSession({
+            driverId: updated.driverId,
+            rideId: updated._id,
+            ridePriceAED: updated.agreedPrice,
+            settings,
+            idempotencyKey: chargeIdempotencyKey,
+            session,
+          });
+        });
+        await Ride.updateOne(
+          { _id: updated._id },
+          {
+            $set: {
+              "commission.ridePriceAED": commission.ridePriceAED,
+              "commission.commissionRate": commission.commissionRate,
+              "commission.commissionAED": commission.commissionAED,
+              "commission.pointsPerAED": commission.pointsPerAED,
+              "commission.pointsCharged": commission.pointsToDeduct,
+              "commission.driverNetAED": commission.driverNetAED,
+              "commission.chargedAt": new Date(),
+              "commission.transactionId": commissionResult.transaction?._id,
+            },
+          }
+        );
+      } catch (commissionError) {
+        console.error("[ride] commission charge failed", commissionError.message);
+      }
+    }
+
     if (terminal) await endActiveCallsForRide(updated._id, `ride_${nextStatus}`);
     const room = `ride:${updated._id}`;
     const event = nextStatus === "completed"
@@ -801,7 +889,7 @@ export const listRideMessages = async (req, res) => {
     const messages = await RideMessage.find(filter).sort({ _id: -1 }).limit(limit).lean();
     return res.json({
       success: true,
-      messages: messages.reverse(),
+      messages: messages.reverse().map(toRideMessageDto),
     });
   } catch (error) { return sendError(res, error); }
 };
@@ -846,18 +934,7 @@ export const sendRideMessage = async (req, res) => {
     if (created && messageType === "trip_request") {
       await cancelSupersededTripRequests({ rideId: ride._id, latestMessage: message });
     }
-    const messageEvent = {
-      rideId: String(ride._id),
-      messageId: String(message._id),
-      senderId: String(message.senderId),
-      senderRole: message.senderRole,
-      text: message.text,
-      messageType: message.messageType,
-      metadata: message.metadata,
-      status: message.status,
-      clientMessageId: message.clientMessageId,
-      createdAt: message.createdAt,
-    };
+    const messageEvent = rideMessageEventPayload(message);
     io.to(String(ride.passengerId)).to(String(ride.driverId)).emit("ride:message", messageEvent);
     const { conversation, recipientId, notification } = await touchConversationWithMessage({
       ride,
@@ -921,6 +998,190 @@ export const updateMessageReceipt = async (req, res) => {
     }
     return res.json({ success: true, message });
   } catch (error) { return sendError(res, error); }
+};
+
+/**
+ * Sends a voice note inside an authorized ride conversation.
+ *
+ * Flow: authenticated principal → ride participant + contact policy →
+ * multipart audio already stored by the upload middleware → idempotent
+ * RideMessage row (clientMessageId unique index keeps retries duplicate-free)
+ * → realtime `ride:message` event → conversation preview/unread bump →
+ * notification + push. The database only ever stores the storage reference.
+ */
+export const sendRideVoiceMessage = async (req, res) => {
+  let uploadedFile = null;
+  try {
+    const principal = await resolvePrincipal(req.user?._id);
+    const { ride, participantRole } = await assertRideParticipant(principal, req.params.rideId, { requireContact: true });
+
+    uploadedFile = req.file;
+    if (!uploadedFile) {
+      throw new CommunicationPolicyError("A recorded voice file is required", 400, "VOICE_FILE_REQUIRED");
+    }
+    const clientMessageId = String(req.body?.clientMessageId || "").trim();
+    if (!clientMessageId || clientMessageId.length > 100) {
+      throw new CommunicationPolicyError("clientMessageId is required", 400, "INVALID_MESSAGE");
+    }
+    // The recorder enforces the cap client-side; the server clamps and rejects
+    // clearly over-limit payloads so a tampered client cannot bypass it.
+    const requestedDuration = Number.parseFloat(req.body?.durationSeconds);
+    if (Number.isFinite(requestedDuration) && requestedDuration > CHAT_AUDIO_MAX_DURATION_SECONDS + 2) {
+      throw new CommunicationPolicyError(
+        `Voice message must not exceed ${CHAT_AUDIO_MAX_DURATION_SECONDS} seconds`,
+        413,
+        "VOICE_TOO_LONG"
+      );
+    }
+    const durationSeconds = Number.isFinite(requestedDuration) && requestedDuration > 0
+      ? Math.min(requestedDuration, CHAT_AUDIO_MAX_DURATION_SECONDS)
+      : null;
+
+    const storageKind = uploadedFile.storage || (isS3StorageEnabled() ? "s3" : "local");
+    const storageKey = uploadedFile.key || uploadedFile.filename;
+    const mimeType = String(uploadedFile.mimetype || "audio/mp4");
+
+    let message;
+    let created = true;
+    try {
+      message = await RideMessage.create({
+        rideId: ride._id,
+        senderId: principal.id,
+        senderRole: participantRole,
+        text: "",
+        clientMessageId,
+        messageType: "voice",
+        metadata: null,
+        audioUrl: null,
+        audioKey: storageKey,
+        audioStorage: storageKind,
+        audioMimeType: mimeType,
+        audioDuration: durationSeconds,
+        audioSize: Number(uploadedFile.size) || null,
+      });
+    } catch (error) {
+      if (error?.code !== 11000) throw error;
+      // Idempotent retry: the message already exists, so discard the freshly
+      // uploaded bytes and return the original row — never a duplicate.
+      created = false;
+      await removeChatAudioUpload({ storage: storageKind, key: storageKey }).catch((cleanupError) => {
+        console.error("Voice retry cleanup failed", cleanupError.message);
+      });
+      message = await RideMessage.findOne({ rideId: ride._id, senderId: principal.id, clientMessageId });
+    }
+    uploadedFile = null; // Ownership transferred to the message row / cleanup.
+
+    io.to(String(ride.passengerId)).to(String(ride.driverId)).emit("ride:message", rideMessageEventPayload(message));
+    const { conversation, recipientId, notification } = await touchConversationWithMessage({
+      ride,
+      message,
+      participantRole,
+    });
+    await emitConversationUpdated(conversation);
+    if (String(recipientId) === String(notification?.userId)) {
+      emitNotificationNew(notification);
+      await sendPushToUser({
+        userId: recipientId,
+        title: "New message",
+        body: notification?.message || "sent you a voice message",
+        data: notification
+          ? {
+              id: String(notification._id),
+              type: "RIDE_MESSAGE",
+              rideId: String(ride._id),
+              conversationId: String(notification.conversationId || ""),
+              messageId: String(notification.messageId || message._id),
+              deepLink: `drewel://chat/ride?conversationId=${String(notification.conversationId || "")}`,
+            }
+          : {},
+        type: "RIDE_MESSAGE",
+      });
+    } else {
+      io.to(String(recipientId)).emit("notification:new", {
+        id: notification?._id ? String(notification._id) : "",
+        type: "RIDE_MESSAGE",
+        message: notification?.message || "",
+        read: Boolean(notification?.read),
+        data: notification?.data || { rideId: String(ride._id) },
+        createdAt: notification?.createdAt || new Date(),
+      });
+    }
+
+    return res.status(created ? 201 : 200).json({
+      success: true,
+      message: toRideMessageDto(message),
+      idempotent: !created,
+    });
+  } catch (error) {
+    // A rejected upload must not leave orphaned bytes behind.
+    if (uploadedFile) {
+      await removeChatAudioUpload({
+        storage: uploadedFile.storage || (isS3StorageEnabled() ? "s3" : "local"),
+        key: uploadedFile.key || uploadedFile.filename,
+      }).catch((cleanupError) => {
+        console.error("Voice upload cleanup failed", cleanupError.message);
+      });
+    }
+    return sendError(res, error);
+  }
+};
+
+/**
+ * Streams a voice note to an authenticated ride participant. This is the ONLY
+ * way chat audio leaves storage: there is no public/static path for these
+ * files, and every request re-verifies conversation membership, so guessing a
+ * URL or message id from another chat always fails with 403/404.
+ */
+export const getRideMessageAudio = async (req, res) => {
+  try {
+    const principal = await resolvePrincipal(req.user?._id);
+    const { ride } = await assertRideParticipant(principal, req.params.rideId);
+    if (!mongoose.isValidObjectId(req.params.messageId)) {
+      throw new CommunicationPolicyError("Invalid message id", 400, "INVALID_MESSAGE_ID");
+    }
+    const message = await RideMessage.findOne({
+      _id: req.params.messageId,
+      rideId: ride._id,
+      messageType: "voice",
+    }).select("audioKey audioStorage audioMimeType audioSize").lean();
+    if (!message?.audioKey) {
+      throw new CommunicationPolicyError("Voice message not found", 404, "MESSAGE_NOT_FOUND");
+    }
+
+    const contentType = message.audioMimeType || "audio/mp4";
+    const safeFileName = path.basename(String(message.audioKey));
+    res.setHeader("Content-Type", contentType);
+    res.setHeader("X-Content-Type-Options", "nosniff");
+    res.setHeader("Accept-Ranges", "bytes");
+    res.setHeader("Cache-Control", "private, max-age=86400");
+    res.setHeader("Content-Disposition", `inline; filename="${safeFileName.replace(/[^a-zA-Z0-9._-]/g, "_")}"`);
+
+    if (message.audioStorage === "s3") {
+      const rangeHeader = String(req.headers.range || "");
+      const command = new GetObjectCommand({
+        Bucket: getS3Bucket(),
+        Key: message.audioKey,
+        ...(rangeHeader ? { Range: rangeHeader } : {}),
+      });
+      const object = await getS3Client().send(command);
+      if (object.ContentType) res.setHeader("Content-Type", object.ContentType);
+      if (object.ContentLength != null) res.setHeader("Content-Length", String(object.ContentLength));
+      if (object.ContentRange) res.setHeader("Content-Range", object.ContentRange);
+      res.status(object.ContentRange ? 206 : 200);
+      object.Body.pipe(res);
+      return;
+    }
+
+    const localPath = path.join(chatAudioRootPath, safeFileName);
+    if (!fs.existsSync(localPath)) {
+      throw new CommunicationPolicyError("Voice message not found", 404, "MESSAGE_NOT_FOUND");
+    }
+    // sendFile honors Range requests for seeking automatically.
+    res.sendFile(localPath);
+  } catch (error) {
+    if (res.headersSent) return res.end();
+    return sendError(res, error);
+  }
 };
 
 export const createSafetyAction = (type) => async (req, res) => {

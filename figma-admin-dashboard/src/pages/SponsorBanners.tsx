@@ -3,7 +3,7 @@ import { Plus, LayoutGrid, List, Eye, Pencil, Trash2, Archive, ToggleLeft, Toggl
 import {
   Badge, Button, Card, Modal, ConfirmDialog, Toast, SectionHeader, EmptyState, StatRow
 } from "../components/ui";
-import { getBanners, addBanner, updateBanner, deleteBanner as apiDeleteBanner, toggleBannerStatus } from "../api";
+import { getBanners, deleteBanner as apiDeleteBanner, toggleBannerStatus } from "../api";
 
 type ViewMode = "grid" | "list";
 
@@ -16,7 +16,6 @@ export default function SponsorBanners() {
   const [createOpen, setCreateOpen] = useState(false);
   const [toast, setToast] = useState<{ msg: string; type: "success" | "error" } | null>(null);
   const [loading, setLoading] = useState(false);
-  const [_fetching, setFetching] = useState(true);
 
   // Create form state
   const [createTitle, setCreateTitle] = useState("");
@@ -38,7 +37,6 @@ export default function SponsorBanners() {
       } catch (err) {
         console.error("Failed to load banners", err);
       } finally {
-        if (!cancelled) setFetching(false);
       }
     })();
     return () => { cancelled = true; };

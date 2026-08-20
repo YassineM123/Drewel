@@ -328,6 +328,7 @@ class DriverAccountController extends GetxController {
         ApiKeyConstants.countryCode: next.countryCode ?? '',
         ApiKeyConstants.profileImage: next.profileImageUrl ?? '',
         ApiKeyConstants.fullName: next.fullName ?? '',
+        ApiKeyConstants.type: ApiKeyConstants.driver,
       };
     }
   }

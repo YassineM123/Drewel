@@ -277,13 +277,15 @@ export const getUnreadSummary = async ({ principal }) => {
  */
 export const touchConversationWithMessage = async ({ ride, message, participantRole }) => {
   let conversation = await RideConversation.findOne({ rideId: ride._id });
+  const isVoice = message.messageType === "voice";
+  const preview = isVoice ? "🎤 Voice message" : String(message.text || "").slice(0, 140);
   const updates = {
     rideId: ride._id,
     rideReference: String(ride.reference || ""),
     passengerId: ride.passengerId,
     driverId: ride.driverId,
     lastMessageAt: message.createdAt,
-    lastMessagePreview: String(message.text || "").slice(0, 140),
+    lastMessagePreview: preview,
     lastMessageSenderRole: participantRole,
     lastMessageStatus: message.status,
     status: conversationStatusForRide(ride),
@@ -313,6 +315,9 @@ export const touchConversationWithMessage = async ({ ride, message, participantR
     participantRole === "passenger" ? conversation.passengerName : conversation.driverName;
   const senderDisplayName = String(senderName || "").split(/\s+/)[0] || "Your ride participant";
   const eventKey = `ride-message:${ride._id}:${message._id}:${recipientId}`;
+  const notificationBody = isVoice
+    ? `${senderDisplayName} sent you a voice message`
+    : `${senderDisplayName}: ${String(message.text || "").slice(0, 120)}`;
   const notification = await Notification.findOneAndUpdate(
     { eventKey },
     {
@@ -321,7 +326,7 @@ export const touchConversationWithMessage = async ({ ride, message, participantR
         recipientType,
         type: "RIDE_MESSAGE",
         title: senderDisplayName,
-        message: `${senderDisplayName}: ${String(message.text || "").slice(0, 120)}`,
+        message: notificationBody,
         eventKey,
         rideId: ride._id,
         conversationId: conversation._id,

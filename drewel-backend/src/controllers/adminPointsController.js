@@ -1380,6 +1380,10 @@ export const updatePointSettings = async (req, res) => {
       maximumConcurrentOffers: { min: 1, max: 100 },
       largeAdjustmentThreshold: { min: 1 },
     };
+    const floatDefinitions = {
+      commissionRate: { min: 0, max: 1 },
+      pointsPerAED: { min: 0.01 },
+    };
     const values = {};
     for (const [fieldName, bounds] of Object.entries(definitions)) {
       if (req.body?.[fieldName] !== undefined) {
@@ -1388,6 +1392,19 @@ export const updatePointSettings = async (req, res) => {
           fieldName,
           bounds
         );
+      }
+    }
+    for (const [fieldName, bounds] of Object.entries(floatDefinitions)) {
+      if (req.body?.[fieldName] !== undefined) {
+        const parsed = typeof req.body[fieldName] === "number"
+          ? req.body[fieldName]
+          : Number(String(req.body[fieldName] ?? "").trim());
+        if (!Number.isFinite(parsed) || parsed < bounds.min || (bounds.max !== undefined && parsed > bounds.max)) {
+          throw new PointsValidationError(
+            `${fieldName} must be a number between ${bounds.min} and ${bounds.max ?? "unlimited"}`
+          );
+        }
+        values[fieldName] = parsed;
       }
     }
     if (Object.keys(values).length === 0) {

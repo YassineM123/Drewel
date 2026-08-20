@@ -55,12 +55,10 @@ export default function AuditLogs() {
   const [toast, setToast] = useState<string | null>(null);
   const [logs, setLogs] = useState<any[]>([]);
   const [total, setTotal] = useState(0);
-  const [_fetching, setFetching] = useState(true);
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      setFetching(true);
       try {
         const res = await getAuditLogs({ page, limit: 10 });
         if (!cancelled) {
@@ -69,8 +67,6 @@ export default function AuditLogs() {
         }
       } catch (err) {
         console.error("Failed to load audit logs", err);
-      } finally {
-        if (!cancelled) setFetching(false);
       }
     })();
     return () => { cancelled = true; };

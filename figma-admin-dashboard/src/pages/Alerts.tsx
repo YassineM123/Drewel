@@ -267,7 +267,6 @@ export default function Alerts() {
   const [loading, setLoading] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const [expandedRow, setExpandedRow] = useState<string | null>(null);
-  const [_fetching, setFetching] = useState(true);
 
   useEffect(() => {
     let cancelled = false;
@@ -277,8 +276,6 @@ export default function Alerts() {
         if (!cancelled) setAlerts(res.alerts ?? []);
       } catch (err) {
         console.error("Failed to load alerts", err);
-      } finally {
-        if (!cancelled) setFetching(false);
       }
     })();
     return () => { cancelled = true; };

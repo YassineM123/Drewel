@@ -281,26 +281,28 @@ class _RideChatScreenState extends State<RideChatScreen> {
                     radius: 18,
                   ),
                   const SizedBox(width: 10),
-                  Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: <Widget>[
-                      Text(
-                        _chatTitle,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          color: textColor,
-                          fontSize: 18,
-                          fontWeight: FontWeight.w800,
+                  Flexible(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: <Widget>[
+                        Text(
+                          _chatTitle,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: textColor,
+                            fontSize: 18,
+                            fontWeight: FontWeight.w800,
+                          ),
                         ),
-                      ),
-                      const SizedBox(height: 3),
-                      _CounterpartSubtitle(
-                        conversation: _conversation,
-                        contactAllowed: _canChat,
-                      ),
-                    ],
+                        const SizedBox(height: 3),
+                        _CounterpartSubtitle(
+                          conversation: _conversation,
+                          contactAllowed: _canChat,
+                        ),
+                      ],
+                    ),
                   ),
                 ],
               ),

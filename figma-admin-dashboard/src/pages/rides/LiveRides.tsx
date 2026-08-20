@@ -1,11 +1,15 @@
-import { useState, useEffect, useMemo } from "react";
+import { Fragment, useState, useEffect, useMemo, useRef } from "react";
 import { useSearchParams } from "react-router-dom";
-import { Navigation, RefreshCw, AlertTriangle, Search, X, ZoomIn, ZoomOut, Locate, Filter } from "lucide-react";
+import { Navigation, RefreshCw, AlertTriangle, Search, X, Filter } from "lucide-react";
+import { MapContainer, TileLayer, Marker, Polyline, useMap } from "react-leaflet";
+import L from "leaflet";
+import "leaflet/dist/leaflet.css";
 import { Button, Drawer, Select } from "../../components/ui";
-import { getRides } from "../../api";
+import { getRides, getDriversWithLocation } from "../../api";
 import { type Ride, type RideStatus } from "../../data/mockRides";
 import { RideStatusBadge } from "../Dashboard";
 import RideDetails from "./RideDetails";
+import { useSocket } from "../../context/SocketContext";
 
 function mapApiRide(r: any): Ride {
   return {
@@ -40,210 +44,182 @@ function mapApiRide(r: any): Ride {
   };
 }
 
-// ─── Constants ────────────────────────────────────────────────────────────────
+// ─── Live driver position tracking ───────────────────────────────────────────
 
-// ─── Lagos map coordinate transform ──────────────────────────────────────────
-// Bounding box: lat 6.38–6.64, lng 3.28–3.62
-
-const MAP_W  = 700;
-const MAP_H  = 500;
-const LAT_MIN = 6.38, LAT_MAX = 6.64;
-const LNG_MIN = 3.28, LNG_MAX = 3.62;
-
-function toXY(lat: number, lng: number) {
-  const x = Math.round(((lng - LNG_MIN) / (LNG_MAX - LNG_MIN)) * MAP_W);
-  const y = Math.round(((LAT_MAX - lat) / (LAT_MAX - LAT_MIN)) * MAP_H);
-  return { x: Math.max(24, Math.min(MAP_W - 24, x)), y: Math.max(24, Math.min(MAP_H - 24, y)) };
+interface DriverPosition {
+  lat: number;
+  lng: number;
+  heading: number | null;
+  speed: number | null;
+  updatedAt: string | null;
+  ageSeconds: number | null;
 }
 
-// ─── Map SVG ──────────────────────────────────────────────────────────────────
+function isFiniteCoord(lat: unknown, lng: unknown) {
+  return typeof lat === "number" && typeof lng === "number" && Number.isFinite(lat) && Number.isFinite(lng) && !(lat === 0 && lng === 0);
+}
+
+/** Seeds driver positions via REST and keeps them fresh over the admin
+ *  tracking socket room (see backend `driver-map:track` / `driver:location`). */
+function useLiveDriverPositions() {
+  const { socket, connected } = useSocket();
+  const [positions, setPositions] = useState<Record<string, DriverPosition>>({});
+
+  useEffect(() => {
+    let cancelled = false;
+    getDriversWithLocation()
+      .then((drivers: any[]) => {
+        if (cancelled) return;
+        const next: Record<string, DriverPosition> = {};
+        for (const d of drivers || []) {
+          const id = d._id || d.id;
+          if (!id || !isFiniteCoord(d.lat, d.long)) continue;
+          next[id] = {
+            lat: d.lat, lng: d.long,
+            heading: d.heading ?? null, speed: d.speed ?? null,
+            updatedAt: d.locationUpdatedAt || null,
+            ageSeconds: d.locationAgeSeconds ?? null,
+          };
+        }
+        setPositions(next);
+      })
+      .catch((err) => console.error("Failed to load driver locations", err));
+    return () => { cancelled = true; };
+  }, []);
+
+  useEffect(() => {
+    if (!socket || !connected) return;
+    socket.emit("driver-map:track", { on: true });
+
+    const onLocation = (event: any) => {
+      const id = event?.driverId;
+      if (!id || !isFiniteCoord(event.lat, event.long)) return;
+      setPositions(prev => ({
+        ...prev,
+        [id]: {
+          lat: event.lat, lng: event.long,
+          heading: event.heading ?? null, speed: event.speed ?? null,
+          updatedAt: event.locationUpdatedAt || new Date().toISOString(),
+          ageSeconds: 0,
+        },
+      }));
+    };
+    socket.on("driver:location", onLocation);
+
+    return () => {
+      socket.emit("driver-map:track", { on: false });
+      socket.off("driver:location", onLocation);
+    };
+  }, [socket, connected]);
+
+  return positions;
+}
+
+// ─── Map ──────────────────────────────────────────────────────────────────────
+
+const statusColor = (ride: Ride) =>
+  ride.isStuck ? "#DC2626" : ride.status === "ride_started" ? "#16A34A" : ride.status === "driver_arrived" ? "#7C3AED" : "#BE1B2C";
+
+function driverDivIcon(label: string, color: string, selected: boolean) {
+  const size = selected ? 32 : 26;
+  return L.divIcon({
+    className: "",
+    html: `<div style="width:${size}px;height:${size}px;border-radius:9999px;background:${color};border:${selected ? 2.5 : 2}px solid white;box-shadow:0 2px 6px rgba(0,0,0,0.35);display:flex;align-items:center;justify-content:center;color:white;font:700 ${selected ? 10 : 9}px Inter, sans-serif;">${label}</div>`,
+    iconSize: [size, size],
+    iconAnchor: [size / 2, size / 2],
+  });
+}
+
+function dotDivIcon(color: string) {
+  return L.divIcon({
+    className: "",
+    html: `<div style="width:10px;height:10px;border-radius:9999px;background:${color};border:2px solid white;box-shadow:0 1px 3px rgba(0,0,0,0.3);"></div>`,
+    iconSize: [10, 10],
+    iconAnchor: [5, 5],
+  });
+}
+
+/** Keeps the map framed on the active rides / driver positions without
+ *  fighting the user once they've manually panned or zoomed. */
+function FitBounds({ points }: { points: [number, number][] }) {
+  const map = useMap();
+  const fitted = useRef(false);
+
+  useEffect(() => {
+    if (fitted.current || points.length === 0) return;
+    fitted.current = true;
+    if (points.length === 1) {
+      map.setView(points[0], 13);
+    } else {
+      map.fitBounds(L.latLngBounds(points), { padding: [40, 40], maxZoom: 15 });
+    }
+  }, [points, map]);
+
+  return null;
+}
 
 interface MapProps {
   rides: Ride[];
+  driverPositions: Record<string, DriverPosition>;
   selected: Ride | null;
   onSelect: (r: Ride) => void;
-  zoom: number;
 }
 
-function LagosMap({ rides, selected, onSelect, zoom }: MapProps) {
-  const scale = zoom;
-  const vW = MAP_W / scale;
-  const vH = MAP_H / scale;
-  const vX = (MAP_W - vW) / 2;
-  const vY = (MAP_H - vH) / 2;
+function LiveMap({ rides, driverPositions, selected, onSelect }: MapProps) {
+  const points: [number, number][] = [];
+  for (const ride of rides) {
+    const pos = driverPositions[ride.driver.id];
+    if (pos) points.push([pos.lat, pos.lng]);
+    else if (ride.pickup.lat && ride.pickup.lng) points.push([ride.pickup.lat, ride.pickup.lng]);
+  }
+  const center: [number, number] = points[0] || [6.5244, 3.3792]; // Lagos fallback
 
   return (
-    <svg
-      viewBox={`${vX} ${vY} ${vW} ${vH}`}
-      className="w-full h-full"
-      style={{ transition: "all 0.3s ease" }}
-    >
-      {/* ── Base ── */}
-      <rect width={MAP_W} height={MAP_H} fill="#EFF3F8" />
+    <MapContainer center={center} zoom={12} scrollWheelZoom className="w-full h-full" style={{ background: "#EFF3F8" }}>
+      <TileLayer
+        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+      />
+      <FitBounds points={points} />
 
-      {/* ── Lagos Lagoon ── */}
-      <path d="M0,460 Q60,428 130,418 Q200,408 260,415 Q320,422 380,410 Q450,397 530,405 Q610,413 700,420 L700,500 L0,500 Z" fill="#BDD5EA" />
-
-      {/* ── Atlantic Ocean / Bar Beach strip ── */}
-      <path d="M255,478 Q310,466 375,472 Q440,478 500,468 Q540,462 580,470 L700,500 L220,500 Z" fill="#9DC0D9" />
-
-      {/* ── Victoria Island (land strip) ── */}
-      <ellipse cx="340" cy="456" rx="80" ry="16" fill="#DBE8F0" />
-      <ellipse cx="200" cy="450" rx="55" ry="12" fill="#DBE8F0" />
-
-      {/* ── Street grid — residential ── */}
-      {/* Ikeja area (top-left cluster) */}
-      {[
-        [30,60,55,30],[95,55,55,30],[160,50,60,35],[30,100,45,28],[95,98,55,28],[160,95,58,28],
-        [30,140,48,26],[95,135,55,26],[155,130,58,26],
-      ].map(([x,y,w,h],i) => <rect key={`ik${i}`} x={x} y={y} width={w} height={h} rx="2" fill="#E2EAF2" />)}
-
-      {/* Surulere area (center-left) */}
-      {[
-        [115,260,50,30],[170,258,60,30],[235,255,55,30],
-        [115,300,50,28],[170,298,60,28],[235,295,55,28],
-      ].map(([x,y,w,h],i) => <rect key={`su${i}`} x={x} y={y} width={w} height={h} rx="2" fill="#E2EAF2" />)}
-
-      {/* Lagos Island / VI cluster */}
-      {[
-        [210,390,45,22],[260,388,45,22],[310,388,45,22],
-        [355,385,40,20],[210,370,45,16],[260,368,55,16],
-      ].map(([x,y,w,h],i) => <rect key={`li${i}`} x={x} y={y} width={w} height={h} rx="2" fill="#D8E4EE" />)}
-
-      {/* Lekki corridor */}
-      {[
-        [420,370,50,22],[475,368,50,22],[530,372,45,20],[580,375,40,20],
-        [420,400,50,18],[475,398,50,18],[530,402,45,18],
-      ].map(([x,y,w,h],i) => <rect key={`lk${i}`} x={x} y={y} width={w} height={h} rx="2" fill="#E2EAF2" />)}
-
-      {/* ── Major roads ── */}
-      {/* Airport Road (Ikeja → Lagos Island) */}
-      <path d="M55,85 L90,200 L135,310 L175,390" stroke="#D0D9E6" strokeWidth="6" fill="none" strokeLinecap="round" />
-
-      {/* Lagos-Ibadan Expressway (goes off screen upper right) */}
-      <path d="M70,70 Q200,45 400,20" stroke="#C8D4E2" strokeWidth="5" fill="none" strokeLinecap="round" />
-
-      {/* Third Mainland Bridge */}
-      <path d="M145,310 Q185,355 230,390" stroke="#C8D4E2" strokeWidth="5" fill="none" strokeLinecap="round" />
-
-      {/* Carter Bridge */}
-      <path d="M185,350 Q210,368 238,388" stroke="#C8D4E2" strokeWidth="4" fill="none" strokeLinecap="round" />
-
-      {/* Lekki Expressway */}
-      <path d="M280,400 Q380,395 480,398 Q570,400 660,415" stroke="#C8D4E2" strokeWidth="6" fill="none" strokeLinecap="round" />
-
-      {/* East-West Expressway / Eko Bridge approach */}
-      <path d="M0,320 Q80,305 170,310 Q240,316 310,330 Q370,342 460,340 Q560,338 700,345" stroke="#C8D4E2" strokeWidth="5" fill="none" strokeLinecap="round" />
-
-      {/* Apapa - Oshodi Expressway */}
-      <path d="M65,420 Q90,380 130,340 Q165,305 185,260 Q200,210 210,160" stroke="#C8D4E2" strokeWidth="4" fill="none" strokeLinecap="round" />
-
-      {/* Oshodi - Isolo route */}
-      <path d="M210,160 Q290,150 370,165 Q430,175 500,165 Q570,155 640,170" stroke="#D0D9E6" strokeWidth="3" fill="none" strokeLinecap="round" />
-
-      {/* Ikorodu Road */}
-      <path d="M140,250 Q195,220 280,205 Q350,194 410,200 Q480,208 550,195" stroke="#D0D9E6" strokeWidth="3" fill="none" strokeLinecap="round" />
-
-      {/* ── Area labels ── */}
-      {[
-        { label: "Ikeja / Airport", x: 75, y: 145 },
-        { label: "Surulere", x: 152, y: 290 },
-        { label: "Oshodi", x: 230, y: 175 },
-        { label: "Lagos Island", x: 246, y: 435 },
-        { label: "Victoria Island", x: 340, y: 442 },
-        { label: "Lekki", x: 500, y: 365 },
-        { label: "Ajah", x: 620, y: 395 },
-        { label: "Ikorodu Rd", x: 390, y: 198 },
-      ].map(l => (
-        <text key={l.label} x={l.x} y={l.y} fill="#8A9BBE" fontSize="11" fontFamily="Inter, sans-serif" fontWeight="600"
-          textAnchor="middle" opacity="0.85">{l.label}</text>
-      ))}
-
-      {/* ── Lagos Lagoon label ── */}
-      <text x="120" y="484" fill="#6890AE" fontSize="10" fontFamily="Inter, sans-serif" opacity="0.7">Lagos Lagoon</text>
-
-      {/* ── Route lines for each active ride ── */}
       {rides.map(ride => {
-        const p = toXY(ride.pickup.lat, ride.pickup.lng);
-        const d = toXY(ride.destination.lat, ride.destination.lng);
-        const isLagos = ride.city === "Lagos";
-        if (!isLagos) return null;
-        const isSel   = selected?.id === ride.id;
-        const isStuck = ride.isStuck;
-        const midX = (p.x + d.x) / 2;
-        const midY = Math.min(p.y, d.y) - 25;
-        return (
-          <path key={`route-${ride.id}`}
-            d={`M${p.x},${p.y} Q${midX},${midY} ${d.x},${d.y}`}
-            stroke={isStuck ? "#DC2626" : isSel ? "#BE1B2C" : "#FECACA"}
-            strokeWidth={isSel ? 3 : 1.5}
-            strokeDasharray={isSel ? "none" : "4,3"}
-            fill="none"
-            opacity={isSel ? 1 : 0.5}
-          />
-        );
-      })}
-
-      {/* ── Markers ── */}
-      {rides.map(ride => {
-        const p = toXY(ride.pickup.lat, ride.pickup.lng);
-        const d = toXY(ride.destination.lat, ride.destination.lng);
-        const isLagos = ride.city === "Lagos";
-        if (!isLagos) return null;
-        const isSel   = selected?.id === ride.id;
-        const isStuck = ride.isStuck;
-        const color   = isStuck ? "#DC2626" : ride.status === "ride_started" ? "#16A34A" : ride.status === "driver_arrived" ? "#7C3AED" : "#BE1B2C";
+        const pos = driverPositions[ride.driver.id];
+        const driverLatLng: [number, number] | null = pos ? [pos.lat, pos.lng] : null;
+        const isSel = selected?.id === ride.id;
+        const color = statusColor(ride);
+        const routePoints: [number, number][] = [
+          driverLatLng || [ride.pickup.lat, ride.pickup.lng],
+          [ride.destination.lat, ride.destination.lng],
+        ];
 
         return (
-          <g key={`markers-${ride.id}`}>
-            {/* Pickup pin */}
-            <circle cx={p.x} cy={p.y} r="4" fill="#BE1B2C" opacity={isSel ? 1 : 0.5} />
-
-            {/* Destination pin */}
-            <circle cx={d.x} cy={d.y} r="4" fill="#DC2626" opacity={isSel ? 1 : 0.4} />
-
-            {/* Driver marker */}
-            <g onClick={() => onSelect(ride)} style={{ cursor: "pointer" }}>
-              {isSel && (
-                <circle cx={p.x} cy={p.y} r="20" fill={color} opacity="0.12">
-                  <animate attributeName="r" values="16;24;16" dur="2s" repeatCount="indefinite" />
-                </circle>
-              )}
-              <circle cx={p.x} cy={p.y} r={isSel ? 16 : 13} fill={color}
-                stroke="white" strokeWidth={isSel ? 2.5 : 2}
-                className="transition-all duration-200"
-                style={{ filter: isSel ? `drop-shadow(0 2px 6px ${color}66)` : undefined }}
+          <Fragment key={ride.id}>
+            <Polyline
+              positions={routePoints}
+              pathOptions={{
+                color: ride.isStuck ? "#DC2626" : isSel ? "#BE1B2C" : "#FECACA",
+                weight: isSel ? 3 : 1.5,
+                dashArray: isSel ? undefined : "4,4",
+                opacity: isSel ? 1 : 0.6,
+              }}
+            />
+            {ride.pickup.lat !== 0 && (
+              <Marker position={[ride.pickup.lat, ride.pickup.lng]} icon={dotDivIcon("#BE1B2C")} />
+            )}
+            {ride.destination.lat !== 0 && (
+              <Marker position={[ride.destination.lat, ride.destination.lng]} icon={dotDivIcon("#DC2626")} />
+            )}
+            {driverLatLng && (
+              <Marker
+                position={driverLatLng}
+                icon={driverDivIcon(ride.driver.avatar, color, isSel)}
+                eventHandlers={{ click: () => onSelect(ride) }}
               />
-              <text x={p.x} y={p.y + 1} textAnchor="middle" dominantBaseline="middle"
-                fill="white" fontSize={isSel ? "9" : "8"} fontWeight="700" fontFamily="Inter, sans-serif"
-                style={{ pointerEvents: "none" }}>
-                {ride.driver.avatar}
-              </text>
-              {isSel && (
-                <g>
-                  <rect x={p.x - 22} y={p.y - 28} width="44" height="14" rx="4" fill="#1E293B" opacity="0.9" />
-                  <text x={p.x} y={p.y - 20} textAnchor="middle" dominantBaseline="middle"
-                    fill="white" fontSize="7.5" fontFamily="Inter, sans-serif" fontWeight="600"
-                    style={{ pointerEvents: "none" }}>
-                    {ride.id}
-                  </text>
-                </g>
-              )}
-            </g>
-          </g>
+            )}
+          </Fragment>
         );
       })}
-
-      {/* Off-map rides indicator */}
-      {rides.filter(r => r.city !== "Lagos").length > 0 && (
-        <g>
-          <rect x={MAP_W - 110} y={10} width="100" height="28" rx="6" fill="white" stroke="#E2E8F0" strokeWidth="1" />
-          <text x={MAP_W - 60} y={24} textAnchor="middle" dominantBaseline="middle" fill="#64748B" fontSize="10" fontFamily="Inter, sans-serif">
-            +{rides.filter(r => r.city !== "Lagos").length} off-map
-          </text>
-        </g>
-      )}
-    </svg>
+    </MapContainer>
   );
 }
 
@@ -351,8 +327,8 @@ export default function LiveRides() {
   const [stuckOnly, setStuckOnly]     = useState(false);
   const [selected, setSelected]       = useState<Ride | null>(initialRide);
   const [detailOpen, setDetailOpen]   = useState(!!initialRide);
-  const [zoom, setZoom]               = useState(1);
   const [showFilters, setShowFilters] = useState(false);
+  const driverPositions = useLiveDriverPositions();
 
   const filtered = useMemo(() => activeRides.filter(r => {
     if (staleOnly && !r.isStaleLocation) return false;
@@ -491,31 +467,15 @@ export default function LiveRides() {
 
         {/* LEFT: Map */}
         <div className="xl:col-span-3 relative rounded-[14px] overflow-hidden border border-slate-200 bg-[#EFF3F8]">
-          <LagosMap rides={filtered} selected={selected} onSelect={handleSelect} zoom={zoom} />
+          <LiveMap rides={filtered} driverPositions={driverPositions} selected={selected} onSelect={handleSelect} />
 
           {/* Live badge */}
-          <div className="absolute top-4 right-4 flex items-center gap-1.5 bg-white/90 backdrop-blur-sm border border-slate-200 rounded-full px-3 py-1.5 text-xs font-semibold text-green-700 shadow-sm">
+          <div className="absolute top-4 right-4 z-[1000] flex items-center gap-1.5 bg-white/90 backdrop-blur-sm border border-slate-200 rounded-full px-3 py-1.5 text-xs font-semibold text-green-700 shadow-sm">
             <span className="live-pulse w-1.5 h-1.5 rounded-full bg-green-500" /> Live
           </div>
 
-          {/* Zoom controls */}
-          <div className="absolute top-14 right-4 flex flex-col gap-1">
-            <button onClick={() => setZoom(z => Math.min(z + 0.25, 2.5))}
-              className="w-8 h-8 bg-white/90 backdrop-blur-sm border border-slate-200 rounded-[8px] flex items-center justify-center text-slate-600 hover:bg-white shadow-sm transition-colors">
-              <ZoomIn size={15} />
-            </button>
-            <button onClick={() => setZoom(z => Math.max(z - 0.25, 1))}
-              className="w-8 h-8 bg-white/90 backdrop-blur-sm border border-slate-200 rounded-[8px] flex items-center justify-center text-slate-600 hover:bg-white shadow-sm transition-colors">
-              <ZoomOut size={15} />
-            </button>
-            <button onClick={() => setZoom(1)}
-              className="w-8 h-8 bg-white/90 backdrop-blur-sm border border-slate-200 rounded-[8px] flex items-center justify-center text-slate-600 hover:bg-white shadow-sm transition-colors">
-              <Locate size={15} />
-            </button>
-          </div>
-
           {/* Map legend */}
-          <div className="absolute bottom-4 left-4 bg-white/90 backdrop-blur-sm rounded-[10px] border border-slate-200 px-3 py-2.5 flex flex-col gap-1.5 shadow-sm">
+          <div className="absolute bottom-4 left-4 z-[1000] bg-white/90 backdrop-blur-sm rounded-[10px] border border-slate-200 px-3 py-2.5 flex flex-col gap-1.5 shadow-sm">
             {[
               { color: "bg-green-600",  label: "In Progress" },
               { color: "bg-[#BE1B2C]",   label: "En Route" },
@@ -528,20 +488,9 @@ export default function LiveRides() {
             ))}
           </div>
 
-          {/* Traffic conditions */}
-          <div className="absolute bottom-4 right-4 bg-white/90 backdrop-blur-sm border border-slate-200 rounded-[10px] px-3 py-2 flex items-center gap-2 shadow-sm">
-            <div className="flex gap-0.5">
-              <div className="w-1 h-4 rounded-sm bg-green-500" />
-              <div className="w-1 h-4 rounded-sm bg-green-500" />
-              <div className="w-1 h-3 rounded-sm bg-amber-400" />
-              <div className="w-1 h-2 rounded-sm bg-slate-300" />
-            </div>
-            <span className="text-xs text-slate-600 font-medium">Moderate traffic</span>
-          </div>
-
           {/* Selected ride highlight info */}
           {selected && (
-            <div className="absolute top-4 left-4 bg-white/95 backdrop-blur-sm border border-blue-200 rounded-[10px] px-3 py-2.5 shadow-md max-w-52">
+            <div className="absolute top-20 left-4 z-[1000] bg-white/95 backdrop-blur-sm border border-blue-200 rounded-[10px] px-3 py-2.5 shadow-md max-w-52">
               <div className="flex items-center justify-between gap-2 mb-1">
                 <span className="font-mono text-xs font-bold text-[#BE1B2C]">{selected.id}</span>
                 <button onClick={() => setSelected(null)} className="text-slate-400 hover:text-slate-600"><X size={12} /></button>

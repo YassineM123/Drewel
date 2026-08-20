@@ -49,7 +49,6 @@ export default function OnlineDrivers() {
   const [revealedPII, setRevealedPII] = useState<Set<string>>(new Set());
   const [drivers, setDrivers] = useState<any[]>([]);
   const [locationDrivers, setLocationDrivers] = useState<any[]>([]);
-  const [_fetching, setFetching] = useState(true);
 
   const fetchDrivers = async () => {
     try {
@@ -61,8 +60,6 @@ export default function OnlineDrivers() {
       setLocationDrivers(withLocation);
     } catch (err) {
       console.error("Failed to load drivers", err);
-    } finally {
-      setFetching(false);
     }
   };
 

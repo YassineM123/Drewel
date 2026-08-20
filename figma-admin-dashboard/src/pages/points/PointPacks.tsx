@@ -33,7 +33,6 @@ export default function PointPacks() {
   const [createOpen, setCreateOpen] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const [_fetching, setFetching] = useState(true);
 
   useEffect(() => {
     let cancelled = false;
@@ -44,7 +43,6 @@ export default function PointPacks() {
       } catch (err) {
         console.error("Failed to load point packs", err);
       } finally {
-        if (!cancelled) setFetching(false);
       }
     })();
     return () => { cancelled = true; };

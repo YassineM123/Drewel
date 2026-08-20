@@ -121,15 +121,23 @@ class _BalanceCard extends StatelessWidget {
                 value: '${wallet.availablePoints}',
                 emphasized: true,
               ),
+              if (wallet.pointsPerAED != null && wallet.pointsPerAED! > 0)
+                _BalanceRow(
+                  label: 'points.aed_equivalent'.tr,
+                  value:
+                      '${(wallet.availablePoints / wallet.pointsPerAED!).toStringAsFixed(2)} AED',
+                ),
               const Divider(color: Colors.white38),
               _BalanceRow(
                 label: 'points.reserved'.tr,
                 value: '${wallet.reservedPoints}',
               ),
-              _BalanceRow(
-                label: 'points.available_rides'.tr,
-                value: '${wallet.equivalentAvailableRides}',
-              ),
+              if (wallet.commissionRate != null)
+                _BalanceRow(
+                  label: 'points.commission_rate'.tr,
+                  value:
+                      '${((wallet.commissionRate ?? 0) * 100).toStringAsFixed(0)}%',
+                ),
               _BalanceRow(
                 label: 'points.purchased'.tr,
                 value: '${wallet.purchasedPoints}',
@@ -187,6 +195,9 @@ class _TransactionTile extends StatelessWidget {
   String get _title => switch (transaction.type) {
         'WELCOME_BONUS' => 'points.welcome_bonus'.tr,
         'RIDE_CHARGE' => 'points.ride_charge'.trParams(
+            {'reference': transaction.rideId ?? ''},
+          ),
+        'RIDE_COMMISSION' => 'points.ride_commission'.trParams(
             {'reference': transaction.rideId ?? ''},
           ),
         'POINTS_PURCHASE' => 'points.purchase'.tr,

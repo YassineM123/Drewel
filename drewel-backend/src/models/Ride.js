@@ -130,6 +130,20 @@ const rideSchema = new mongoose.Schema(
       passenger: { type: rideReviewSchema, default: null },
       driver: { type: rideReviewSchema, default: null },
     },
+    commission: {
+      ridePriceAED: { type: Number, default: null },
+      commissionRate: { type: Number, default: null },
+      commissionAED: { type: Number, default: null },
+      pointsPerAED: { type: Number, default: null },
+      pointsCharged: { type: Number, default: null },
+      driverNetAED: { type: Number, default: null },
+      chargedAt: { type: Date, default: null },
+      transactionId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "PointTransaction",
+        default: null,
+      },
+    },
   },
   { timestamps: true, versionKey: false }
 );

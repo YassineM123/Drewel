@@ -52,7 +52,7 @@ export const getMyPointsWallet = async (req, res) => {
     res.set("Cache-Control", "no-store");
     return res.json({
       success: true,
-      wallet: toWalletDto(wallet, settings.rideOfferPointsCost),
+      wallet: toWalletDto(wallet, settings),
     });
   } catch (error) {
     return sendError(res, error);

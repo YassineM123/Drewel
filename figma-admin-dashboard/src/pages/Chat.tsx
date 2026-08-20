@@ -12,7 +12,6 @@ export default function Chat() {
   const bottomRef = useRef<HTMLDivElement>(null);
   const [mobileView, setMobileView] = useState<"list" | "thread">("list");
   const [chatTab, setChatTab] = useState<"all" | "unread" | "drivers" | "users">("all");
-  const [loading, setLoading] = useState(true);
   const [messages, setMessages] = useState<any[]>([]);
 
   useEffect(() => {
@@ -27,8 +26,6 @@ export default function Chat() {
         }
       } catch (err) {
         console.error("Failed to load chat threads", err);
-      } finally {
-        if (!cancelled) setLoading(false);
       }
     })();
     return () => { cancelled = true; };

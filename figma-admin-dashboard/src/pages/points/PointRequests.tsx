@@ -24,19 +24,15 @@ export default function PointRequests() {
   const [loading, setLoading] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const [requests, setRequests] = useState<any[]>([]);
-  const [_fetching, setFetching] = useState(true);
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      setFetching(true);
       try {
         const res = await getPurchaseRequests({ page, limit: 50 });
         if (!cancelled) setRequests(res.requests ?? []);
       } catch (err) {
         console.error("Failed to load purchase requests", err);
-      } finally {
-        if (!cancelled) setFetching(false);
       }
     })();
     return () => { cancelled = true; };

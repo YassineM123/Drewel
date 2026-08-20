@@ -58,8 +58,13 @@ Future<bool> showOfferReservationConfirmation(
               ),
               _QuoteRow(
                 label: 'points.offer_reservation'.tr,
-                value: wallet.offerPointsCost,
+                value: 1,
               ),
+              if (wallet.commissionRate != null)
+                _CommissionInfo(
+                  commissionRate: wallet.commissionRate!,
+                  pointsPerAED: wallet.pointsPerAED ?? 10,
+                ),
               const Divider(),
               _QuoteRow(
                 label: 'points.after_reservation'.tr,
@@ -78,16 +83,51 @@ Future<bool> showOfferReservationConfirmation(
               onPressed: controller.isSendingOffer.value
                   ? null
                   : () => Navigator.pop(dialogContext, true),
-              child: Text(
-                'points.send_offer'.trParams(
-                  {'points': '${wallet.offerPointsCost}'},
-                ),
-              ),
+              child: Text('points.send_offer'.tr),
             ),
           ],
         ),
       ) ??
       false;
+}
+
+class _CommissionInfo extends StatelessWidget {
+  const _CommissionInfo({
+    required this.commissionRate,
+    required this.pointsPerAED,
+  });
+
+  final double commissionRate;
+  final double pointsPerAED;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+        padding: const EdgeInsets.symmetric(vertical: 4),
+        child: Container(
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: primaryColor.withValues(alpha: 0.08),
+            borderRadius: BorderRadius.circular(6),
+          ),
+          child: Row(
+            children: <Widget>[
+              Icon(Icons.info_outline_rounded,
+                  size: 14, color: primaryColor.withValues(alpha: 0.7)),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  'points.commission_info'
+                      .trParams({'rate': '${(commissionRate * 100).toInt()}%'}),
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: Colors.grey.shade700,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
 }
 
 class _QuoteRow extends StatelessWidget {

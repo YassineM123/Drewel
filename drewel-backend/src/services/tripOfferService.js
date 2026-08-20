@@ -8,13 +8,14 @@ import TripOffer from "../models/TripOffer.js";
 import PointsSettings from "../models/PointsSettings.js";
 import {
   PointsError,
-  captureOfferPointsInSession,
+  estimateCommissionBalance,
   queuePointsEvents,
   releaseOfferPointsInSession,
   reservePointsInSession,
   runPointsTransaction,
   toWalletDto,
 } from "./pointsWalletService.js";
+import { calculateRideCommission } from "./commissionService.js";
 import { createPickupPin, decryptPickupPin } from "./rideTransitionService.js";
 import { buildFreshDubaiMarketplaceAvailabilityFilter } from "../utils/availableDrivers.js";
 import { notifyRideTransition } from "./rideNotificationService.js";
@@ -49,6 +50,7 @@ export const toTripOfferDto = (offer) => ({
   stateVersion: offer.stateVersion,
   createdAt: offer.createdAt,
   updatedAt: offer.updatedAt,
+  commission: offer.commission || null,
 });
 
 export const createTripOffer = async ({
@@ -168,9 +170,23 @@ export const createTripOffer = async ({
     }
 
     const offerId = new mongoose.Types.ObjectId();
+
+    const balanceCheck = await estimateCommissionBalance(
+      driverId,
+      offeredPrice,
+      session
+    );
+    if (!balanceCheck.hasEnoughPoints) {
+      throw new PointsError(
+        `Insufficient points. You need ${balanceCheck.pointsRequired} points for this ride but have ${balanceCheck.availablePoints}. Recharge your points to accept rides.`,
+        409,
+        "INSUFFICIENT_AVAILABLE_POINTS"
+      );
+    }
+
     const reservation = await reservePointsInSession({
       driverId,
-      points: settings.rideOfferPointsCost,
+      points: 1,
       offerId,
       rideId: contact._id,
       idempotencyKey: `offer-reserve:${driverId}:${idempotencyKey}`,
@@ -179,6 +195,7 @@ export const createTripOffer = async ({
     const expiresAt = new Date(
       Date.now() + offerTtlMs(settings.offerExpirationSeconds)
     );
+    const estimatedCommission = calculateRideCommission(offeredPrice, settings);
     const [offer] = await TripOffer.create(
       [
         {
@@ -195,12 +212,20 @@ export const createTripOffer = async ({
           destination,
           vehicleType,
           note,
-          pointsCost: settings.rideOfferPointsCost,
+          pointsCost: 1,
           reservedBonusPoints: reservation.bonusPoints,
           reservedPurchasedPoints: reservation.purchasedPoints,
           status: "pending",
           reservationState: "reserved",
           expiresAt,
+          commission: {
+            ridePriceAED: estimatedCommission.ridePriceAED,
+            commissionRate: estimatedCommission.commissionRate,
+            commissionAED: estimatedCommission.commissionAED,
+            pointsPerAED: estimatedCommission.pointsPerAED,
+            pointsToDeduct: estimatedCommission.pointsToDeduct,
+            driverNetAED: estimatedCommission.driverNetAED,
+          },
         },
       ],
       { session }
@@ -263,10 +288,11 @@ export const createTripOffer = async ({
             offerId: String(offer._id),
             points: offer.pointsCost,
             walletVersion: reservation.wallet.version,
+            commission: estimatedCommission,
             notification: {
               type: "POINTS_RESERVED",
               title: "Points reserved",
-              message: `${offer.pointsCost} points reserved for the trip offer`,
+              message: `1 point reserved. Commission: ${estimatedCommission.commissionAED} AED (${estimatedCommission.pointsToDeduct} points)`,
               deepLink: "drewel://driver/points",
             },
           },
@@ -296,7 +322,7 @@ export const createTripOffer = async ({
       });
     }
     await queuePointsEvents(outboxEvents, session);
-    return { offer, wallet: reservation.wallet, idempotent: false };
+    return { offer, wallet: reservation.wallet, idempotent: false, settings: { commissionRate: settings.commissionRate, pointsPerAED: settings.pointsPerAED } };
   });
 
 const releaseCompetingOffers = async (acceptedOffer, session) => {
@@ -370,12 +396,18 @@ export const acceptTripOffer = async ({
         Ride.findById(offer.rideId).select("+pickupPinEncrypted").session(session),
         mongoose.model("DriverPointsWallet").findOne({ driverId: offer.driverId }).session(session),
       ]);
+      const settings = await PointsSettings.getEffective({ session });
       return {
         offer,
         ride,
         wallet,
         pickupPin: decryptPickupPin(ride?.pickupPinEncrypted),
         idempotent: true,
+        commission: offer.commission || null,
+        settings: {
+          commissionRate: settings.commissionRate,
+          pointsPerAED: settings.pointsPerAED,
+        },
       };
     }
     if (offer.status !== "pending" || offer.reservationState !== "reserved") {
@@ -463,10 +495,24 @@ export const acceptTripOffer = async ({
       );
     }
 
-    const charge = await captureOfferPointsInSession({
+    const settings = await PointsSettings.getEffective({ session });
+    const commissionCheck = await estimateCommissionBalance(
+      offer.driverId,
+      offer.offeredPrice,
+      session
+    );
+    if (!commissionCheck.hasEnoughPoints) {
+      throw new PointsError(
+        `Insufficient points. You need ${commissionCheck.pointsRequired} points for this ride commission but have ${commissionCheck.availablePoints}.`,
+        409,
+        "INSUFFICIENT_AVAILABLE_POINTS"
+      );
+    }
+
+    const release = await releaseOfferPointsInSession({
       offer,
-      rideId: ride._id,
-      idempotencyKey: `offer-charge:${offer._id}`,
+      reason: "Offer accepted - points reservation released",
+      idempotencyKey: `offer-release:${offer._id}:accepted`,
       session,
     });
     const accepted = await TripOffer.findOneAndUpdate(
@@ -517,25 +563,25 @@ export const acceptTripOffer = async ({
       { session }
     );
 
+    const commission = calculateRideCommission(offer.offeredPrice, settings);
     await queuePointsEvents(
       [
         {
-          eventKey: `offer:${offer._id}:charged`,
-          type: "points:charged",
-          aggregateType: "wallet",
-          aggregateId: charge.wallet._id,
+          eventKey: `offer:${offer._id}:accepted`,
+          type: "points:notification",
+          aggregateType: "trip_offer",
+          aggregateId: offer._id,
           recipientId: offer.driverId,
           recipientType: "Driver",
           payload: {
             offerId: String(offer._id),
             rideId: String(ride._id),
             status: "accepted",
-            points: offer.pointsCost,
-            walletVersion: charge.wallet.version,
+            commission,
             notification: {
-              type: "RIDE_POINTS_CHARGED",
-              title: "Points charged",
-              message: `${offer.pointsCost} points charged for the confirmed ride`,
+              type: "RIDE_ACCEPTED",
+              title: "Ride accepted",
+              message: `Commission on completion: ${commission.commissionAED} AED (${commission.pointsToDeduct} points)`,
               deepLink: "drewel://driver/points",
             },
           },
@@ -565,9 +611,10 @@ export const acceptTripOffer = async ({
     return {
       offer: accepted,
       ride,
-      wallet: charge.wallet,
+      wallet: release.wallet,
       pickupPin: pickupPin.pin,
       idempotent: false,
+      commission,
     };
   });
 
@@ -712,5 +759,5 @@ export const expireTripOffers = async ({ limit = 100 } = {}) => {
   return released;
 };
 
-export const getOfferWalletDto = (wallet, pointsCost) =>
-  wallet ? toWalletDto(wallet, pointsCost) : null;
+export const getOfferWalletDto = (wallet, settings) =>
+  wallet ? toWalletDto(wallet, settings) : null;

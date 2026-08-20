@@ -119,6 +119,14 @@ const tripOfferSchema = new mongoose.Schema(
     deliveryFailedAt: { type: Date, default: null },
     resolvedAt: { type: Date, default: null },
     stateVersion: { type: Number, default: 0, min: 0 },
+    commission: {
+      ridePriceAED: { type: Number, default: null },
+      commissionRate: { type: Number, default: null },
+      commissionAED: { type: Number, default: null },
+      pointsPerAED: { type: Number, default: null },
+      pointsToDeduct: { type: Number, default: null },
+      driverNetAED: { type: Number, default: null },
+    },
   },
   { timestamps: true, versionKey: false }
 );

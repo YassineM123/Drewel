@@ -3,7 +3,7 @@ import {
   Card, Button, SectionHeader, Th, Td, Tr, Avatar, Badge, Modal, Toast, StatRow
 } from "../components/ui";
 import { ShieldCheck, UserPlus, Mail, MoreHorizontal, Check, X } from "lucide-react";
-import { getTeam, getRolesCatalog } from "../api";
+import { getTeam } from "../api";
 
 interface TeamMember {
   id: string;
@@ -61,7 +61,6 @@ export default function TeamRoles() {
   const [toast, setToast] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<"members" | "permissions">("members");
   const [team, setTeam] = useState<TeamMember[]>([]);
-  const [_fetching, setFetching] = useState(true);
 
   useEffect(() => {
     let cancelled = false;
@@ -72,7 +71,6 @@ export default function TeamRoles() {
       } catch (err) {
         console.error("Failed to load team", err);
       } finally {
-        if (!cancelled) setFetching(false);
       }
     })();
     return () => { cancelled = true; };

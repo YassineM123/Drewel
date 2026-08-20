@@ -147,10 +147,11 @@ export const sendTripOffer = async (req, res) => {
       offer: toTripOfferDto(accepted.offer),
       ride: accepted.ride,
       wallet: accepted.wallet
-        ? getOfferWalletDto(accepted.wallet, accepted.offer.pointsCost)
+        ? getOfferWalletDto(accepted.wallet, accepted.settings)
         : null,
       idempotent: result.idempotent || accepted.idempotent,
       pickupPin: accepted.pickupPin,
+      commission: accepted.commission || null,
     });
   } catch (error) {
     if (createdOfferId) {
@@ -306,7 +307,7 @@ export const acceptOffer = async (req, res) => {
       offer: toTripOfferDto(result.offer),
       ride: result.ride,
       wallet: result.wallet
-        ? getOfferWalletDto(result.wallet, result.offer.pointsCost)
+        ? getOfferWalletDto(result.wallet, result.settings)
         : null,
       idempotent: result.idempotent,
       pickupPin: result.pickupPin,
@@ -344,7 +345,7 @@ const closeAs = (actorRole, terminalStatus, reason) => async (req, res) => {
       success: true,
       offer: toTripOfferDto(result.offer),
       wallet: result.wallet
-        ? getOfferWalletDto(result.wallet, result.offer.pointsCost)
+        ? getOfferWalletDto(result.wallet, null)
         : null,
       idempotent: result.idempotent,
     });

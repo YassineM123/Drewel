@@ -25,8 +25,10 @@ const NOTIF_LABELS: { key: NotifKey; label: string; description: string }[] = [
 ];
 
 const operationalSettings: Setting[] = [
-  { key: "welcome_points", label: "Welcome Points", value: 100, unit: "pts", min: 0, max: 500, description: "Points credited to a new driver on first approval" },
+  { key: "welcome_points", label: "Welcome Points", value: 1000, unit: "pts", min: 0, max: 10000, description: "Points credited to a new driver on first approval" },
   { key: "points_per_ride", label: "Points Charged Per Ride", value: 20, unit: "pts", min: 1, max: 100, description: "Points deducted from driver on each completed ride" },
+  { key: "commission_rate", label: "Commission Rate", value: 0.10, unit: "decimal", min: 0, max: 1, description: "Percentage of ride price taken as commission (0.10 = 10%)" },
+  { key: "points_per_aed", label: "Points Per AED", value: 10, unit: "pts", min: 1, max: 1000, description: "How many points equal 1 AED (10 points = 1 AED)" },
   { key: "offer_expiry", label: "Trip Offer Expiry Time", value: 45, unit: "sec", min: 10, max: 120, description: "Seconds before an unaccepted trip offer expires" },
   { key: "pickup_radius", label: "Pickup Geofence Radius", value: 100, unit: "m", min: 20, max: 500, description: "Radius within which pickup PIN confirmation is valid" },
   { key: "destination_radius", label: "Destination Geofence Radius", value: 150, unit: "m", min: 50, max: 800, description: "Radius within which ride completion is auto-triggered" },
@@ -43,7 +45,6 @@ export default function Settings() {
   const [toast, setToast] = useState<string | null>(null);
   const [notifs, setNotifs] = useState<Record<NotifKey, boolean>>(DEFAULT_NOTIFS);
   const [adminUser, setAdminUser] = useState<any>(null);
-  const [_fetching, setFetching] = useState(true);
 
   useEffect(() => {
     let cancelled = false;
@@ -54,7 +55,6 @@ export default function Settings() {
       } catch (err) {
         console.error("Failed to load admin settings", err);
       } finally {
-        if (!cancelled) setFetching(false);
       }
     })();
     return () => { cancelled = true; };

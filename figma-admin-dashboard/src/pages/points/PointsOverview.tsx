@@ -36,7 +36,6 @@ function relTime(iso: string) {
 export default function PointsOverview() {
   const navigate = useNavigate();
   const [overview, setOverview] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let cancelled = false;
@@ -46,8 +45,6 @@ export default function PointsOverview() {
         if (!cancelled) setOverview(data);
       } catch (err) {
         console.error("Failed to load points overview", err);
-      } finally {
-        if (!cancelled) setLoading(false);
       }
     })();
     return () => { cancelled = true; };
@@ -148,7 +145,7 @@ export default function PointsOverview() {
             </button>
           </div>
           <div className="divide-y divide-slate-50">
-            {recentTx.map(tx => (
+            {recentTx.map((tx: any) => (
               <div key={tx.id} className="flex items-center justify-between gap-3 px-5 py-3">
                 <div className="flex-1 min-w-0">
                   <p className="text-xs font-semibold text-slate-700">{TX_LABEL[tx.type] ?? tx.type}</p>
