@@ -79,6 +79,36 @@ class RideMessageRepository {
     return RideMessageModel.fromJson(Map<String, dynamic>.from(raw as Map));
   }
 
+  /// Uploads a recorded voice note and creates its message in one call.
+  ///
+  /// [clientMessageId] must be reused verbatim on retry — the backend's
+  /// unique index turns a replay into the original message instead of a
+  /// duplicate.
+  Future<RideMessageModel> sendVoice(
+    String rideId, {
+    required String filePath,
+    required Duration duration,
+    String mimeType = 'audio/mp4',
+    String? clientMessageId,
+  }) async {
+    final String idempotencyKey = clientMessageId ?? newClientMessageId();
+    final Map<String, dynamic> response =
+        await _api.postMultipartFile(
+      '${ApiUrlConstants.rideMessages(rideId)}/voice',
+      fileField: 'audio',
+      filePath: filePath,
+      fileName: '$idempotencyKey.m4a',
+      contentType: mimeType,
+      fields: <String, String>{
+        'clientMessageId': idempotencyKey,
+        'durationSeconds': (duration.inMilliseconds / 1000)
+            .toStringAsFixed(1),
+      },
+    );
+    final dynamic raw = response['message'] ?? response['data'];
+    return RideMessageModel.fromJson(Map<String, dynamic>.from(raw as Map));
+  }
+
   static String _routePointText(String label, Map<String, dynamic> point) {
     final String address = (point['address'] ?? '').toString().trim();
     final Object? lat = point['lat'];

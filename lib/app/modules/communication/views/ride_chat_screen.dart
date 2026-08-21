@@ -1,14 +1,18 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:get/get.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:intl/intl.dart';
+import 'package:permission_handler/permission_handler.dart'
+    show openAppSettings;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../../common/colors.dart';
 import '../../../../common/motion.dart';
+import '../../../../common/socket_services.dart';
 import '../../../data/apis/api_constants/api_key_constants.dart';
 import '../../../data/apis/api_models/ride_message_model.dart';
 import '../../../data/apis/api_models/ride_conversation_model.dart';
@@ -18,6 +22,8 @@ import '../../../data/apis/communication_api_client.dart';
 import '../../../data/repositories/driver_points_repository.dart';
 import '../../../data/repositories/active_ride_repository.dart';
 import '../../../data/repositories/ride_message_repository.dart';
+import '../../../data/services/voice_player_manager.dart';
+import '../../../data/services/voice_recorder_service.dart';
 import '../../../routes/app_pages.dart';
 import '../../active_ride/controllers/active_ride_controller.dart';
 import '../../points/bindings/driver_points_binding.dart';
@@ -25,6 +31,7 @@ import '../../points/controllers/driver_points_controller.dart';
 import '../../points/widgets/trip_offer_points.dart';
 import '../../user_home/widgets/trip_request_map_sheet.dart';
 import '../controllers/call_state_controller.dart';
+import '../widgets/voice_message_bubble.dart';
 
 class RideChatScreen extends StatefulWidget {
   const RideChatScreen({super.key});
@@ -55,6 +62,17 @@ class _RideChatScreenState extends State<RideChatScreen> {
   String? _failedClientMessageId;
   Timer? _refreshTimer;
   bool _refreshing = false;
+
+  // Voice notes.
+  VoiceRecorderService? _recorder;
+  VoicePlayerManager? _player;
+  bool _recording = false;
+  _PendingVoice? _pendingVoice;
+  _PendingVoice? _failedVoice;
+  SocketService? _subscribedSocket;
+  final Set<String> _seenMessageIds = <String>{};
+
+  static const String _realtimeEvent = 'ride:message';
 
   static const List<String> _quickMessages = <String>[
     "I'm here",
@@ -103,6 +121,72 @@ class _RideChatScreenState extends State<RideChatScreen> {
   void initState() {
     super.initState();
     _load();
+    _subscribeRealtime();
+  }
+
+  /// Instant delivery for incoming messages. The 5s poll stays as the safety
+  /// net for missed events; duplicates are filtered by message id.
+  void _subscribeRealtime() {
+    final SocketService socket = _communication.socketService;
+    socket.off(_realtimeEvent);
+    socket.on(_realtimeEvent, _handleRealtimeMessage);
+    _subscribedSocket = socket;
+  }
+
+  void _handleRealtimeMessage(dynamic data) {
+    if (data is! Map) return;
+    final String? rideId = _rideId;
+    if (rideId == null) return;
+    if ((data['rideId'] ?? '').toString() != rideId) return;
+    final RideMessageModel message = RideMessageModel.fromFlat(
+      id: (data['messageId'] ?? data['_id'] ?? '').toString(),
+      rideId: rideId,
+      data: data,
+      fallbackSenderId: '',
+    );
+    final String echoClientId =
+        message.clientMessageId ?? (data['clientMessageId'] ?? '').toString();
+    if (message.id.isEmpty ||
+        _seenMessageIds.contains(message.id) ||
+        _messages.any((RideMessageModel existing) =>
+            existing.id == message.id ||
+            (echoClientId.isNotEmpty &&
+                (existing.clientMessageId ?? '') == echoClientId))) {
+      return;
+    }
+    if (message.isCancelledTripRequest) return;
+    _seenMessageIds.add(message.id);
+    if (!mounted) return;
+    setState(() => _messages.add(message));
+    if (message.senderId != _selfId &&
+        message.status != RideMessageStatus.read) {
+      _communication.messageRepository
+          .markReceipt(rideId, message.id, RideMessageStatus.read)
+          .then((_) {
+        if (!mounted) return;
+        final int index =
+            _messages.indexWhere((RideMessageModel m) => m.id == message.id);
+        if (index >= 0) {
+          setState(() {
+            _messages[index] = RideMessageModel(
+              id: message.id,
+              rideId: message.rideId,
+              text: message.text,
+              senderId: message.senderId,
+              status: RideMessageStatus.read,
+              messageType: message.messageType,
+              metadata: message.metadata,
+              clientMessageId: message.clientMessageId,
+              audioUrl: message.audioUrl,
+              audioDuration: message.audioDuration,
+              audioMimeType: message.audioMimeType,
+              audioSize: message.audioSize,
+              createdAt: message.createdAt,
+            );
+          });
+        }
+      }).catchError((_) {});
+    }
   }
 
   Future<void> _load({bool showLoader = true}) async {
@@ -165,6 +249,25 @@ class _RideChatScreenState extends State<RideChatScreen> {
         _messages.addAll(messages.where(
           (RideMessageModel message) => !message.isCancelledTripRequest,
         ));
+        _seenMessageIds
+          ..clear()
+          ..addAll(messages.map((RideMessageModel message) => message.id));
+        // A "failed" or in-flight voice upload may have actually landed
+        // (e.g. lost response after a retry); reconcile against the server.
+        final Set<String> serverClientIds = messages
+            .map((RideMessageModel message) =>
+                (message.clientMessageId ?? '').toString())
+            .where((String id) => id.isNotEmpty)
+            .toSet();
+        if (_pendingVoice != null &&
+            serverClientIds.contains(_pendingVoice!.clientMessageId)) {
+          _pendingVoice = null;
+        }
+        if (_failedVoice != null &&
+            serverClientIds.contains(_failedVoice!.clientMessageId)) {
+          _deleteQuietly(_failedVoice!.path);
+          _failedVoice = null;
+        }
         _incomingOffers
           ..clear()
           ..addAll(incoming);
@@ -182,6 +285,10 @@ class _RideChatScreenState extends State<RideChatScreen> {
           RideMessageStatus.read,
         );
       }
+      // Re-attach on every poll: SocketService recreates its underlying
+      // socket on app resume, which silently drops screen-scoped listeners.
+      // off()+on() makes this idempotent.
+      _subscribeRealtime();
       _refreshTimer ??= Timer.periodic(
         const Duration(seconds: 5),
         (_) => _load(showLoader: false),
@@ -248,10 +355,149 @@ class _RideChatScreenState extends State<RideChatScreen> {
     _send(text, _failedClientMessageId);
   }
 
+  VoicePlayerManager get _voicePlayer => _player ??= VoicePlayerManager();
+
+  Future<void> _startVoiceRecording() async {
+    if (_recording || _sending || _pendingVoice != null) return;
+    final VoiceRecorderService recorder =
+        _recorder ??= VoiceRecorderService(onMaxDurationReached: (result) {
+      if (!mounted) return;
+      setState(() => _recording = false);
+      _uploadVoice(
+        path: result.path,
+        duration: result.duration,
+        mimeType: result.mimeType,
+      );
+    });
+    try {
+      await recorder.start();
+    } on VoiceRecordingException catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(error.message)),
+      );
+      if (error.code == 'MIC_PERMISSION_PERMANENTLY_DENIED') {
+        await openAppSettings();
+      }
+      return;
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+            content: Text('Recording could not start. Please try again.')),
+      );
+      return;
+    }
+    if (!mounted) return;
+    setState(() => _recording = true);
+  }
+
+  Future<void> _cancelVoiceRecording() async {
+    await _recorder?.cancel();
+    if (!mounted) return;
+    setState(() => _recording = false);
+  }
+
+  Future<void> _stopAndSendVoiceRecording() async {
+    final VoiceRecordingResult? result = await _recorder?.stop();
+    if (!mounted) return;
+    setState(() => _recording = false);
+    if (result == null) return;
+    await _uploadVoice(
+      path: result.path,
+      duration: result.duration,
+      mimeType: result.mimeType,
+    );
+  }
+
+  Future<void> _uploadVoice({
+    required String path,
+    required Duration duration,
+    required String mimeType,
+    String? clientMessageId,
+  }) async {
+    final String? rideId = _rideId;
+    if (rideId == null) {
+      _deleteQuietly(path);
+      return;
+    }
+    final _PendingVoice pending = _PendingVoice(
+      path: path,
+      duration: duration,
+      clientMessageId:
+          clientMessageId ?? RideMessageRepository.newClientMessageId(),
+    );
+    setState(() {
+      _pendingVoice = pending;
+      _error = null;
+    });
+    try {
+      final RideMessageModel sent =
+          await _communication.messageRepository.sendVoice(
+        rideId,
+        filePath: pending.path,
+        duration: pending.duration,
+        mimeType: mimeType,
+        clientMessageId: pending.clientMessageId,
+      );
+      _deleteQuietly(pending.path);
+      if (!mounted) return;
+      setState(() {
+        if (!_messages.any((RideMessageModel m) => m.id == sent.id)) {
+          _messages.add(sent);
+        }
+        _seenMessageIds.add(sent.id);
+        _pendingVoice = null;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      // Keep the file so Retry can re-upload with the same idempotency key.
+      setState(() {
+        _pendingVoice = null;
+        _failedVoice = pending;
+        _error = 'Voice message not sent. Please retry.';
+      });
+    }
+  }
+
+  void _retryFailedVoice() {
+    final _PendingVoice? failed = _failedVoice;
+    if (failed == null) return;
+    setState(() => _failedVoice = null);
+    _uploadVoice(
+      path: failed.path,
+      duration: failed.duration,
+      mimeType: VoiceRecorderService.voiceMimeType,
+      clientMessageId: failed.clientMessageId,
+    );
+  }
+
+  void _discardFailedVoice() {
+    final _PendingVoice? failed = _failedVoice;
+    if (failed == null) return;
+    _deleteQuietly(failed.path);
+    setState(() {
+      _failedVoice = null;
+      _error = null;
+    });
+  }
+
+  void _deleteQuietly(String path) {
+    try {
+      final File file = File(path);
+      if (file.existsSync()) file.deleteSync();
+    } catch (_) {}
+  }
+
   @override
   void dispose() {
     _refreshTimer?.cancel();
+    _subscribedSocket?.off(_realtimeEvent);
     _textController.dispose();
+    _recorder?.dispose();
+    _player?.dispose();
+    if (_pendingVoice != null) _deleteQuietly(_pendingVoice!.path);
+    if (_failedVoice != null) _deleteQuietly(_failedVoice!.path);
     super.dispose();
   }
 
@@ -364,29 +610,41 @@ class _RideChatScreenState extends State<RideChatScreen> {
                         selfId: _selfId,
                         role: _role,
                         conversation: _conversation,
+                        player: _voicePlayer,
+                        pendingVoice: _pendingVoice,
+                        failedVoice: _failedVoice,
                         onRefresh: () => _load(showLoader: false),
                         onDetails: _showTripRequestDetails,
                         onConfirm: _confirmTripRequest,
+                        onRetryVoice: _retryFailedVoice,
+                        onDiscardVoice: _discardFailedVoice,
                       ),
               ),
-              _canChat
-                  ? _QuickReplyBar(
-                      quickMessages: _quickMessages,
-                      sending: _sending,
-                      onSend: _send,
-                    )
-                  : const _ReadOnlyConversationNotice(),
-              _canChat
-                  ? _ChatComposer(
-                      textController: _textController,
-                      hintText: 'Message $_chatTitle...',
-                      sending: _sending,
-                      canSendTripRequest: _role != ApiKeyConstants.driver &&
-                          _routeRide?.status == 'contacting',
-                      onSend: _send,
-                      onTripRequest: _showPassengerTripRequest,
-                    )
-                  : const SizedBox.shrink(),
+              if (_canChat && !_recording)
+                _QuickReplyBar(
+                  quickMessages: _quickMessages,
+                  sending: _sending || _recording,
+                  onSend: _send,
+                ),
+              if (!_canChat) const _ReadOnlyConversationNotice(),
+              if (_canChat && _recording && _recorder != null)
+                _VoiceRecordingBar(
+                  recorder: _recorder!,
+                  onCancel: _cancelVoiceRecording,
+                  onSend: _stopAndSendVoiceRecording,
+                )
+              else if (_canChat)
+                _ChatComposer(
+                  textController: _textController,
+                  hintText: 'Message $_chatTitle...',
+                  sending: _sending,
+                  canRecord: _pendingVoice == null,
+                  canSendTripRequest: _role != ApiKeyConstants.driver &&
+                      _routeRide?.status == 'contacting',
+                  onSend: _send,
+                  onTripRequest: _showPassengerTripRequest,
+                  onRecordStart: _startVoiceRecording,
+                ),
             ],
           ),
         ),
@@ -1247,17 +1505,21 @@ class _ChatComposer extends StatelessWidget {
     required this.textController,
     required this.hintText,
     required this.sending,
+    required this.canRecord,
     required this.canSendTripRequest,
     required this.onSend,
     required this.onTripRequest,
+    required this.onRecordStart,
   });
 
   final TextEditingController textController;
   final String hintText;
   final bool sending;
+  final bool canRecord;
   final bool canSendTripRequest;
   final VoidCallback onSend;
   final VoidCallback onTripRequest;
+  final VoidCallback onRecordStart;
 
   @override
   Widget build(BuildContext context) => Container(
@@ -1320,33 +1582,197 @@ class _ChatComposer extends StatelessWidget {
               ),
             ),
             const SizedBox(width: 10),
+            // WhatsApp-style trailing action: mic while the field is empty,
+            // send as soon as there is text.
+            ValueListenableBuilder<TextEditingValue>(
+              valueListenable: textController,
+              builder: (BuildContext context, TextEditingValue value, _) {
+                final bool hasText = value.text.trim().isNotEmpty;
+                final bool showMic = !hasText && canRecord && !sending;
+                return SizedBox.square(
+                  dimension: 58,
+                  child: IconButton.filled(
+                    style: IconButton.styleFrom(
+                      backgroundColor: primaryColor,
+                      foregroundColor: Colors.white,
+                      disabledBackgroundColor:
+                          primaryColor.withValues(alpha: 0.45),
+                      shape: const CircleBorder(),
+                      elevation: 4,
+                      shadowColor: primaryColor.withValues(alpha: 0.28),
+                    ),
+                    tooltip: showMic ? 'Record voice message' : 'Send message',
+                    onPressed: sending
+                        ? null
+                        : showMic
+                            ? onRecordStart
+                            : onSend,
+                    icon: sending
+                        ? const SizedBox.square(
+                            dimension: 18,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
+                          )
+                        : Icon(
+                            showMic
+                                ? Icons.mic_rounded
+                                : Icons.send_rounded,
+                            size: 28,
+                          ),
+                  ),
+                );
+              },
+            ),
+          ],
+        ),
+      );
+}
+
+class _VoiceRecordingBar extends StatefulWidget {
+  const _VoiceRecordingBar({
+    required this.recorder,
+    required this.onCancel,
+    required this.onSend,
+  });
+
+  final VoiceRecorderService recorder;
+  final VoidCallback onCancel;
+  final VoidCallback onSend;
+
+  @override
+  State<_VoiceRecordingBar> createState() => _VoiceRecordingBarState();
+}
+
+class _VoiceRecordingBarState extends State<_VoiceRecordingBar> {
+  static const int _sampleCount = 28;
+  final List<double> _samples =
+      List<double>.filled(_sampleCount, 0.05, growable: false);
+
+  @override
+  void initState() {
+    super.initState();
+    widget.recorder.level.addListener(_onLevel);
+  }
+
+  @override
+  void didUpdateWidget(covariant _VoiceRecordingBar oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.recorder != widget.recorder) {
+      oldWidget.recorder.level.removeListener(_onLevel);
+      widget.recorder.level.addListener(_onLevel);
+    }
+  }
+
+  void _onLevel() {
+    if (!mounted) return;
+    setState(() {
+      _samples.removeAt(0);
+      _samples.add(
+        widget.recorder.level.value.clamp(0.05, 1.0).toDouble(),
+      );
+    });
+  }
+
+  @override
+  void dispose() {
+    widget.recorder.level.removeListener(_onLevel);
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => Container(
+        padding: const EdgeInsets.fromLTRB(12, 12, 12, 14),
+        color: const Color(0xFFFCFCFC),
+        child: Row(
+          children: <Widget>[
+            IconButton(
+              tooltip: 'Cancel recording',
+              onPressed: widget.onCancel,
+              iconSize: 26,
+              color: Colors.redAccent,
+              icon: const Icon(Icons.delete_outline_rounded),
+            ),
+            const SizedBox(width: 4),
+            const Icon(Icons.circle, color: Colors.redAccent, size: 12),
+            const SizedBox(width: 8),
+            ValueListenableBuilder<Duration>(
+              valueListenable: widget.recorder.elapsed,
+              builder: (BuildContext context, Duration elapsed, _) => Text(
+                formatVoiceDuration(elapsed),
+                style: const TextStyle(
+                  color: textColor,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                  fontFeatures: <FontFeature>[FontFeature.tabularFigures()],
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: CustomPaint(
+                size: const Size(double.infinity, 30),
+                painter: _RecordingWavePainter(
+                  samples: _samples,
+                  color: primaryColor,
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
             SizedBox.square(
               dimension: 58,
               child: IconButton.filled(
                 style: IconButton.styleFrom(
                   backgroundColor: primaryColor,
                   foregroundColor: Colors.white,
-                  disabledBackgroundColor: primaryColor.withValues(alpha: 0.45),
                   shape: const CircleBorder(),
                   elevation: 4,
                   shadowColor: primaryColor.withValues(alpha: 0.28),
                 ),
-                tooltip: 'Send message',
-                onPressed: sending ? null : onSend,
-                icon: sending
-                    ? const SizedBox.square(
-                        dimension: 18,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: Colors.white,
-                        ),
-                      )
-                    : const Icon(Icons.send_rounded, size: 28),
+                tooltip: 'Send voice message',
+                onPressed: widget.onSend,
+                icon: const Icon(Icons.send_rounded, size: 28),
               ),
             ),
           ],
         ),
       );
+}
+
+class _RecordingWavePainter extends CustomPainter {
+  _RecordingWavePainter({
+    required this.samples,
+    required this.color,
+  });
+
+  final List<double> samples;
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    const double barWidth = 3;
+    final Paint paint = Paint()..color = color;
+    final double step = (size.width - barWidth) / (samples.length - 1);
+    for (int i = 0; i < samples.length; i++) {
+      final double barHeight =
+          (size.height * samples[i]).clamp(3.0, size.height).toDouble();
+      final RRect bar = RRect.fromRectAndRadius(
+        Rect.fromLTWH(
+          i * step,
+          (size.height - barHeight) / 2,
+          barWidth,
+          barHeight,
+        ),
+        const Radius.circular(2),
+      );
+      canvas.drawRRect(bar, paint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(_RecordingWavePainter oldDelegate) =>
+      !identical(oldDelegate.samples, samples) || oldDelegate.color != color;
 }
 
 class _MessageList extends StatelessWidget {
@@ -1357,7 +1783,12 @@ class _MessageList extends StatelessWidget {
     required this.onRefresh,
     required this.onDetails,
     required this.onConfirm,
+    required this.player,
+    required this.onRetryVoice,
+    required this.onDiscardVoice,
     this.conversation,
+    this.pendingVoice,
+    this.failedVoice,
   });
 
   final List<RideMessageModel> messages;
@@ -1366,11 +1797,18 @@ class _MessageList extends StatelessWidget {
   final VoidCallback onRefresh;
   final void Function(RideMessageModel message) onDetails;
   final void Function(RideMessageModel message) onConfirm;
+  final VoicePlayerManager player;
+  final VoidCallback onRetryVoice;
+  final VoidCallback onDiscardVoice;
   final RideConversationModel? conversation;
+  final _PendingVoice? pendingVoice;
+  final _PendingVoice? failedVoice;
 
   @override
   Widget build(BuildContext context) {
-    if (messages.isEmpty) {
+    if (messages.isEmpty &&
+        pendingVoice == null &&
+        failedVoice == null) {
       return RefreshIndicator(
         onRefresh: () async => onRefresh(),
         child: ListView(
@@ -1391,11 +1829,38 @@ class _MessageList extends StatelessWidget {
         ),
       );
     }
+    // Trailing optimistic rows: the note being uploaded, then a failed one.
+    final int trailingCount =
+        (pendingVoice != null ? 1 : 0) + (failedVoice != null ? 1 : 0);
     return ListView.builder(
       padding: const EdgeInsets.fromLTRB(0, 12, 0, 20),
       physics: const AlwaysScrollableScrollPhysics(),
-      itemCount: messages.length,
+      itemCount: messages.length + trailingCount,
       itemBuilder: (BuildContext context, int index) {
+        if (index >= messages.length) {
+          final bool isPendingRow = pendingVoice != null &&
+              index == messages.length;
+          final _PendingVoice voice =
+              (isPendingRow ? pendingVoice : failedVoice)!;
+          return _VoiceRow(
+            message: RideMessageModel(
+              id: 'local-voice-${voice.clientMessageId}',
+              rideId: '',
+              text: '',
+              senderId: selfId,
+              status: RideMessageStatus.sent,
+              messageType: 'voice',
+              audioDuration: voice.duration.inMilliseconds / 1000,
+              createdAt: DateTime.now(),
+            ),
+            mine: true,
+            player: player,
+            uploading: isPendingRow,
+            failed: !isPendingRow,
+            onRetry: isPendingRow ? null : onRetryVoice,
+            onDiscard: isPendingRow ? null : onDiscardVoice,
+          );
+        }
         final RideMessageModel message = messages[index];
         final bool mine = message.senderId == selfId;
         final DateTime? previousTime =
@@ -1413,13 +1878,22 @@ class _MessageList extends StatelessWidget {
                 onDetails: () => onDetails(message),
                 onConfirm: () => onConfirm(message),
               )
-            : _MessageBubble(
-                message: message,
-                mine: mine,
-                counterpartImageUrl:
-                    mine ? null : conversation?.counterpart?.profileImageUrl,
-              );
-        final bool isNewest = index == messages.length - 1;
+            : message.isVoice
+                ? _VoiceRow(
+                    message: message,
+                    mine: mine,
+                    player: player,
+                    counterpartImageUrl: mine
+                        ? null
+                        : conversation?.counterpart?.profileImageUrl,
+                  )
+                : _MessageBubble(
+                    message: message,
+                    mine: mine,
+                    counterpartImageUrl:
+                        mine ? null : conversation?.counterpart?.profileImageUrl,
+                  );
+        final bool isNewest = index == messages.length - 1 && trailingCount == 0;
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: <Widget>[
@@ -1434,6 +1908,108 @@ class _MessageList extends StatelessWidget {
   bool _sameDay(DateTime? a, DateTime? b) {
     if (a == null || b == null) return true;
     return a.year == b.year && a.month == b.month && a.day == b.day;
+  }
+}
+
+/// Same row geometry as [_MessageBubble] but hosting a [VoiceMessageBubble].
+class _VoiceRow extends StatelessWidget {
+  const _VoiceRow({
+    required this.message,
+    required this.mine,
+    required this.player,
+    this.counterpartImageUrl,
+    this.uploading = false,
+    this.failed = false,
+    this.onRetry,
+    this.onDiscard,
+  });
+
+  final RideMessageModel message;
+  final bool mine;
+  final VoicePlayerManager player;
+  final String? counterpartImageUrl;
+  final bool uploading;
+  final bool failed;
+  final VoidCallback? onRetry;
+  final VoidCallback? onDiscard;
+
+  @override
+  Widget build(BuildContext context) {
+    final Widget? timeLabel = message.createdAt == null
+        ? null
+        : Text(
+            DateFormat.Hm().format(message.createdAt!.toLocal()),
+            style: const TextStyle(color: text2Color, fontSize: 11),
+          );
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 6),
+      child: Row(
+        mainAxisAlignment:
+            mine ? MainAxisAlignment.end : MainAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: <Widget>[
+          if (!mine) ...<Widget>[
+            CircleAvatar(
+              radius: 16,
+              backgroundColor: primaryColor.withValues(alpha: 0.12),
+              backgroundImage:
+                  counterpartImageUrl != null && counterpartImageUrl!.isNotEmpty
+                      ? NetworkImage(counterpartImageUrl!)
+                      : null,
+              child: counterpartImageUrl == null || counterpartImageUrl!.isEmpty
+                  ? const Icon(Icons.person_rounded,
+                      size: 16, color: primaryColor)
+                  : null,
+            ),
+            const SizedBox(width: 8),
+          ],
+          if (mine && timeLabel != null) ...<Widget>[
+            Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: <Widget>[
+                if (!uploading && !failed) _StatusIcon(status: message.status),
+                const SizedBox(height: 2),
+                timeLabel,
+              ],
+            ),
+            const SizedBox(width: 6),
+          ],
+          Flexible(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              mainAxisSize: MainAxisSize.min,
+              children: <Widget>[
+                VoiceMessageBubble(
+                  message: message,
+                  mine: mine,
+                  player: player,
+                  uploading: uploading,
+                  failed: failed,
+                  onRetry: onRetry,
+                ),
+                if (failed && onDiscard != null)
+                  TextButton(
+                    style: TextButton.styleFrom(
+                      visualDensity: VisualDensity.compact,
+                      padding: const EdgeInsets.symmetric(horizontal: 6),
+                    ),
+                    onPressed: onDiscard,
+                    child: const Text(
+                      'Discard',
+                      style: TextStyle(color: text2Color, fontSize: 12),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          if (!mine && timeLabel != null) ...<Widget>[
+            const SizedBox(width: 6),
+            timeLabel,
+          ],
+        ],
+      ),
+    );
   }
 }
 
@@ -2006,4 +2582,17 @@ class _ReadOnlyConversationNotice extends StatelessWidget {
           ],
         ),
       );
+}
+
+/// A voice note captured locally but not yet confirmed by the server.
+class _PendingVoice {
+  const _PendingVoice({
+    required this.path,
+    required this.duration,
+    required this.clientMessageId,
+  });
+
+  final String path;
+  final Duration duration;
+  final String clientMessageId;
 }

@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:http/http.dart' as http;
+import 'package:http_parser/http_parser.dart' show MediaType;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../common/api_interceptor_client.dart';
@@ -45,6 +46,49 @@ class CommunicationApiClient {
   ]) =>
       _send('PATCH', url, body: body, extraHeaders: extraHeaders);
 
+  /// Multipart upload (voice notes). The file is streamed from disk so a
+  /// 2-minute recording never has to be fully resident in memory twice.
+  Future<Map<String, dynamic>> postMultipartFile(
+    String url, {
+    required String fileField,
+    required String filePath,
+    String? fileName,
+    String? contentType,
+    Map<String, String> fields = const <String, String>{},
+  }) async {
+    final SharedPreferences preferences = await SharedPreferences.getInstance();
+    final String token =
+        preferences.getString(ApiKeyConstants.token)?.trim() ?? '';
+    if (token.isEmpty) {
+      throw const CommunicationApiException('Authentication required.');
+    }
+    final Uri uri = Uri.parse(url);
+    final http.MultipartRequest request = http.MultipartRequest('POST', uri)
+      ..headers['Authorization'] = 'Bearer $token'
+      ..headers['Accept'] = 'application/json'
+      ..fields.addAll(fields);
+    try {
+      request.files.add(
+        await http.MultipartFile.fromPath(
+          fileField,
+          filePath,
+          filename: fileName,
+          contentType:
+              contentType == null ? null : MediaType.parse(contentType),
+        ),
+      );
+    } on FormatException {
+      throw const CommunicationApiException(
+        'The recording could not be read. Please record it again.',
+      );
+    }
+    final http.StreamedResponse streamedResponse =
+        await _client.send(request).timeout(const Duration(seconds: 60));
+    final http.Response response =
+        await http.Response.fromStream(streamedResponse);
+    return _decodeResponse(response);
+  }
+
   Future<Map<String, dynamic>> _send(
     String method,
     String url, {
@@ -78,7 +122,10 @@ class CommunicationApiClient {
           body: jsonEncode(body ?? const <String, dynamic>{}),
         ),
     };
+    return _decodeResponse(response);
+  }
 
+  Map<String, dynamic> _decodeResponse(http.Response response) {
     dynamic decoded = <String, dynamic>{};
     if (response.body.trim().isNotEmpty) {
       try {

@@ -38,6 +38,10 @@ class CallStateController extends GetxService with WidgetsBindingObserver {
   final NotificationRepository notificationRepository;
   final SocketService _socketService;
 
+  /// Screen-scoped listeners (e.g. ride:message in the chat view) attach to
+  /// the same shared socket; they must remove themselves on dispose.
+  SocketService get socketService => _socketService;
+
   final Rxn<ActiveRideModel> activeRide = Rxn<ActiveRideModel>();
   final Rxn<ActiveRideModel> pendingRide = Rxn<ActiveRideModel>();
   final RxInt conversationUnread = 0.obs;
