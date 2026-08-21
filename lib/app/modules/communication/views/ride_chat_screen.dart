@@ -44,6 +44,7 @@ class _RideChatScreenState extends State<RideChatScreen> {
   final CallStateController _communication = Get.find<CallStateController>();
   DriverPointsController? _points;
   final TextEditingController _textController = TextEditingController();
+  final ScrollController _listScrollController = ScrollController();
   final List<RideMessageModel> _messages = <RideMessageModel>[];
   late final ApiDriverPointsRepository _offerRepository =
       ApiDriverPointsRepository(CommunicationApiClient());
@@ -158,6 +159,7 @@ class _RideChatScreenState extends State<RideChatScreen> {
     _seenMessageIds.add(message.id);
     if (!mounted) return;
     setState(() => _messages.add(message));
+    _scrollToBottom(animate: true);
     if (message.senderId != _selfId &&
         message.status != RideMessageStatus.read) {
       _communication.messageRepository
@@ -274,6 +276,12 @@ class _RideChatScreenState extends State<RideChatScreen> {
         if (_failedMessageText == null) _error = null;
         if (showLoader) _loading = false;
       });
+      if (showLoader) {
+        // Open the thread at its latest message, not at the oldest one.
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) _scrollToBottom(animate: false);
+        });
+      }
       for (final RideMessageModel message in messages.where(
         (RideMessageModel message) =>
             message.senderId != selfId &&
@@ -327,6 +335,7 @@ class _RideChatScreenState extends State<RideChatScreen> {
         _failedMessageText = null;
         _failedClientMessageId = null;
       });
+      _scrollToBottom(animate: true);
     } on CommunicationApiException catch (error) {
       if (!mounted) return;
       setState(() {
@@ -357,8 +366,29 @@ class _RideChatScreenState extends State<RideChatScreen> {
 
   VoicePlayerManager get _voicePlayer => _player ??= VoicePlayerManager();
 
+  /// Keeps the newest message visible: chats open at the latest note and
+  /// follow every newly appended one (own sends and realtime arrivals).
+  /// Runs after layout so maxScrollExtent already includes the new row.
+  void _scrollToBottom({required bool animate}) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_listScrollController.hasClients) return;
+      final double target = _listScrollController.position.maxScrollExtent;
+      if (!animate) {
+        _listScrollController.jumpTo(target);
+        return;
+      }
+      _listScrollController.animateTo(
+        target,
+        duration: const Duration(milliseconds: 260),
+        curve: Curves.easeOutCubic,
+      );
+    });
+  }
+
   Future<void> _startVoiceRecording() async {
     if (_recording || _sending || _pendingVoice != null) return;
+    // The microphone and an active playback would otherwise overlap.
+    await _voicePlayer.stop();
     final VoiceRecorderService recorder =
         _recorder ??= VoiceRecorderService(onMaxDurationReached: (result) {
       if (!mounted) return;
@@ -449,6 +479,7 @@ class _RideChatScreenState extends State<RideChatScreen> {
         _seenMessageIds.add(sent.id);
         _pendingVoice = null;
       });
+      _scrollToBottom(animate: true);
     } catch (_) {
       if (!mounted) return;
       // Keep the file so Retry can re-upload with the same idempotency key.
@@ -494,6 +525,7 @@ class _RideChatScreenState extends State<RideChatScreen> {
     _refreshTimer?.cancel();
     _subscribedSocket?.off(_realtimeEvent);
     _textController.dispose();
+    _listScrollController.dispose();
     _recorder?.dispose();
     _player?.dispose();
     if (_pendingVoice != null) _deleteQuietly(_pendingVoice!.path);
@@ -613,6 +645,7 @@ class _RideChatScreenState extends State<RideChatScreen> {
                         player: _voicePlayer,
                         pendingVoice: _pendingVoice,
                         failedVoice: _failedVoice,
+                        scrollController: _listScrollController,
                         onRefresh: () => _load(showLoader: false),
                         onDetails: _showTripRequestDetails,
                         onConfirm: _confirmTripRequest,
@@ -1789,6 +1822,7 @@ class _MessageList extends StatelessWidget {
     this.conversation,
     this.pendingVoice,
     this.failedVoice,
+    this.scrollController,
   });
 
   final List<RideMessageModel> messages;
@@ -1803,6 +1837,7 @@ class _MessageList extends StatelessWidget {
   final RideConversationModel? conversation;
   final _PendingVoice? pendingVoice;
   final _PendingVoice? failedVoice;
+  final ScrollController? scrollController;
 
   @override
   Widget build(BuildContext context) {
@@ -1833,6 +1868,7 @@ class _MessageList extends StatelessWidget {
     final int trailingCount =
         (pendingVoice != null ? 1 : 0) + (failedVoice != null ? 1 : 0);
     return ListView.builder(
+      controller: scrollController,
       padding: const EdgeInsets.fromLTRB(0, 12, 0, 20),
       physics: const AlwaysScrollableScrollPhysics(),
       itemCount: messages.length + trailingCount,
