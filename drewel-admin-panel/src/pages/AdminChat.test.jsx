@@ -126,4 +126,38 @@ describe("Chat admin", () => {
       expect(addConversationNote).toHaveBeenCalledWith("thread-1", "Contacted both sides");
     });
   });
+
+  it("labels voice notes with their duration instead of rendering empty text", async () => {
+    getConversationMessages.mockResolvedValue({
+      conversation: { ...thread, adminNote: "" },
+      messages: [
+        {
+          id: "msg-voice",
+          senderRole: "passenger",
+          text: "",
+          messageType: "voice",
+          audioDuration: 7.5,
+          status: "delivered",
+          createdAt: "2026-08-15T10:01:00.000Z",
+        },
+        {
+          id: "msg-text",
+          senderRole: "driver",
+          text: "On my way",
+          messageType: "text",
+          status: "read",
+          createdAt: "2026-08-15T10:02:00.000Z",
+        },
+      ],
+      supports: [],
+      pagination: { page: 1, limit: 100, total: 2, totalPages: 1 },
+    });
+    render(<MemoryRouter><AdminChat /></MemoryRouter>);
+    await screen.findByText("RIDE-001");
+
+    await userEvent.click(screen.getByRole("button", { name: /Inspect/ }));
+    expect(await screen.findByText("Voice message")).toBeInTheDocument();
+    expect(screen.getByText("0:08")).toBeInTheDocument();
+    expect(screen.getByText("On my way")).toBeInTheDocument();
+  });
 });

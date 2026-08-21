@@ -574,6 +574,7 @@ export const getAdminConversationMessages = async (req, res) => {
         senderRole: message.senderRole,
         text: message.text,
         messageType: message.messageType || "text",
+        audioDuration: message.audioDuration || null,
         status: message.status,
         createdAt: message.createdAt,
         deliveredAt: message.deliveredAt || null,

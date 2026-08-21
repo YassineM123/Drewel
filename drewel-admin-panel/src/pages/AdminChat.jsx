@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Search, MessageSquare, Shield, ShieldAlert, AlertTriangle,
-  ExternalLink, Eye, Clock, CheckCheck, Send, StickyNote,
+  ExternalLink, Eye, Clock, CheckCheck, Send, StickyNote, Mic,
 } from "lucide-react";
 import {
   addConversationNote,
@@ -31,6 +31,11 @@ const fmtTime = (iso) => {
     hour: "2-digit",
     minute: "2-digit",
   });
+};
+
+const fmtDuration = (seconds) => {
+  const total = Math.max(0, Math.round(Number(seconds) || 0));
+  return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, "0")}`;
 };
 
 function StatusBadge({ status }) {
@@ -196,7 +201,19 @@ function ThreadDetail({ thread, onToast }) {
                           {message.status}
                         </span>
                       </div>
-                      <p className="text-sm text-slate-700 whitespace-pre-wrap break-words">{message.text}</p>
+                      {message.messageType === "voice" ? (
+                        <p className="text-sm text-slate-700 inline-flex items-center gap-1.5">
+                          <Mic size={14} className="text-[#BE1B2C]" />
+                          <span className="font-medium">Voice message</span>
+                          {message.audioDuration != null && (
+                            <span className="text-xs text-slate-400 font-mono">
+                              {fmtDuration(message.audioDuration)}
+                            </span>
+                          )}
+                        </p>
+                      ) : (
+                        <p className="text-sm text-slate-700 whitespace-pre-wrap break-words">{message.text}</p>
+                      )}
                     </div>
                   ))}
                 </div>

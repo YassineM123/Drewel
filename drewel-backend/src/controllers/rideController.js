@@ -97,6 +97,9 @@ const rideDto = (ride) => ({
         confirmedAt: ride.confirmedAt,
       }
     : {}),
+  ...(ride.commission?.ridePriceAED != null
+    ? { commission: ride.commission }
+    : {}),
 });
 
 const publicParticipantDto = (participant, role) => {
@@ -196,6 +199,10 @@ const sendError = (res, error) => res.status(error.statusCode || 500).json({
  */
 const toRideMessageDto = (message) => {
   const plain = typeof message?.toObject === "function" ? message.toObject() : { ...message };
+  // Storage internals stay server-side; playback goes through the gated
+  // audio endpoint below.
+  delete plain.audioKey;
+  delete plain.audioStorage;
   if (plain?.messageType === "voice" && plain?._id && plain?.rideId) {
     plain.audioUrl = `/api/rides/${String(plain.rideId)}/messages/${String(plain._id)}/audio`;
   }
