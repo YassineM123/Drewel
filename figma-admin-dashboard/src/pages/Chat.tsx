@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { Search, Send, Paperclip, CheckCheck, Check, Wifi } from "lucide-react";
+import { Search, Send, Paperclip, CheckCheck, Check, Wifi, Mic } from "lucide-react";
 import { Avatar, Badge, EmptyState } from "../components/ui";
 import { getChatThreads, getConversationMessages } from "../api";
 
@@ -227,7 +227,18 @@ export default function Chat() {
                                 ${(msg.from ?? msg.sender) === "admin"
                                   ? "bg-[#BE1B2C] text-white rounded-br-[4px]"
                                   : "bg-white border border-slate-200 text-slate-700 rounded-bl-[4px]"}`}>
-                                {msg.text}
+                                {msg.messageType === "voice" ? (
+                                  <span className={`flex items-center gap-1.5 font-medium
+                                    ${(msg.from ?? msg.sender) === "admin" ? "text-white" : "text-slate-600"}`}>
+                                    <Mic size={14} className="shrink-0" />
+                                    Voice message
+                                    {msg.audioDuration > 0 && (
+                                      <span className="opacity-70">· {fmtDuration(msg.audioDuration)}</span>
+                                    )}
+                                  </span>
+                                ) : (
+                                  msg.text
+                                )}
                               </div>
                               <div className={`flex items-center gap-1 mt-1 ${(msg.from ?? msg.sender) === "admin" ? "justify-end" : "justify-start"}`}>
                                 <span className="text-[10px] text-slate-400">{formatMsgTime(msg.at ?? msg.createdAt ?? msg.timestamp)}</span>
@@ -294,6 +305,13 @@ function formatRelTime(iso: string) {
 
 function formatMsgTime(iso: string) {
   return new Date(iso).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
+}
+
+function fmtDuration(seconds?: number) {
+  if (!seconds || seconds <= 0) return "";
+  const m = Math.floor(seconds / 60);
+  const s = Math.floor(seconds % 60);
+  return `${m}:${String(s).padStart(2, "0")}`;
 }
 
 function groupByDate(messages: any[]): [string, any[]][] {
