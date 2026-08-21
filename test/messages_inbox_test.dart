@@ -2,11 +2,9 @@ import 'dart:convert';
 
 import 'package:drewel/app/data/apis/communication_api_client.dart';
 import 'package:drewel/app/data/repositories/active_ride_repository.dart';
-import 'package:drewel/app/data/repositories/call_repository.dart';
 import 'package:drewel/app/data/repositories/conversation_repository.dart';
 import 'package:drewel/app/data/repositories/notification_repository.dart';
 import 'package:drewel/app/data/repositories/ride_message_repository.dart';
-import 'package:drewel/app/data/services/agora_call_service.dart';
 import 'package:drewel/app/modules/communication/controllers/call_state_controller.dart';
 import 'package:drewel/app/modules/messages/controllers/messages_controller.dart';
 import 'package:drewel/common/socket_services.dart';
@@ -127,11 +125,9 @@ void main() {
 CallStateController _communication(CommunicationApiClient api) =>
     CallStateController(
       activeRideRepository: ActiveRideRepository(api),
-      callRepository: CallRepository(api),
       conversationRepository: ConversationRepository(api),
       messageRepository: RideMessageRepository(api),
       notificationRepository: NotificationRepository(api),
-      agoraService: AgoraCallService(),
       socketService: _FakeSocketService(),
     );
 

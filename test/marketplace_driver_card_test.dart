@@ -25,14 +25,12 @@ void main() {
         'registrationVisible': true,
       });
 
-  Widget app(Drivers value, {VoidCallback? onChat, VoidCallback? onCall}) =>
-      MaterialApp(
+  Widget app(Drivers value, {VoidCallback? onChat}) => MaterialApp(
         home: Scaffold(
           body: MarketplaceDriverCard(
             driver: value,
             onTap: () {},
             onChat: onChat,
-            onCall: onCall,
           ),
         ),
       );
@@ -40,14 +38,16 @@ void main() {
   testWidgets('shows marketplace details and icon-only contact actions',
       (WidgetTester tester) async {
     await tester.pumpWidget(
-      app(driver(), onChat: () {}, onCall: () {}),
+      app(driver(), onChat: () {}),
     );
+    // Flush the flutter_animate entrance timers before assertions.
+    await tester.pump(const Duration(milliseconds: 300));
 
     expect(find.text('Amina'), findsOneWidget);
     expect(find.text('Sedan · Toyota Corolla'), findsOneWidget);
     expect(find.text('123 TUN 456'), findsOneWidget);
     expect(find.byIcon(Icons.message_rounded), findsOneWidget);
-    expect(find.byIcon(Icons.call_rounded), findsOneWidget);
+    expect(find.byIcon(Icons.call_rounded), findsNothing);
     expect(find.text('Chat'), findsNothing);
     expect(find.text('Call'), findsNothing);
     expect(find.text('Safety'), findsNothing);
@@ -57,25 +57,22 @@ void main() {
         .widgetList<SizedBox>(find.byType(SizedBox))
         .where((SizedBox box) => box.width == 44 && box.height == 44)
         .map((SizedBox box) => Size(box.width!, box.height!));
-    expect(actionSizes.length, 2);
+    expect(actionSizes.length, 1);
   });
 
-  testWidgets('busy disables call while preserving configurable chat',
+  testWidgets('busy driver keeps chat available without a call action',
       (WidgetTester tester) async {
     int chats = 0;
-    int calls = 0;
     await tester.pumpWidget(
       app(
         driver(status: 'Busy', available: true),
         onChat: () => chats++,
-        onCall: () => calls++,
       ),
     );
+    await tester.pump(const Duration(milliseconds: 300));
 
     await tester.tap(find.byIcon(Icons.message_rounded));
-    await tester.tap(find.byIcon(Icons.call_rounded));
     expect(chats, 1);
-    expect(calls, 0);
     expect(find.text('Busy'), findsOneWidget);
   });
 
