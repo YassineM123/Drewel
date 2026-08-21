@@ -93,7 +93,7 @@ test("accepted driver GPS movement is pushed immediately and stationary heartbea
   );
   assert.match(
     source,
-    /AndroidSettings\([\s\S]*?distanceFilter:\s*0,[\s\S]*?intervalDuration:\s*Duration\([\s\S]*?seconds:\s*_locationUpdateIntervalSeconds/
+    /AndroidSettings\([\s\S]*?distanceFilter:\s*0,[\s\S]*?intervalDuration:\s*(?:const\s+)?Duration\([\s\S]*?seconds:\s*_locationUpdateIntervalSeconds/
   );
   assert.match(
     source,
