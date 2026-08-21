@@ -13,6 +13,8 @@ export const AUTH_AUDIT_ACTIONS = [
   "ride_unlock",
   "driver_approved",
   "driver_rejected",
+  "user_restricted",
+  "user_unrestricted",
   "point_added",
   "point_refunded",
   "request_approved",

@@ -5,6 +5,7 @@ import Ride, {
 } from "../models/Ride.js";
 import RideAudit from "../models/RideAudit.js";
 import RideInternalNote from "../models/RideInternalNote.js";
+import RideSafetyAction from "../models/RideSafetyAction.js";
 import TripOffer from "../models/TripOffer.js";
 import PointTransaction from "../models/PointTransaction.js";
 import Driver from "../models/Driver.js";
@@ -239,6 +240,32 @@ export const listAdminRides = async (req, res) => {
       filter.createdAt = { ...(filter.createdAt || {}), $lte: toDate };
     }
 
+    const minPrice = String(req.query.minPrice || "").trim();
+    if (minPrice) {
+      const min = Number(minPrice);
+      if (!Number.isFinite(min) || min < 0) {
+        throw new RideTransitionError(
+          "Invalid minimum price filter",
+          400,
+          "INVALID_RIDE_FILTER"
+        );
+      }
+      filter.agreedPrice = { ...(filter.agreedPrice || {}), $gte: min };
+    }
+
+    const maxPrice = String(req.query.maxPrice || "").trim();
+    if (maxPrice) {
+      const max = Number(maxPrice);
+      if (!Number.isFinite(max) || max < 0) {
+        throw new RideTransitionError(
+          "Invalid maximum price filter",
+          400,
+          "INVALID_RIDE_FILTER"
+        );
+      }
+      filter.agreedPrice = { ...(filter.agreedPrice || {}), $lte: max };
+    }
+
     const vehicleType = String(req.query.vehicleType || "").trim();
     if (vehicleType) {
       const escaped = vehicleType.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -357,13 +384,26 @@ export const getAdminRide = async (req, res) => {
     if (!ride) {
       throw new RideTransitionError("Ride not found", 404, "RIDE_NOT_FOUND");
     }
-    const [auditTrail, points, tripOffer, internalNotes] = await Promise.all([
+    const [auditTrail, points, tripOffer, internalNotes, safetyActions] = await Promise.all([
       RideAudit.find({ rideId }).sort({ occurredAt: -1, _id: -1 }).limit(250),
       PointTransaction.find({ rideId }).sort({ createdAt: -1, _id: -1 }),
       TripOffer.findOne({
         $or: [{ contactRideId: rideId }, { rideId }],
       }).lean(),
       RideInternalNote.find({ rideId }).sort({ createdAt: -1, _id: -1 }).lean(),
+      RideSafetyAction.find({ rideId }).sort({ createdAt: -1, _id: -1 }).lean(),
+    ]);
+
+    const safetyPersonIds = safetyActions.flatMap((action) => [action.actorId, action.targetId]);
+    const [safetyDrivers, safetyUsers] = safetyPersonIds.length
+      ? await Promise.all([
+          Driver.find({ _id: { $in: safetyPersonIds } }).select("firstName lastName fullName").lean(),
+          User.find({ _id: { $in: safetyPersonIds } }).select("fullName").lean(),
+        ])
+      : [[], []];
+    const safetyNameById = new Map([
+      ...safetyDrivers.map((d) => [String(d._id), `${d.firstName || ""} ${d.lastName || ""}`.trim() || d.fullName || "Driver"]),
+      ...safetyUsers.map((u) => [String(u._id), u.fullName || "Passenger"]),
     ]);
     const pointsCharged = points.reduce(
       (sum, transaction) =>
@@ -409,6 +449,16 @@ export const getAdminRide = async (req, res) => {
         pointsTransaction: points,
         auditTrail,
         commission: commissionBreakdown,
+        safetyActions: safetyActions.map((action) => ({
+          id: String(action._id),
+          type: action.type,
+          actorRole: action.actorRole,
+          actorName: safetyNameById.get(String(action.actorId)) || "Unknown",
+          targetRole: action.targetRole,
+          targetName: safetyNameById.get(String(action.targetId)) || "Unknown",
+          reason: action.reason,
+          createdAt: action.createdAt,
+        })),
       },
     });
   } catch (error) {

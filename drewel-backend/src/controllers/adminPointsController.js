@@ -122,6 +122,7 @@ export const getPointsOverview = async (req, res) => {
           $project: {
             type: 1,
             points: 1,
+            commissionAED: "$metadata.commissionAED",
             netChange: {
               $subtract: [
                 { $add: ["$newAvailableBalance", "$newReservedBalance"] },
@@ -170,6 +171,15 @@ export const getPointsOverview = async (req, res) => {
                 ],
               },
             },
+            commissionPaidAED: {
+              $sum: {
+                $cond: [
+                  { $eq: ["$type", "RIDE_COMMISSION"] },
+                  { $ifNull: ["$commissionAED", 0] },
+                  0,
+                ],
+              },
+            },
           },
         },
       ]),
@@ -209,6 +219,7 @@ export const getPointsOverview = async (req, res) => {
         pointsCurrentlyReserved:
           walletTotals[0]?.pointsCurrentlyReserved || 0,
         refunds: totals.refunds || 0,
+        commissionPaidAED: Math.round((totals.commissionPaidAED || 0) * 100) / 100,
         activeWallets,
         pendingPurchaseRequests,
         suspiciousAdjustments,
@@ -339,6 +350,7 @@ export const listDriverPointWallets = async (req, res) => {
       Driver.countDocuments(driverFilter),
     ]);
     const driverIds = drivers.map((driver) => driver._id);
+    const walletSettings = await PointsSettings.getEffective();
     const [wallets, lastTransactions, rideCharges] = await Promise.all([
       DriverPointsWallet.find({ driverId: { $in: driverIds } }),
       PointTransaction.aggregate([
@@ -382,7 +394,7 @@ export const listDriverPointWallets = async (req, res) => {
       drivers: drivers.map((driver) => ({
         ...driverSummary(driver),
         wallet: walletByDriver.has(String(driver._id))
-          ? toWalletDto(walletByDriver.get(String(driver._id)))
+          ? toWalletDto(walletByDriver.get(String(driver._id)), walletSettings)
           : null,
         confirmedRidesCharged: chargesByDriver.get(String(driver._id)) || 0,
         lastTransaction: lastTransactionByDriver.get(String(driver._id)) || null,
@@ -403,7 +415,10 @@ export const getDriverPointDetails = async (req, res) => {
       )
       .lean();
     if (!driver) return res.status(404).json({ success: false, code: "DRIVER_NOT_FOUND" });
-    const wallet = await ensureWallet(driverId);
+    const [wallet, walletSettings] = await Promise.all([
+      ensureWallet(driverId),
+      PointsSettings.getEffective(),
+    ]);
     const transactions = await PointTransaction.find({ driverId })
       .select(
         "type status points bonusPoints purchasedPoints previousAvailableBalance newAvailableBalance previousReservedBalance newReservedBalance offerId rideId purchaseRequestId adminId reason createdAt"
@@ -414,7 +429,7 @@ export const getDriverPointDetails = async (req, res) => {
     return res.json({
       success: true,
       driver: driverSummary(driver),
-      wallet: toWalletDto(wallet),
+      wallet: toWalletDto(wallet, walletSettings),
       transactions,
     });
   } catch (error) {
@@ -439,6 +454,35 @@ export const listPointTransactions = async (req, res) => {
       "status"
     );
     if (status) filter.status = status.toUpperCase();
+    if (req.query.search && String(req.query.search).trim()) {
+      const raw = String(req.query.search).trim();
+      const orConditions = [];
+      if (mongoose.isValidObjectId(raw)) {
+        const oid = new mongoose.Types.ObjectId(raw);
+        orConditions.push(
+          { _id: oid },
+          { rideId: oid },
+          { driverId: oid },
+          { offerId: oid },
+          { purchaseRequestId: oid }
+        );
+      }
+      const escaped = raw.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      const matchingDrivers = await Driver.find({
+        $or: [
+          { fullName: { $regex: escaped, $options: "i" } },
+          { firstName: { $regex: escaped, $options: "i" } },
+          { lastName: { $regex: escaped, $options: "i" } },
+          { phone: { $regex: escaped } },
+        ],
+      })
+        .select("_id")
+        .lean();
+      if (matchingDrivers.length) {
+        orConditions.push({ driverId: { $in: matchingDrivers.map((d) => d._id) } });
+      }
+      filter.$or = orConditions.length ? orConditions : [{ _id: null }];
+    }
     const [transactions, total] = await Promise.all([
       PointTransaction.find(filter)
         .select(

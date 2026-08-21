@@ -8,7 +8,6 @@ import Dashboard from "./pages/Dashboard";
 import Alerts from "./pages/Alerts";
 import Users from "./pages/Users";
 import UserDetail from "./pages/UserDetail";
-import AddUser from "./components/AddUser";
 import Drivers from "./pages/Drivers";
 import DriverDetail from "./pages/DriverDetail";
 import EditDriver from "./pages/EditDriver";
@@ -50,7 +49,6 @@ function App() {
 
                 <Route path="/users" element={<Users />} />
                 <Route path="/users/:id" element={<UserDetail />} />
-                <Route path="/users/edit-user" element={<AddUser />} />
 
                 <Route path="/drivers" element={<Drivers />} />
                 <Route path="/driver-detail/:id" element={<DriverDetail />} />

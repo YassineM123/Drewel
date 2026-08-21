@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Search, Shield, ShieldOff, AlertTriangle, Eye, EyeOff,
-  MessageSquare, Clock, ExternalLink, FileText,
+  MessageSquare, Clock, ExternalLink, FileText, Download,
 } from "lucide-react";
 import { getUserList } from "../utils/api";
 import { toggleUserRestriction } from "../api/domains/users";
@@ -23,6 +23,7 @@ function fmtDate(iso) {
   if (!iso) return "N/A";
   return new Date(iso).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
 }
+const csvCell = (value) => `"${String(value ?? "").replaceAll('"', '""')}"`;
 const userName = (u) => u.fullName || u.name || "N/A";
 const userInitials = (u) => {
   const name = userName(u);
@@ -139,19 +140,19 @@ function UserDetailDrawer({ user, onToast }) {
   const [revealed, setRevealed] = useState(false);
   const [modal, setModal] = useState(null);
 
-  const isRestricted = !user.isActive;
+  const isRestricted = Boolean(user.isRestricted);
   const rideSummary = user.rideSummary || {};
   const supportSummary = user.supportSummary || {};
 
-  const handleAction = async (action) => {
+  const handleAction = async (action, reason) => {
     setModal(null);
     try {
-      await toggleUserRestriction(user._id);
+      await toggleUserRestriction(user._id, reason);
       onToast(action === "restrict"
         ? `${userName(user)}'s account has been restricted.`
         : `${userName(user)}'s account has been restored.`);
-    } catch {
-      onToast("Failed to update user status.");
+    } catch (err) {
+      onToast(err?.message || "Failed to update user status.");
     }
   };
 
@@ -282,10 +283,10 @@ function UserDetailDrawer({ user, onToast }) {
       </div>
 
       {modal === "restrict" && (
-        <ActionModal title="Restrict User Account" consequence="User will be prevented from booking rides immediately. They will receive a notification. This action is reversible and logged." variant="danger" onConfirm={() => handleAction("restrict")} onClose={() => setModal(null)} />
+        <ActionModal title="Restrict User Account" consequence="User will be prevented from booking rides immediately. They will receive a notification. This action is reversible and logged." variant="danger" onConfirm={(reason) => handleAction("restrict", reason)} onClose={() => setModal(null)} />
       )}
       {modal === "restore" && (
-        <ActionModal title="Restore User Account" consequence="User's ability to book rides will be restored. They will be notified. This action is logged." variant="primary" onConfirm={() => handleAction("restore")} onClose={() => setModal(null)} />
+        <ActionModal title="Restore User Account" consequence="User's ability to book rides will be restored. They will be notified. This action is logged." variant="primary" onConfirm={(reason) => handleAction("restore", reason)} onClose={() => setModal(null)} />
       )}
     </div>
   );
@@ -302,6 +303,7 @@ export default function Users() {
   const [pagination, setPagination] = useState({ page: 1, limit: 10, total: 0, totalPages: 1 });
   const [selectedUser, setSelectedUser] = useState(null);
   const [toast, setToast] = useState(null);
+  const [exporting, setExporting] = useState(false);
 
   const fetchUsers = useCallback(async () => {
     try {
@@ -328,9 +330,52 @@ export default function Users() {
   useEffect(() => { fetchUsers(); }, [fetchUsers]);
   useEffect(() => { setPage(0); }, [search, statusFilter]);
 
+  const exportCsv = async () => {
+    if (exporting) return;
+    setExporting(true);
+    try {
+      // Export every user matching the current search/status filter, not just
+      // the current page — fetch in bulk pages up to a sane cap.
+      const EXPORT_PAGE_SIZE = 100;
+      const MAX_EXPORT_ROWS = 5000;
+      const first = await getUserList({ search, status: statusFilter, page: 1, limit: EXPORT_PAGE_SIZE, sort: "updatedAt", dir: "desc" });
+      let rows = Array.isArray(first?.users) ? first.users : [];
+      const total = Number(first?.pagination?.total ?? rows.length);
+      const pagesToFetch = Math.min(Math.ceil(total / EXPORT_PAGE_SIZE) || 1, Math.ceil(MAX_EXPORT_ROWS / EXPORT_PAGE_SIZE));
+      for (let p = 2; p <= pagesToFetch && rows.length < MAX_EXPORT_ROWS; p += 1) {
+        const next = await getUserList({ search, status: statusFilter, page: p, limit: EXPORT_PAGE_SIZE, sort: "updatedAt", dir: "desc" });
+        rows = rows.concat(Array.isArray(next?.users) ? next.users : []);
+      }
+
+      const table = [
+        ["Name", "Phone", "Email", "Status", "Rides Completed", "Rides Cancelled", "Reports Filed", "Account Created", "Last Activity"],
+        ...rows.map((user) => [
+          userName(user), user.phone || "", user.email || "",
+          user.isRestricted ? "Restricted" : "Active",
+          user.rideSummary?.completed || 0, user.rideSummary?.cancelled || 0,
+          user.supportSummary?.messagesSent || 0,
+          fmtDate(user.createdAt), user.lastActivityAt ? fmtDate(user.lastActivityAt) : "",
+        ]),
+      ];
+      const blob = new Blob([table.map((row) => row.map(csvCell).join(",")).join("\r\n")], { type: "text/csv;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = `drewel-users-${statusFilter}-${new Date().toISOString().slice(0, 10)}.csv`;
+      document.body.append(anchor);
+      anchor.click();
+      anchor.remove();
+      URL.revokeObjectURL(url);
+    } catch {
+      setError("Unable to export users right now.");
+    } finally {
+      setExporting(false);
+    }
+  };
+
   const totalPages = pagination.totalPages;
-  const activeCount = users.filter((u) => u.isActive !== false).length;
-  const restrictedCount = users.filter((u) => u.isActive === false).length;
+  const activeCount = users.filter((u) => !u.isRestricted).length;
+  const restrictedCount = users.filter((u) => u.isRestricted).length;
 
   return (
     <div className="flex flex-col gap-6">
@@ -342,6 +387,10 @@ export default function Users() {
         <div className="flex items-center gap-2">
           <span className="text-xs text-green-700 bg-green-50 border border-green-200 px-2.5 py-1 rounded-full font-medium">{activeCount} active</span>
           <span className="text-xs text-red-700 bg-red-50 border border-red-200 px-2.5 py-1 rounded-full font-medium">{restrictedCount} restricted</span>
+          <button type="button" onClick={exportCsv} disabled={exporting || users.length === 0}
+            className="h-8 inline-flex items-center gap-1.5 px-3 rounded-[8px] border border-slate-200 bg-white text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-all disabled:opacity-50">
+            <Download size={12} /> {exporting ? "Exporting…" : "Export CSV"}
+          </button>
         </div>
       </div>
 
@@ -412,7 +461,7 @@ export default function Users() {
                   </td>
                   <td className="px-5 py-3"><span className="font-mono text-xs text-slate-600">{maskPhone(user.phone)}</span></td>
                   <td className="px-5 py-3">
-                    <Badge variant={user.isActive === false ? "restricted" : "active"} dot />
+                    <Badge variant={user.isRestricted ? "restricted" : "active"} dot />
                   </td>
                   <td className="px-5 py-3">
                     <span className="text-sm tabular-nums text-slate-700">{Number(user.rideSummary?.completed || 0).toLocaleString()} completed</span>

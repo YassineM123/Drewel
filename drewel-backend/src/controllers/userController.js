@@ -8,6 +8,7 @@ import path from "path";
 import { fileURLToPath } from "url";
 import Driver from "../models/Driver.js";
 import Admin from "../models/Admin.js";
+import AuthAudit from "../models/AuthAudit.js";
 import Ride, { ACTIVE_RIDE_STATUSES } from "../models/Ride.js";
 import TripOffer from "../models/TripOffer.js";
 import DriverPointsWallet from "../models/DriverPointsWallet.js";
@@ -827,7 +828,7 @@ export const dashBoardData = async (req, res) => {
 
 export const toggleRestrictionOnUser = async (req, res) => {
   try {
-    const { userId } = req.body || {};
+    const { userId, reason } = req.body || {};
 
     if (!userId || !mongoose.Types.ObjectId.isValid(userId)) {
       return res.status(200).send({
@@ -844,9 +845,30 @@ export const toggleRestrictionOnUser = async (req, res) => {
       });
     }
 
-    // Toggle the isRestricted field
-    user.isRestricted = !user.isRestricted;
+    const willRestrict = !user.isRestricted;
+    if (willRestrict && !String(reason || "").trim()) {
+      return res.status(400).send({
+        success: false,
+        message: "A reason is required to restrict this account",
+      });
+    }
+
+    user.isRestricted = willRestrict;
+    user.restrictedReason = willRestrict ? String(reason).trim() : "";
     await user.save();
+
+    if (req.admin) {
+      await AuthAudit.create({
+        action: willRestrict ? "user_restricted" : "user_unrestricted",
+        actorId: req.admin._id,
+        actorRole: req.admin.role,
+        actorName: req.admin.fullName,
+        actorEmail: req.admin.email,
+        targetType: "user",
+        targetId: user._id,
+        description: willRestrict ? `Restricted user account: ${user.restrictedReason}` : "Restored user account",
+      });
+    }
 
     return res.status(200).send({
       success: true,
@@ -857,7 +879,7 @@ export const toggleRestrictionOnUser = async (req, res) => {
     });
   } catch (error) {
     console.log("error ==> ", error);
-    return res.status({
+    return res.status(500).send({
       success: false,
       message: "Error while restricting user",
       error: error.message,

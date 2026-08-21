@@ -1,10 +1,8 @@
 import apiClient from "../client";
-import { compactParams, toPagination } from "../query";
 
 /**
- * Roles and permissions — /api/admin/roles, /api/admin/team
- * Backend serves the role catalog, the current admin's effective permissions
- * and the team roster (no credentials ever returned).
+ * Roles and permissions — /api/admin/roles serves the role catalog, the
+ * current admin's effective permissions, and the full team roster together.
  */
 export const getRolesCatalog = async (signal) => {
   const data = await apiClient.get("/admin/roles", { signal });
@@ -12,15 +10,23 @@ export const getRolesCatalog = async (signal) => {
     roles: data.roles || [],
     permissions: data.permissions || {},
     current: data.current || null,
+    team: data.team || [],
   };
 };
 
-export const getTeam = async (params, signal) => {
-  const data = await apiClient.get("/admin/team", {
-    params: compactParams(params),
-    signal,
-  });
-  return { admins: data.admins || data.team || [], pagination: toPagination(data) };
+export const createAdmin = async (payload) => {
+  const data = await apiClient.post("/admin/register", payload);
+  return { success: Boolean(data.success), message: data.message };
+};
+
+export const updateAdminRole = async (id, role) => {
+  const data = await apiClient.patch(`/admin/team/${id}/role`, { role });
+  return data.admin;
+};
+
+export const updateAdminStatus = async (id, isActive) => {
+  const data = await apiClient.patch(`/admin/team/${id}/status`, { isActive });
+  return data.admin;
 };
 
 export const rolesErrorMessage = (error, fallback = "Unable to load roles.") =>

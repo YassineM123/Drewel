@@ -52,11 +52,17 @@ export const isAdmin = async (req, res, next) => {
       });
     }
 
-    const user = await Admin.findById(userId).select("role fullName email").lean();
+    const user = await Admin.findById(userId).select("role fullName email isActive").lean();
     if (!user || !["owner", "finance_admin", "admin"].includes(user.role)) {
       return res.status(403).json({
         success: false,
         message: "You are not an admin",
+      });
+    }
+    if (user.isActive === false) {
+      return res.status(403).json({
+        success: false,
+        message: "This admin account has been deactivated",
       });
     }
 

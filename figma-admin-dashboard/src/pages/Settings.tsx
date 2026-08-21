@@ -26,7 +26,7 @@ const NOTIF_LABELS: { key: NotifKey; label: string; description: string }[] = [
 
 const operationalSettings: Setting[] = [
   { key: "welcome_points", label: "Welcome Points", value: 1000, unit: "pts", min: 0, max: 10000, description: "Points credited to a new driver on first approval" },
-  { key: "points_per_ride", label: "Points Charged Per Ride", value: 20, unit: "pts", min: 1, max: 100, description: "Points deducted from driver on each completed ride" },
+  { key: "points_per_ride", label: "Offer Reservation Lock", value: 1, unit: "pts", min: 1, max: 100, description: "Points reserved when sending a trip offer (released on decline/expiry)" },
   { key: "commission_rate", label: "Commission Rate", value: 0.10, unit: "decimal", min: 0, max: 1, description: "Percentage of ride price taken as commission (0.10 = 10%)" },
   { key: "points_per_aed", label: "Points Per AED", value: 10, unit: "pts", min: 1, max: 1000, description: "How many points equal 1 AED (10 points = 1 AED)" },
   { key: "offer_expiry", label: "Trip Offer Expiry Time", value: 45, unit: "sec", min: 10, max: 120, description: "Seconds before an unaccepted trip offer expires" },

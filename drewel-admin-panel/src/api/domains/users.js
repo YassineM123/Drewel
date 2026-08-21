@@ -25,8 +25,9 @@ export const getRestrictedUsers = async (signal) => {
 };
 
 /** Toggle account restriction — POST /api/users/toggle-restriction */
-export const toggleUserRestriction = async (userId, signal) => {
-  const data = await apiClient.post("/users/toggle-restriction", { userId }, { signal });
+export const toggleUserRestriction = async (userId, reason, signal) => {
+  const data = await apiClient.post("/users/toggle-restriction", { userId, reason }, { signal });
+  if (data.success === false) throw new Error(data.message || "Could not update this account.");
   return data.user || data;
 };
 

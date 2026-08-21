@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useState, useCallback } from "react";
 import { clearAdminSession, isAuthTokenUsable, notifyAdminSessionChanged } from "../utils/session";
+import apiClient from "../api/client";
 
 const AuthContext = createContext(null);
 
@@ -31,6 +32,13 @@ export function AuthProvider({ children }) {
   }, [refresh]);
 
   const signOut = useCallback(() => {
+    // Capture the token explicitly: clearAdminSession() below runs synchronously,
+    // but axios reads the token via an interceptor microtask that would otherwise
+    // fire after localStorage has already been wiped, sending the request unauthenticated.
+    const token = localStorage.getItem("authToken");
+    if (token) {
+      apiClient.post("/admin/logout", undefined, { headers: { Authorization: `Bearer ${token}` } }).catch(() => {});
+    }
     clearAdminSession();
     setUser(null);
     window.location.href = "/login";

@@ -552,17 +552,16 @@ export default function Drivers() {
       setLoading(true);
       setError("");
       const result = await getDriverList({
-        status: tab === "verification" ? "pending" : tab === "restricted" ? "rejected" : "all",
-        availability: availabilityFilter,
+        status: tab === "verification" ? "pending" : "all",
+        availability: tab === "online" ? "Online,Busy" : availabilityFilter,
+        restricted: tab === "restricted" ? "true" : undefined,
         search,
         page,
         limit: 20,
         sort: "updatedAt",
         dir: "desc",
       });
-      let list = Array.isArray(result.drivers) ? result.drivers : [];
-      if (tab === "online") list = list.filter((d) => d.availabilityStatus !== "Offline");
-      if (tab === "restricted") list = list.filter((d) => d.isRestricted);
+      const list = Array.isArray(result.drivers) ? result.drivers : [];
       setDrivers(list);
       setPagination(result.pagination || { page, limit: 20, total: 0, totalPages: 1 });
     } catch (e) {

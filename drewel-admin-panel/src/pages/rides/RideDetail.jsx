@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import PropTypes from "prop-types";
-import { ArrowLeft, Plus, X } from "lucide-react";
+import { ArrowLeft, Plus, X, ShieldAlert } from "lucide-react";
 import {
   addRideNote,
   cancelRide,
@@ -14,6 +14,7 @@ import {
   ridesErrorMessage,
   unlockRide,
 } from "../../api/domains/rides";
+import { useSocket } from "../../context/SocketContext";
 import {
   Badge, Button, Card, StatRow, Modal, LoadingState, ErrorState,
 } from "../../components/ui";
@@ -137,6 +138,8 @@ const RideDetail = () => {
   const [action, setAction] = useState("");
   const [actionError, setActionError] = useState("");
   const [busy, setBusy] = useState(false);
+  const { socket, isConnected } = useSocket();
+  const loadRef = useRef(null);
 
   const load = useCallback(async (signal) => {
     setState((current) => ({ ...current, loading: true, error: "" }));
@@ -150,11 +153,31 @@ const RideDetail = () => {
     }
   }, [rideId]);
 
+  useEffect(() => { loadRef.current = load; }, [load]);
+
   useEffect(() => {
     const controller = new AbortController();
     load(controller.signal);
     return () => controller.abort();
   }, [load]);
+
+  useEffect(() => {
+    if (!socket || !isConnected) return undefined;
+    const refresh = (event) => {
+      if (event?.rideId && event.rideId !== rideId) return;
+      window.setTimeout(() => loadRef.current?.(), 250);
+    };
+    const events = [
+      "ride:status_changed", "ride:participants_unlocked",
+      "ride:points_refunded", "ride:internal_note_added", "ride:eta_updated",
+    ];
+    socket.emit("driver-map:track", { on: true });
+    for (const event of events) socket.on(event, refresh);
+    return () => {
+      socket.emit("driver-map:track", { on: false });
+      for (const event of events) socket.off(event, refresh);
+    };
+  }, [socket, isConnected, rideId]);
 
   const perform = async (payload) => {
     const handlers = { cancel: cancelRide, dispute: openDispute, resolve: resolveRideDispute, failure: markTechnicalFailure, unlock: unlockRide, refund: refundRidePoints, note: addRideNote };
@@ -191,6 +214,7 @@ const RideDetail = () => {
   const ride = state.ride;
   const audit = Array.isArray(ride.auditTrail) ? ride.auditTrail : Array.isArray(ride.audit) ? ride.audit : [];
   const notes = Array.isArray(ride.internalNotes) ? ride.internalNotes : [];
+  const safetyActions = Array.isArray(ride.safetyActions) ? ride.safetyActions : [];
   const points = ride.pointsTransaction || ride.points;
   const tripOffer = ride.tripOffer;
   const cancel = ride.cancellation;
@@ -290,6 +314,28 @@ const RideDetail = () => {
         <div className="bg-amber-50 border border-amber-200 rounded-[12px] px-4 py-3 text-sm text-amber-800">
           This reservation is under review. Resolve it by marking it completed or cancelling it by admin; a points refund is a separate audited action.
         </div>
+      )}
+
+      {safetyActions.length > 0 && (
+        <Card className="p-5 border-red-200">
+          <h2 className="text-sm font-semibold text-slate-800 mb-3 flex items-center gap-2">
+            <ShieldAlert size={15} className="text-red-600" /> Safety Reports
+          </h2>
+          <div className="flex flex-col gap-2">
+            {safetyActions.map((action) => (
+              <div key={action.id} className="bg-red-50 rounded-[10px] border border-red-100 px-3.5 py-2.5">
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-xs font-semibold text-red-800">
+                    {label(action.actorRole)} {action.type === "block" ? "blocked" : "reported"} {label(action.targetRole)}
+                  </span>
+                  <span className="text-[11px] text-slate-400">{date(action.createdAt)}</span>
+                </div>
+                <p className="text-xs text-slate-600">{action.actorName} → {action.targetName}</p>
+                {action.reason && <p className="text-xs text-slate-500 italic mt-0.5">&ldquo;{action.reason}&rdquo;</p>}
+              </div>
+            ))}
+          </div>
+        </Card>
       )}
 
       <Card className="p-5">

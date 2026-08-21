@@ -131,6 +131,11 @@ pointTransactionSchema.index(
 pointTransactionSchema.index({ driverId: 1, createdAt: -1, _id: -1 });
 pointTransactionSchema.index({ driverId: 1, type: 1, createdAt: -1 });
 pointTransactionSchema.index(
+  { rideId: 1 },
+  { partialFilterExpression: { rideId: { $type: "objectId" } } }
+);
+pointTransactionSchema.index({ createdAt: -1 });
+pointTransactionSchema.index(
   { offerId: 1, type: 1 },
   {
     unique: true,

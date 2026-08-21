@@ -575,6 +575,10 @@ export const getAdminConversationMessages = async (req, res) => {
         text: message.text,
         messageType: message.messageType || "text",
         audioDuration: message.audioDuration || null,
+        audioMimeType: message.audioMimeType || null,
+        audioUrl: message.audioKey
+          ? `/rides/${String(message.rideId)}/messages/${String(message._id)}/audio`
+          : null,
         status: message.status,
         createdAt: message.createdAt,
         deliveredAt: message.deliveredAt || null,

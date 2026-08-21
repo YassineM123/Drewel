@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Search, MessageSquare, Shield, ShieldAlert, AlertTriangle,
-  ExternalLink, Eye, Clock, CheckCheck, Send, StickyNote, Mic,
+  ExternalLink, Eye, Clock, CheckCheck, Send, StickyNote, Mic, Play, Pause, Loader2,
 } from "lucide-react";
 import {
   addConversationNote,
@@ -10,6 +10,7 @@ import {
   getChatMetadata,
   getChatThreads,
   getConversationMessages,
+  getConversationMessageAudioBlob,
 } from "../api/domains/chat";
 
 const fmtRelative = (iso) => {
@@ -88,6 +89,39 @@ function ThreadDetail({ thread, onToast }) {
   const [error, setError] = useState("");
   const [note, setNote] = useState("");
   const [noteSaving, setNoteSaving] = useState(false);
+  const [playingId, setPlayingId] = useState("");
+  const [loadingAudioId, setLoadingAudioId] = useState("");
+  const audioRef = useRef(null);
+  const objectUrlsRef = useRef(new Map());
+
+  useEffect(() => () => {
+    for (const url of objectUrlsRef.current.values()) URL.revokeObjectURL(url);
+  }, []);
+
+  const toggleVoicePlayback = async (message) => {
+    if (playingId === message.id) {
+      audioRef.current?.pause();
+      setPlayingId("");
+      return;
+    }
+    if (!audioRef.current || !message.audioUrl) return;
+    try {
+      let objectUrl = objectUrlsRef.current.get(message.id);
+      if (!objectUrl) {
+        setLoadingAudioId(message.id);
+        const { blob } = await getConversationMessageAudioBlob(message.audioUrl);
+        objectUrl = URL.createObjectURL(blob);
+        objectUrlsRef.current.set(message.id, objectUrl);
+      }
+      audioRef.current.src = objectUrl;
+      await audioRef.current.play();
+      setPlayingId(message.id);
+    } catch (err) {
+      onToast(chatErrorMessage(err, "Unable to play this voice message."), "error");
+    } finally {
+      setLoadingAudioId("");
+    }
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -202,7 +236,7 @@ function ThreadDetail({ thread, onToast }) {
                         </span>
                       </div>
                       {message.messageType === "voice" ? (
-                        <p className="text-sm text-slate-700 inline-flex items-center gap-1.5">
+                        <div className="text-sm text-slate-700 inline-flex items-center gap-1.5">
                           <Mic size={14} className="text-[#BE1B2C]" />
                           <span className="font-medium">Voice message</span>
                           {message.audioDuration != null && (
@@ -210,7 +244,20 @@ function ThreadDetail({ thread, onToast }) {
                               {fmtDuration(message.audioDuration)}
                             </span>
                           )}
-                        </p>
+                          {message.audioUrl && (
+                            <button type="button" onClick={() => toggleVoicePlayback(message)}
+                              disabled={loadingAudioId === message.id}
+                              className="ml-1 w-6 h-6 inline-flex items-center justify-center rounded-full bg-slate-100 text-slate-600 hover:bg-slate-200 transition-colors disabled:opacity-50">
+                              {loadingAudioId === message.id ? (
+                                <Loader2 size={12} className="animate-spin" />
+                              ) : playingId === message.id ? (
+                                <Pause size={12} />
+                              ) : (
+                                <Play size={12} />
+                              )}
+                            </button>
+                          )}
+                        </div>
                       ) : (
                         <p className="text-sm text-slate-700 whitespace-pre-wrap break-words">{message.text}</p>
                       )}
@@ -218,6 +265,7 @@ function ThreadDetail({ thread, onToast }) {
                   ))}
                 </div>
               )}
+              <audio ref={audioRef} onEnded={() => setPlayingId("")} className="hidden" />
             </div>
 
             {supports.length > 0 && (

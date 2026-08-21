@@ -67,5 +67,5 @@ router.post(
 router.get('/get-user', requireSignIn, getUser); // Get current user details
 router.get("/get-user-details/:id", requireSignIn, getUserDetails);
 router.post('/toggle-restriction',requireSignIn,isAdmin,toggleRestrictionOnUser);
-router.get('/restricted',requireSignIn,getRestrictedUsers)
+router.get('/restricted',requireSignIn,isAdmin,getRestrictedUsers)
 export default router;

@@ -15,11 +15,13 @@ import PointPurchaseRequest from "../src/models/PointPurchaseRequest.js";
 import PointsOutboxEvent from "../src/models/PointsOutboxEvent.js";
 import PointsSettings from "../src/models/PointsSettings.js";
 import PointsAdminAudit from "../src/models/PointsAdminAudit.js";
+import { calculateRideCommission } from "../src/services/commissionService.js";
 import {
   grantWelcomeBonus,
   isWelcomeBonusEligible,
   runPointsTransaction,
   creditPointsInSession,
+  chargeRideCommissionInSession,
 } from "../src/services/pointsWalletService.js";
 import {
   acceptTripOffer,
@@ -211,7 +213,7 @@ test(
 );
 
 test(
-  "offer requires 20 available points and duplicate send reserves once",
+  "offer requires 1 available point (lock) and duplicate send reserves once",
   { skip: !integrationEnabled },
   async () => {
     const [driver, passenger] = await Promise.all([
@@ -226,7 +228,7 @@ test(
     });
     await DriverPointsWallet.create({
       driverId: driver._id,
-      availableBonusPoints: 19,
+      availableBonusPoints: 0,
     });
     await assert.rejects(
       createTripOffer(offerPayload({ driver, contact, suffix: "00000020" })),
@@ -234,7 +236,7 @@ test(
     );
     await DriverPointsWallet.updateOne(
       { driverId: driver._id },
-      { $inc: { availableBonusPoints: 81, totalEarnedBonus: 100, version: 1 } }
+      { $inc: { availableBonusPoints: 10, totalEarnedBonus: 10, version: 1 } }
     );
     const payload = offerPayload({ driver, contact, suffix: "00000021" });
     const first = await createTripOffer(payload);
@@ -242,8 +244,8 @@ test(
     const wallet = await DriverPointsWallet.findOne({ driverId: driver._id });
     assert.equal(first.idempotent, false);
     assert.equal(retry.idempotent, true);
-    assert.equal(wallet.availableBonusPoints, 80);
-    assert.equal(wallet.reservedBonusPoints, 20);
+    assert.equal(wallet.availableBonusPoints, 9);
+    assert.equal(wallet.reservedBonusPoints, 1);
     assert.equal(
       await PointTransaction.countDocuments({
         offerId: first.offer._id,
@@ -443,7 +445,7 @@ test(
 );
 
 test(
-  "double acceptance creates one ride charge and never a negative balance",
+  "double acceptance creates one ride and never a negative balance",
   { skip: !integrationEnabled },
   async () => {
     const [driver, passenger] = await Promise.all([
@@ -472,23 +474,23 @@ test(
     ]);
     const wallet = await DriverPointsWallet.findOne({ driverId: driver._id });
     assert.equal(new Set(accepted.map((result) => String(result.ride._id))).size, 1);
-    assert.equal(wallet.availableBonusPoints, 0);
-    assert.equal(wallet.availablePurchasedPoints, 0);
+    assert.equal(wallet.availableBonusPoints, 10);
+    assert.equal(wallet.availablePurchasedPoints, 10);
     assert.equal(wallet.reservedBonusPoints, 0);
     assert.equal(wallet.reservedPurchasedPoints, 0);
-    assert.equal(wallet.totalConsumed, 20);
+    assert.equal(wallet.totalConsumed, 0);
     assert.equal(
       await PointTransaction.countDocuments({
         offerId: created.offer._id,
         type: "RIDE_CHARGE",
       }),
-      1
+      0
     );
   }
 );
 
 test(
-  "concurrent distinct offers cannot overspend one 20 point wallet",
+  "concurrent distinct offers cannot overspend a 1 point wallet",
   { skip: !integrationEnabled },
   async () => {
     const [driver, passenger1, passenger2] = await Promise.all([
@@ -498,8 +500,8 @@ test(
     ]);
     await DriverPointsWallet.create({
       driverId: driver._id,
-      availableBonusPoints: 20,
-      totalEarnedBonus: 20,
+      availableBonusPoints: 1,
+      totalEarnedBonus: 1,
     });
     const [contact1, contact2] = await Promise.all([
       Ride.create({
@@ -523,7 +525,7 @@ test(
     assert.equal(settled.filter((item) => item.status === "rejected").length, 1);
     const wallet = await DriverPointsWallet.findOne({ driverId: driver._id });
     assert.equal(wallet.availableBonusPoints, 0);
-    assert.equal(wallet.reservedBonusPoints, 20);
+    assert.equal(wallet.reservedBonusPoints, 1);
     assert.equal(await TripOffer.countDocuments({ driverId: driver._id }), 1);
   }
 );
@@ -1006,7 +1008,7 @@ test(
 );
 
 test(
-  "literal lifecycle declines one offer, charges five rides, reaches zero, and blocks the sixth",
+  "literal lifecycle declines one offer, completes rides with commission charges, and blocks when balance insufficient",
   { skip: !integrationEnabled },
   async () => {
     const [driver, passenger] = await Promise.all([
@@ -1031,11 +1033,16 @@ test(
       reason: "Literal lifecycle decline",
     });
     let wallet = await DriverPointsWallet.findOne({ driverId: driver._id });
-    assert.equal(wallet.availableBonusPoints, 100);
+    assert.equal(wallet.availableBonusPoints, 1000);
     assert.equal(wallet.reservedBonusPoints, 0);
 
+    const settings = await PointsSettings.getEffective();
+    const ridePrice = 100;
+    const commission = calculateRideCommission(ridePrice, settings);
+    const pointsPerRide = Math.ceil(commission.pointsToDeduct);
+
     const acceptedRideIds = [];
-    for (let index = 0; index < 5; index += 1) {
+    for (let index = 0; index < 10; index += 1) {
       if (index > 0) {
         contact = await Ride.create({
           passengerId: passenger._id,
@@ -1048,6 +1055,7 @@ test(
         offerPayload({
           driver,
           contact,
+          offeredPrice: ridePrice,
           suffix: `0000019${index + 2}`,
         })
       );
@@ -1056,6 +1064,16 @@ test(
         passengerId: passenger._id,
       });
       acceptedRideIds.push(String(accepted.ride._id));
+      await runPointsTransaction(async (session) => {
+        await chargeRideCommissionInSession({
+          driverId: driver._id,
+          rideId: accepted.ride._id,
+          ridePriceAED: ridePrice,
+          settings,
+          idempotencyKey: `commission-${String(accepted.ride._id)}`,
+          session,
+        });
+      });
       await Promise.all([
         Ride.updateOne(
           { _id: accepted.ride._id },
@@ -1072,16 +1090,16 @@ test(
       ]);
     }
     wallet = await DriverPointsWallet.findOne({ driverId: driver._id });
-    assert.equal(new Set(acceptedRideIds).size, 5);
+    assert.equal(new Set(acceptedRideIds).size, 10);
     assert.equal(wallet.availableBonusPoints, 0);
     assert.equal(wallet.reservedBonusPoints, 0);
-    assert.equal(wallet.totalConsumed, 100);
+    assert.equal(wallet.totalConsumed, 10 * pointsPerRide);
     assert.equal(
       await PointTransaction.countDocuments({
         driverId: driver._id,
-        type: "RIDE_CHARGE",
+        type: "RIDE_COMMISSION",
       }),
-      5
+      10
     );
     const blockedContact = await Ride.create({
       passengerId: passenger._id,
@@ -1094,6 +1112,7 @@ test(
         offerPayload({
           driver,
           contact: blockedContact,
+          offeredPrice: ridePrice,
           suffix: "00000199",
         })
       ),

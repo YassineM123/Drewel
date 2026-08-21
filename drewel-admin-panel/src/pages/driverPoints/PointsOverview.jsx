@@ -11,6 +11,7 @@ const METRICS = [
   ["pointsConsumed", "Points consumed"],
   ["pointsCurrentlyReserved", "Points currently reserved"],
   ["refunds", "Refunds"],
+  ["commissionPaidAED", "Commission paid (AED)"],
   ["activeWallets", "Active wallets"],
   ["pendingPurchaseRequests", "Pending purchase requests"],
   ["suspiciousAdjustments", "Suspicious adjustments"],

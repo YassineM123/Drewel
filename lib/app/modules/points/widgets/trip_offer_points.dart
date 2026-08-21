@@ -340,7 +340,7 @@ class TripOfferStatusCard extends StatelessWidget {
       'accepted' => (
           Icons.check_circle_rounded,
           Colors.green,
-          'points.accepted_status'.trParams({'points': '${offer.pointsCost}'})
+          'points.accepted_status'.tr,
         ),
       'declined' => (
           Icons.undo_rounded,

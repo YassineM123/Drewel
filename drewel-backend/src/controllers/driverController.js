@@ -663,7 +663,7 @@ export const updateDriverDetails = async (req, res) => {
       "whatsappNumber", "email", "phone", "countryCode", "lat", "long",
     ];
     const adminFields = [
-      ...selfFields, "contractNumber", "licenseCompany", "isRestricted",
+      ...selfFields, "contractNumber", "licenseCompany",
       "rejectionReason",
     ];
     const allowedFields = requesterIsAdmin ? adminFields : selfFields;

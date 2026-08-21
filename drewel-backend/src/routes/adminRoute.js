@@ -1,7 +1,10 @@
 import express from 'express';
 import {
   loginAdmin,
+  logoutAdmin,
   registerAdmin,
+  updateAdminRole,
+  updateAdminStatus,
   getDriversForReview,
   getDriverReviewDetails,
   getOnlineDrivers,
@@ -56,6 +59,9 @@ const router = express.Router();
 
 router.post("/register", requireSignIn, isAdmin, registerAdmin);
 router.post('/login',loginAdmin);
+router.post('/logout', requireSignIn, isAdmin, logoutAdmin);
+router.patch('/team/:id/role', requireSignIn, isAdmin, updateAdminRole);
+router.patch('/team/:id/status', requireSignIn, isAdmin, updateAdminStatus);
 router.get('/dashboard',requireSignIn,isAdmin,dashBoardData)
 router.get('/drivers/online', requireSignIn, isAdmin, getOnlineDrivers);
 router.get('/drivers/location', requireSignIn, isAdmin, getDriversWithLocation);

@@ -78,6 +78,8 @@ const Rides = ({ initialFilter = "active", lockedFilter = false }) => {
   const [customer, setCustomer] = useState("");
   const [city, setCity] = useState("");
   const [vehicleType, setVehicleType] = useState("");
+  const [minPrice, setMinPrice] = useState("");
+  const [maxPrice, setMaxPrice] = useState("");
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
@@ -87,6 +89,7 @@ const Rides = ({ initialFilter = "active", lockedFilter = false }) => {
   const [dir, setDir] = useState("desc");
   const [state, setState] = useState({ loading: true, error: "", rides: [], pagination: {} });
   const [live, setLive] = useState(false);
+  const [exporting, setExporting] = useState(false);
   const { socket, isConnected } = useSocket();
   const loadRef = useRef(null);
 
@@ -95,24 +98,26 @@ const Rides = ({ initialFilter = "active", lockedFilter = false }) => {
     return () => window.clearTimeout(timer);
   }, [search]);
 
+  const queryParams = useCallback((overrides = {}) => ({
+    status: filter,
+    search: debouncedSearch,
+    filters: {
+      driver: driver.trim() || undefined,
+      customer: customer.trim() || undefined,
+      city: city.trim() || undefined,
+      vehicleType: vehicleType.trim() || undefined,
+      minPrice: minPrice.trim() || undefined,
+      maxPrice: maxPrice.trim() || undefined,
+    },
+    range: from || to ? { from: from || undefined, to: to || undefined } : undefined,
+    sort, dir, page, limit,
+    ...overrides,
+  }), [filter, debouncedSearch, driver, customer, city, vehicleType, minPrice, maxPrice, from, to, sort, dir, page, limit]);
+
   const load = useCallback(async (signal) => {
     setState((current) => ({ ...current, loading: true, error: "" }));
     try {
-      const payload = await getRides(
-        {
-          status: filter,
-          search: debouncedSearch,
-          filters: {
-            driver: driver.trim() || undefined,
-            customer: customer.trim() || undefined,
-            city: city.trim() || undefined,
-            vehicleType: vehicleType.trim() || undefined,
-          },
-          range: from || to ? { from: from || undefined, to: to || undefined } : undefined,
-          sort, dir, page, limit,
-        },
-        signal,
-      );
+      const payload = await getRides(queryParams(), signal);
       const rides = Array.isArray(payload?.rides) ? payload.rides : [];
       setState({
         loading: false, error: "", rides,
@@ -123,7 +128,7 @@ const Rides = ({ initialFilter = "active", lockedFilter = false }) => {
         setState((current) => ({ ...current, loading: false, error: ridesErrorMessage(error, "Unable to load reservations.") }));
       }
     }
-  }, [customer, debouncedSearch, dir, driver, filter, from, limit, page, sort, to, vehicleType, city]);
+  }, [queryParams, page, limit]);
 
   useEffect(() => { loadRef.current = load; }, [load]);
 
@@ -164,24 +169,49 @@ const Rides = ({ initialFilter = "active", lockedFilter = false }) => {
     setPage(1);
   };
 
-  const exportCsv = () => {
-    const rows = [
-      ["Reference", "Status", "Customer", "Driver", "Vehicle Type", "Pickup", "Destination", "Updated", "ETA Minutes", "Remaining Distance", "Last GPS"],
-      ...state.rides.map((ride) => [
-        ride.reference || ride.id || ride._id, label(ride.status), person(ride.user || ride.passenger), person(ride.driver),
-        ride.vehicleType || ride.driver?.vehicleType || "", place(ride.pickup), place(ride.destination),
-        date(ride.updatedAt), ride.etaMinutes ?? "", distance(ride.distanceMeters), date(ride.lastGpsAt),
-      ]),
-    ];
-    const blob = new Blob([rows.map((row) => row.map(csv).join(",")).join("\r\n")], { type: "text/csv;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const anchor = document.createElement("a");
-    anchor.href = url;
-    anchor.download = `drewel-reservations-${filter}-${new Date().toISOString().slice(0, 10)}.csv`;
-    document.body.append(anchor);
-    anchor.click();
-    anchor.remove();
-    URL.revokeObjectURL(url);
+  const exportCsv = async () => {
+    if (exporting) return;
+    setExporting(true);
+    try {
+      // Export must cover every filtered reservation, not just the current
+      // page — fetch in bulk pages up to a sane cap rather than dumping
+      // whatever happens to be loaded in the table right now.
+      const EXPORT_PAGE_SIZE = 100;
+      const MAX_EXPORT_ROWS = 5000;
+      const first = await getRides(queryParams({ page: 1, limit: EXPORT_PAGE_SIZE }));
+      let rides = Array.isArray(first?.rides) ? first.rides : [];
+      const total = Number(first?.pagination?.total ?? rides.length);
+      const pagesToFetch = Math.min(
+        Math.ceil(total / EXPORT_PAGE_SIZE) || 1,
+        Math.ceil(MAX_EXPORT_ROWS / EXPORT_PAGE_SIZE),
+      );
+      for (let p = 2; p <= pagesToFetch && rides.length < MAX_EXPORT_ROWS; p += 1) {
+        const next = await getRides(queryParams({ page: p, limit: EXPORT_PAGE_SIZE }));
+        rides = rides.concat(Array.isArray(next?.rides) ? next.rides : []);
+      }
+
+      const rows = [
+        ["Reference", "Status", "Customer", "Driver", "Vehicle Type", "Pickup", "Destination", "Updated", "ETA Minutes", "Remaining Distance", "Last GPS"],
+        ...rides.map((ride) => [
+          ride.reference || ride.id || ride._id, label(ride.status), person(ride.user || ride.passenger), person(ride.driver),
+          ride.vehicleType || ride.driver?.vehicleType || "", place(ride.pickup), place(ride.destination),
+          date(ride.updatedAt), ride.etaMinutes ?? "", distance(ride.distanceMeters), date(ride.lastGpsAt),
+        ]),
+      ];
+      const blob = new Blob([rows.map((row) => row.map(csv).join(",")).join("\r\n")], { type: "text/csv;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = `drewel-reservations-${filter}-${new Date().toISOString().slice(0, 10)}.csv`;
+      document.body.append(anchor);
+      anchor.click();
+      anchor.remove();
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      setState((current) => ({ ...current, error: ridesErrorMessage(error, "Unable to export reservations.") }));
+    } finally {
+      setExporting(false);
+    }
   };
 
   const pagination = state.pagination;
@@ -203,7 +233,7 @@ const Rides = ({ initialFilter = "active", lockedFilter = false }) => {
               </span>
             )}
             <Button variant="secondary" size="sm" icon={<RefreshCw size={14} />} onClick={() => load()} disabled={state.loading}>Refresh</Button>
-            <Button variant="secondary" size="sm" icon={<Download size={14} />} onClick={exportCsv} disabled={state.loading || state.rides.length === 0}>Export CSV</Button>
+            <Button variant="secondary" size="sm" icon={<Download size={14} />} onClick={exportCsv} loading={exporting} disabled={state.loading || state.rides.length === 0}>Export CSV</Button>
           </>
         }
       />
@@ -232,6 +262,10 @@ const Rides = ({ initialFilter = "active", lockedFilter = false }) => {
             className="h-10 w-32 bg-white border border-slate-200 rounded-[10px] px-3 text-sm text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-red-700/20 focus:border-red-400" />
           <input value={vehicleType} onChange={(e) => { setVehicleType(e.target.value); setPage(1); }} placeholder="Vehicle type"
             className="h-10 w-36 bg-white border border-slate-200 rounded-[10px] px-3 text-sm text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-red-700/20 focus:border-red-400" />
+          <input type="number" min="0" value={minPrice} onChange={(e) => { setMinPrice(e.target.value); setPage(1); }} placeholder="Min price"
+            className="h-10 w-24 bg-white border border-slate-200 rounded-[10px] px-3 text-sm text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-red-700/20 focus:border-red-400" />
+          <input type="number" min="0" value={maxPrice} onChange={(e) => { setMaxPrice(e.target.value); setPage(1); }} placeholder="Max price"
+            className="h-10 w-24 bg-white border border-slate-200 rounded-[10px] px-3 text-sm text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-red-700/20 focus:border-red-400" />
           <input type="date" value={from} onChange={(e) => { setFrom(e.target.value); setPage(1); }}
             className="h-10 bg-white border border-slate-200 rounded-[10px] px-3 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-red-700/20 focus:border-red-400" />
           <input type="date" value={to} onChange={(e) => { setTo(e.target.value); setPage(1); }}

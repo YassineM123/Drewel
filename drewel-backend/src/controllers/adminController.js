@@ -1,5 +1,6 @@
 import mongoose from "mongoose";
 import Admin from "../models/Admin.js";
+import AuthAudit from "../models/AuthAudit.js";
 import Driver from "../models/Driver.js";
 import DriverLogs from "../models/Driverlogs.js";
 import bcrypt from "bcryptjs";
@@ -9,7 +10,6 @@ import {
   buildActiveDriverPresenceFilter,
   emitDriverPresenceTransition,
 } from "../services/driverPresenceService.js";
-import { dispatchNotification } from "../services/notificationService.js";
 import { buildFreshAdminMarketplaceAvailabilityFilter } from "../utils/availableDrivers.js";
 import {
   getDriverLocationFutureSkewMs,
@@ -241,7 +241,23 @@ const enrichDriverOperations = async (drivers) => {
       .lean(),
     Ride.aggregate([
       { $match: { driverId: { $in: driverIds } } },
-      { $group: { _id: "$driverId", total: { $sum: 1 }, completed: { $sum: { $cond: [{ $eq: ["$status", "completed"] }, 1, 0] } } } },
+      {
+        $group: {
+          _id: "$driverId",
+          total: { $sum: 1 },
+          completed: { $sum: { $cond: [{ $eq: ["$status", "completed"] }, 1, 0] } },
+          cancelledByDriver: { $sum: { $cond: [{ $eq: ["$status", "cancelled_by_driver"] }, 1, 0] } },
+          terminal: {
+            $sum: {
+              $cond: [
+                { $in: ["$status", ["completed", "cancelled", "cancelled_by_user", "cancelled_by_driver", "cancelled_by_admin"]] },
+                1,
+                0,
+              ],
+            },
+          },
+        },
+      },
     ]),
     TripOffer.aggregate([
       { $match: { driverId: { $in: driverIds } } },
@@ -263,6 +279,9 @@ const enrichDriverOperations = async (drivers) => {
       ...driver,
       documentSummary: documentAvailability(driver),
       pointsWallet: walletDto(walletsByDriver.get(driverId)),
+      cancellationRate: rideSummary.terminal
+        ? (Number(rideSummary.cancelledByDriver || 0) / Number(rideSummary.terminal)) * 100
+        : 0,
       rideSummary: {
         total: Number(rideSummary.total || 0),
         completed: Number(rideSummary.completed || 0),
@@ -286,9 +305,30 @@ const enrichDriverOperations = async (drivers) => {
 };
 
 const escapeRegex = (value) => String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+// The only admin roles a team-management action may ever assign. "owner" can
+// never be granted this way, and "support"/"analyst" are schema-valid but not
+// yet enforced anywhere in the backend, so granting them would silently hand
+// out full admin access under a misleading label.
+const MANAGEABLE_ADMIN_ROLES = ["finance_admin", "admin"];
+
 export const registerAdmin = async (req, res) => {
   try {
+    if (req.admin?.role !== "owner") {
+      return res.status(403).send({
+        success: false,
+        message: "Only the Drewel Owner can create new admin accounts",
+      });
+    }
+
     const { fullName, email, password } = req.body || {};
+    const requestedRole = String(req.body?.role || "admin");
+    if (!MANAGEABLE_ADMIN_ROLES.includes(requestedRole)) {
+      return res.status(400).send({
+        success: false,
+        message: `Role must be one of: ${MANAGEABLE_ADMIN_ROLES.join(", ")}`,
+      });
+    }
 
     if (!fullName || !email || !password) {
       return res
@@ -307,11 +347,19 @@ export const registerAdmin = async (req, res) => {
       fullName,
       email: normalizedEmail,
       password: hashedPassword,
-      // Only an authenticated admin can reach this controller. Never trust a
-      // caller-provided role when creating another privileged account.
-      role: "admin",
+      role: requestedRole,
     });
     await newAdmin.save();
+    await AuthAudit.create({
+      action: "admin_created",
+      actorId: req.admin._id,
+      actorRole: req.admin.role,
+      actorName: req.admin.fullName,
+      actorEmail: req.admin.email,
+      targetType: "admin",
+      targetId: newAdmin._id,
+      description: `Created admin account ${normalizedEmail} with role ${requestedRole}`,
+    });
     return res
       .status(200)
       .send({ success: true, message: "New admin is registered" });
@@ -320,6 +368,110 @@ export const registerAdmin = async (req, res) => {
     return res
       .status(500)
       .send({ success: false, message: "Error while registering admin" });
+  }
+};
+
+export const updateAdminRole = async (req, res) => {
+  try {
+    if (req.admin?.role !== "owner") {
+      return res.status(403).json({
+        success: false,
+        message: "Only the Drewel Owner can change admin roles",
+      });
+    }
+    const { id } = req.params;
+    const nextRole = String(req.body?.role || "");
+    if (!MANAGEABLE_ADMIN_ROLES.includes(nextRole)) {
+      return res.status(400).json({
+        success: false,
+        message: `Role must be one of: ${MANAGEABLE_ADMIN_ROLES.join(", ")}`,
+      });
+    }
+    if (String(id) === String(req.admin._id)) {
+      return res.status(400).json({
+        success: false,
+        message: "You cannot change your own role",
+      });
+    }
+    const target = await Admin.findById(id);
+    if (!target) {
+      return res.status(404).json({ success: false, message: "Admin not found" });
+    }
+    if (target.role === "owner") {
+      return res.status(400).json({
+        success: false,
+        message: "The Owner role cannot be changed",
+      });
+    }
+    const previousRole = target.role;
+    target.role = nextRole;
+    await target.save();
+    await AuthAudit.create({
+      action: "admin_role_changed",
+      actorId: req.admin._id,
+      actorRole: req.admin.role,
+      actorName: req.admin.fullName,
+      actorEmail: req.admin.email,
+      targetType: "admin",
+      targetId: target._id,
+      description: `Changed role of ${target.email} from ${previousRole} to ${nextRole}`,
+      metadata: { previousRole, newRole: nextRole },
+    });
+    return res.status(200).json({
+      success: true,
+      message: "Admin role updated",
+      admin: { id: String(target._id), fullName: target.fullName, email: target.email, role: target.role },
+    });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: "Failed to update admin role" });
+  }
+};
+
+export const updateAdminStatus = async (req, res) => {
+  try {
+    if (req.admin?.role !== "owner") {
+      return res.status(403).json({
+        success: false,
+        message: "Only the Drewel Owner can activate or deactivate admins",
+      });
+    }
+    const { id } = req.params;
+    const isActive = Boolean(req.body?.isActive);
+    if (String(id) === String(req.admin._id)) {
+      return res.status(400).json({
+        success: false,
+        message: "You cannot deactivate your own account",
+      });
+    }
+    const target = await Admin.findById(id);
+    if (!target) {
+      return res.status(404).json({ success: false, message: "Admin not found" });
+    }
+    if (target.role === "owner") {
+      return res.status(400).json({
+        success: false,
+        message: "The Owner account cannot be deactivated",
+      });
+    }
+    target.isActive = isActive;
+    await target.save();
+    await AuthAudit.create({
+      action: isActive ? "admin_reactivated" : "admin_deactivated",
+      actorId: req.admin._id,
+      actorRole: req.admin.role,
+      actorName: req.admin.fullName,
+      actorEmail: req.admin.email,
+      targetType: "admin",
+      targetId: target._id,
+      description: `${isActive ? "Reactivated" : "Deactivated"} admin account ${target.email}`,
+    });
+    return res.status(200).json({
+      success: true,
+      message: isActive ? "Admin reactivated" : "Admin deactivated",
+      admin: { id: String(target._id), fullName: target.fullName, email: target.email, isActive: target.isActive },
+    });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: "Failed to update admin status" });
   }
 };
 
@@ -350,6 +502,14 @@ export const loginAdmin = async (req, res) => {
     // 3. Compare passwords
     const isMatch = await bcrypt.compare(password, existingAdmin.password);
     if (!isMatch) {
+      await AuthAudit.create({
+        action: "login_failure",
+        actorId: existingAdmin._id,
+        actorRole: existingAdmin.role,
+        actorName: existingAdmin.fullName,
+        actorEmail: existingAdmin.email,
+        description: "Invalid password",
+      });
       return res.status(401).json({
         success: false,
         message: "Invalid credentials",
@@ -363,6 +523,21 @@ export const loginAdmin = async (req, res) => {
       });
     }
 
+    if (existingAdmin.isActive === false) {
+      await AuthAudit.create({
+        action: "login_failure",
+        actorId: existingAdmin._id,
+        actorRole: existingAdmin.role,
+        actorName: existingAdmin.fullName,
+        actorEmail: existingAdmin.email,
+        description: "Login attempt on a deactivated admin account",
+      });
+      return res.status(403).json({
+        success: false,
+        message: "This admin account has been deactivated",
+      });
+    }
+
     // 4. Generate JWT token
     const token = jwt.sign(
       { _id: existingAdmin._id, role: "admin" },
@@ -372,6 +547,14 @@ export const loginAdmin = async (req, res) => {
 
     const admin = existingAdmin.toObject();
     delete admin.password;
+
+    await AuthAudit.create({
+      action: "login_success",
+      actorId: existingAdmin._id,
+      actorRole: existingAdmin.role,
+      actorName: existingAdmin.fullName,
+      actorEmail: existingAdmin.email,
+    });
 
     // 5. Send success response
     return res.status(200).json({
@@ -386,6 +569,23 @@ export const loginAdmin = async (req, res) => {
       success: false,
       message: "Error while login",
     });
+  }
+};
+
+export const logoutAdmin = async (req, res) => {
+  try {
+    if (req.admin) {
+      await AuthAudit.create({
+        action: "logout",
+        actorId: req.admin._id,
+        actorRole: req.admin.role,
+        actorName: req.admin.fullName,
+        actorEmail: req.admin.email,
+      });
+    }
+    return res.status(200).json({ success: true, message: "Logged out" });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: "Failed to record logout" });
   }
 };
 
@@ -452,6 +652,7 @@ export const getDriversForReview = async (req, res) => {
       search,
       availability,
       discoverability,
+      restricted,
       page = 1,
       limit = 20,
       sort = "updatedAt",
@@ -461,8 +662,18 @@ export const getDriversForReview = async (req, res) => {
     if (status && ["pending", "approved", "rejected", "completed"].includes(status)) {
       filter.status = status;
     }
-    if (availability && ["Online", "Busy", "Offline"].includes(availability)) {
-      filter.availabilityStatus = availability;
+    if (availability) {
+      const values = String(availability)
+        .split(",")
+        .map((v) => v.trim())
+        .filter((v) => ["Online", "Busy", "Offline"].includes(v));
+      if (values.length === 1) filter.availabilityStatus = values[0];
+      else if (values.length > 1) filter.availabilityStatus = { $in: values };
+    }
+    if (restricted === "true") {
+      filter.isRestricted = true;
+    } else if (restricted === "false") {
+      filter.isRestricted = { $ne: true };
     }
     const term = String(search || "").trim();
     if (term) {
@@ -586,92 +797,6 @@ export const getDriverReviewDetails = async (req, res) => {
     return res.status(500).json({
       success: false,
       message: "Failed to fetch driver details",
-      error: error.message,
-    });
-  }
-};
-
-export const updateDriverReviewStatus = async (req, res) => {
-  try {
-    const { id } = req.params;
-    const { status, rejection_reason } = req.body || {};
-    if (!["pending", "approved", "rejected", "completed"].includes(status)) {
-      return res.status(400).json({
-        success: false,
-        message: "Invalid status value",
-      });
-    }
-
-    const driver = await Driver.findById(id);
-    if (!driver) {
-      return res.status(404).json({
-        success: false,
-        message: "Driver not found",
-      });
-    }
-
-    driver.status = status;
-    if (status === "approved") {
-      driver.approvedAt = new Date();
-      driver.isApproved = true;
-      driver.rejectionReason = "";
-    } else if (status === "rejected") {
-      driver.isApproved = false;
-      driver.rejectionReason = String(rejection_reason || "").trim();
-    } else if (status === "pending") {
-      driver.isApproved = false;
-      driver.approvedAt = null;
-      driver.rejectionReason = "";
-      if (!driver.basicRequestSubmittedAt) {
-        driver.basicRequestSubmittedAt = new Date();
-      }
-    } else if (status === "completed") {
-      driver.isApproved = true;
-      if (!driver.approvedAt) driver.approvedAt = new Date();
-      if (!driver.completedAt) driver.completedAt = new Date();
-      driver.rejectionReason = "";
-    }
-
-driver.fullName = [driver.firstName, driver.lastName].filter(Boolean).join(" ").trim();
-    await driver.save();
-
-    const driverNotification =
-      status === "approved"
-        ? {
-            type: "DRIVER_APPROVED",
-            title: "Application approved",
-            message: "Your driver application has been approved. You can start accepting rides.",
-            deepLink: "drewel://driver/status",
-          }
-        : status === "rejected"
-          ? {
-              type: "DRIVER_REJECTED",
-              title: "Application not approved",
-              message: String(rejection_reason || "").trim() || "Your driver application was not approved.",
-              deepLink: "drewel://driver/status",
-            }
-          : null;
-    if (driverNotification) {
-      await dispatchNotification({
-        userId: driver._id,
-        recipientType: "driver",
-        type: driverNotification.type,
-        title: driverNotification.title,
-        message: driverNotification.message,
-        deepLink: driverNotification.deepLink,
-        data: { status, rejectionReason: driverNotification.type === "DRIVER_REJECTED" ? driver.rejectionReason : "" },
-      });
-    }
-
-    return res.status(200).json({
-      success: true,
-      message: "Driver status updated successfully",
-      driver,
-    });
-  } catch (error) {
-    return res.status(500).json({
-      success: false,
-      message: "Failed to update driver status",
       error: error.message,
     });
   }

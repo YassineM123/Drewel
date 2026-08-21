@@ -553,15 +553,33 @@ export const acceptTripOffer = async ({
       { session }
     );
 
-    await Ride.updateMany(
+    const competingRides = await Ride.find(
       {
         _id: { $ne: ride._id },
         status: "contacting",
         $or: [{ passengerId }, { driverId: offer.driverId }],
       },
-      { $set: { status: "cancelled", endedAt: now, contactEndsAt: now } },
-      { session }
-    );
+      { _id: 1 }
+    ).session(session);
+    if (competingRides.length) {
+      await Ride.updateMany(
+        { _id: { $in: competingRides.map((competing) => competing._id) } },
+        { $set: { status: "cancelled", endedAt: now, contactEndsAt: now } },
+        { session }
+      );
+      await RideAudit.create(
+        competingRides.map((competing) => ({
+          rideId: competing._id,
+          action: "ride_cancelled",
+          fromStatus: "contacting",
+          toStatus: "cancelled",
+          actorId: confirmedBy || passengerId,
+          actorRole,
+          reasonCode: "superseded_by_accepted_offer",
+        })),
+        { session }
+      );
+    }
 
     const commission = calculateRideCommission(offer.offeredPrice, settings);
     await queuePointsEvents(

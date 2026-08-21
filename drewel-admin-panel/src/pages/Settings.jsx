@@ -4,8 +4,10 @@ import { getPointSettings, updatePointSettings, pointsErrorMessage } from "../ut
 import { getAdminSettings, settingsErrorMessage } from "../api/domains/settings";
 
 const operationalSettings = [
-  { key: "welcomeDriverPoints", label: "Welcome Points", unit: "pts", min: 0, max: 500, description: "Points credited to a new driver on first approval" },
-  { key: "rideOfferPointsCost", label: "Points Charged Per Ride", unit: "pts", min: 1, max: 100, description: "Points deducted from driver on each completed ride" },
+  { key: "welcomeDriverPoints", label: "Welcome Points", unit: "pts", min: 0, max: 10000, description: "Points credited to a new driver on first approval" },
+  { key: "rideOfferPointsCost", label: "Offer Reservation Lock", unit: "pts", min: 1, max: 100, description: "Points reserved when sending a trip offer (released on decline/expiry)" },
+  { key: "commissionRate", label: "Commission Rate", unit: "decimal", min: 0, max: 1, description: "Percentage of ride price taken as commission (0.10 = 10%)" },
+  { key: "pointsPerAED", label: "Points Per AED", unit: "pts/AED", min: 0.01, max: 1000, description: "How many points equal 1 AED (10 points = 1 AED)" },
   { key: "offerExpirationSeconds", label: "Trip Offer Expiry Time", unit: "sec", min: 10, max: 120, description: "Seconds before an unaccepted trip offer expires" },
   { key: "lowBalanceThreshold", label: "Low Balance Threshold", unit: "pts", min: 0, max: 500, description: "Driver balance below which a low-balance alert fires" },
   { key: "maximumConcurrentOffers", label: "Max Concurrent Offers", unit: "", min: 1, max: 10, description: "Maximum simultaneous trip offers per driver" },
