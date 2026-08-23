@@ -39,4 +39,17 @@ post_install do |installer|
   installer.pods_project.targets.each do |target|
     flutter_additional_macos_build_settings(target)
   end
+
+  # AgoraVideo_Special_macOS embeds AgoraScreenCaptureExtension.framework in
+  # addition to AgoraRtcKit.framework, and both ship the same Obj-C classes
+  # (RTECVPixelBuffer, RTEColorSpace, ...), which triggers "Class X is
+  # implemented in both..." warnings/crashes at launch. The extension is only
+  # needed for a standalone screen-capture App Extension target, which this
+  # app doesn't have, so drop it from the generated embed step.
+  frameworks_script = File.join(__dir__, 'Pods', 'Target Support Files', 'Pods-Runner', 'Pods-Runner-frameworks.sh')
+  if File.exist?(frameworks_script)
+    contents = File.read(frameworks_script)
+    contents.gsub!(/^\s*install_framework "\$\{PODS_XCFRAMEWORKS_BUILD_DIR\}\/AgoraVideo_Special_macOS\/AgoraScreenCaptureExtension\.framework"\n/, '')
+    File.write(frameworks_script, contents)
+  end
 end

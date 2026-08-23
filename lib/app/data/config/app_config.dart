@@ -21,6 +21,7 @@ bool shouldUseOpenStreetMap({
   required bool googleWebMapEnabled,
   required String googleWebApiKey,
 }) =>
+    platform == TargetPlatform.iOS ||
     !googleMapsFlutterSupportsPlatform(isWeb: isWeb, platform: platform) ||
     shouldPreferOpenStreetMap(
       isWeb: isWeb,

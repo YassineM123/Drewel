@@ -63,7 +63,7 @@ void main() {
     );
   });
 
-  test('native mobile platforms keep Google Maps available', () {
+  test('Android keeps Google Maps available', () {
     expect(
       shouldUseOpenStreetMap(
         isWeb: false,
@@ -72,6 +72,18 @@ void main() {
         googleWebApiKey: '',
       ),
       isFalse,
+    );
+  });
+
+  test('iOS uses OpenStreetMap when the native Google key is unavailable', () {
+    expect(
+      shouldUseOpenStreetMap(
+        isWeb: false,
+        platform: TargetPlatform.iOS,
+        googleWebMapEnabled: false,
+        googleWebApiKey: '',
+      ),
+      isTrue,
     );
   });
 }

@@ -533,6 +533,16 @@ class _RideChatScreenState extends State<RideChatScreen> {
     super.dispose();
   }
 
+  void _handleBack() {
+    if (Navigator.of(context).canPop()) {
+      Get.back();
+    } else {
+      Get.offAllNamed(
+        _role == ApiKeyConstants.driver ? Routes.DRIVER_HOME : Routes.USER_HOME,
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) => Scaffold(
         backgroundColor: const Color(0xFFFCFCFC),
@@ -543,7 +553,7 @@ class _RideChatScreenState extends State<RideChatScreen> {
           centerTitle: true,
           leading: IconButton(
             tooltip: 'Back',
-            onPressed: Get.back,
+            onPressed: _handleBack,
             icon: const Icon(Icons.arrow_back_rounded, color: primaryColor),
           ),
           title: InkWell(
