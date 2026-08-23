@@ -328,6 +328,8 @@ class DriverAccountController extends GetxController {
         ApiKeyConstants.countryCode: next.countryCode ?? '',
         ApiKeyConstants.profileImage: next.profileImageUrl ?? '',
         ApiKeyConstants.fullName: next.fullName ?? '',
+        // CustomDrawer uses this field to choose the passenger or driver
+        // navigation. Keep it when replacing the whole map after a refresh.
         ApiKeyConstants.type: ApiKeyConstants.driver,
       };
     }

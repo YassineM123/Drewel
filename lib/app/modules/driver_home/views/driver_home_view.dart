@@ -1,6 +1,7 @@
 import 'package:drewel/app/data/constants/icons_constant.dart';
 import 'package:drewel/app/data/constants/image_constants.dart';
 import 'package:drewel/app/data/constants/string_constants.dart';
+import 'package:drewel/app/data/apis/api_constants/api_key_constants.dart';
 import 'package:drewel/common/common_drawer.dart';
 import 'package:drewel/common/common_methods.dart';
 import 'package:drewel/common/drewel_app_bar.dart';
@@ -51,7 +52,10 @@ class DriverHomeView extends GetView<DriverHomeController> {
             ),
             endDrawer: Obx(
               () => CustomDrawer(
-                userData: Map<String, String>.from(controller.userData),
+                userData: <String, String>{
+                  ...controller.userData,
+                  ApiKeyConstants.type: ApiKeyConstants.driver,
+                },
               ),
             ),
             backgroundColor: primaryColor,
