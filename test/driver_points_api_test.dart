@@ -105,11 +105,8 @@ void main() {
       throwsA(
         isA<CommunicationApiException>()
             .having((error) => error.statusCode, 'statusCode', 404)
-            .having(
-              (error) => error.message,
-              'message',
-              contains('Cannot GET /api/driver/points/wallet'),
-            ),
+            // Framework error text is masked, never shown to end users.
+            .having((error) => error.message, 'message', isNot(contains('GET'))),
       ),
     );
   });

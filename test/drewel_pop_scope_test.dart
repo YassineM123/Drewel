@@ -50,14 +50,15 @@ void main() {
     await tester.binding.handlePopRoute();
     await tester.pumpAndSettle();
 
-    expect(find.text('Discard changes?'), findsOneWidget);
-    await tester.tap(find.text('Cancel'));
+    // Without loaded translations .tr falls back to the raw key.
+    expect(find.text('discard_changes'), findsOneWidget);
+    await tester.tap(find.text('cancel'));
     await tester.pumpAndSettle();
     expect(find.text('Edited form'), findsOneWidget);
 
     await tester.binding.handlePopRoute();
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Discard'));
+    await tester.tap(find.text('discard'));
     await tester.pumpAndSettle();
     expect(find.text('Open form'), findsOneWidget);
   });

@@ -58,7 +58,7 @@ Future<bool> showOfferReservationConfirmation(
               ),
               _QuoteRow(
                 label: 'points.offer_reservation'.tr,
-                value: 1,
+                value: wallet.offerPointsCost,
               ),
               if (wallet.commissionRate != null)
                 _CommissionInfo(
@@ -83,7 +83,9 @@ Future<bool> showOfferReservationConfirmation(
               onPressed: controller.isSendingOffer.value
                   ? null
                   : () => Navigator.pop(dialogContext, true),
-              child: Text('points.send_offer'.tr),
+              child: Text('points.send_offer'.trParams(
+                <String, String>{'points': '${wallet.offerPointsCost}'},
+              )),
             ),
           ],
         ),

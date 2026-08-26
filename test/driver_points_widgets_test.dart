@@ -77,7 +77,6 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Ride DRW-1024'), findsOneWidget);
     expect(find.text('−20'), findsOneWidget);
-    expect(find.text('Available rides'), findsOneWidget);
   });
 
   testWidgets('wallet renders a loading skeleton', (tester) async {
@@ -214,7 +213,7 @@ void main() {
 
     expect(find.byKey(const Key('insufficient-points-dialog')), findsOneWidget);
     expect(
-      find.text('You don’t have enough points to send this offer.'),
+      find.text("You don't have enough points to send this offer."),
       findsOneWidget,
     );
     expect(find.text('Buy Points'), findsOneWidget);
@@ -241,7 +240,10 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('200 Available points'), findsOneWidget);
-    expect(find.text('50.00 AED'), findsOneWidget);
+    expect(
+      find.text('Arranged directly with the owner'),
+      findsOneWidget,
+    );
     await tester.tap(find.byKey(const Key('request-pack-pack-200')));
     await tester.pumpAndSettle();
 

@@ -256,6 +256,8 @@ void main() {
         ),
       ),
     ));
+    // Flush flutter_animate entrance timers so no timer stays pending.
+    await tester.pump(const Duration(milliseconds: 400));
 
     expect(find.text('Trip Offer'), findsOneWidget);
     expect(find.text('ACCEPTED'), findsOneWidget);
