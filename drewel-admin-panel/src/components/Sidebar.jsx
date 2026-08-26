@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { bestMatchingRoute } from "../utils/routeMeta";
+import { getPointsAccess } from "../utils/pointsPermissions";
 
 const ROLE_LABELS = {
   owner: "Owner",
@@ -57,11 +58,11 @@ const navGroups = [
     section: "Driver Points",
     collapsible: true,
     items: [
-      { to: "/points/overview",     label: "Overview",          icon: <BarChart2      size={16} /> },
-      { to: "/points/balances",     label: "Wallets",           icon: <Wallet         size={16} /> },
-      { to: "/points/requests",     label: "Purchase Requests", icon: <Coins          size={16} /> },
-      { to: "/points/transactions", label: "Transactions",      icon: <ArrowLeftRight size={16} /> },
-      { to: "/points/packs",        label: "Packs",             icon: <Package        size={16} /> },
+      { to: "/points/overview",     label: "Overview",          icon: <BarChart2      size={16} />, pointsPermission: "canRead" },
+      { to: "/points/balances",     label: "Wallets",           icon: <Wallet         size={16} />, pointsPermission: "canRead" },
+      { to: "/points/requests",     label: "Purchase Requests", icon: <Coins          size={16} />, pointsPermission: "canManageRequests" },
+      { to: "/points/transactions", label: "Transactions",      icon: <ArrowLeftRight size={16} />, pointsPermission: "canRead" },
+      { to: "/points/packs",        label: "Packs",             icon: <Package        size={16} />, pointsPermission: "canManagePacks" },
     ],
   },
   {
@@ -104,6 +105,7 @@ function DrewelMark() {
 export default function Sidebar({ collapsed, onToggle }) {
   const location = useLocation();
   const { user, role, signOut } = useAuth();
+  const pointsAccess = getPointsAccess(user);
   const [expandedGroups, setExpandedGroups] = useState(
     ["Operations", "People", "Requests", "Driver Points", "Governance"]
   );
@@ -114,7 +116,14 @@ export default function Sidebar({ collapsed, onToggle }) {
     );
   };
 
-  const allNavPaths = navGroups.flatMap(g => g.items.map(i => i.to));
+  const visibleNavGroups = navGroups
+    .map((group) => ({
+      ...group,
+      items: group.items.filter((item) => !item.pointsPermission || pointsAccess[item.pointsPermission]),
+    }))
+    .filter((group) => group.items.length > 0);
+
+  const allNavPaths = visibleNavGroups.flatMap(g => g.items.map(i => i.to));
   const activePath = bestMatchingRoute(location.pathname, allNavPaths);
 
   const isGroupActive = (group) => group.items.some(item => item.to === activePath);
@@ -156,7 +165,7 @@ export default function Sidebar({ collapsed, onToggle }) {
       </div>
 
       <nav className="flex-1 overflow-y-auto py-3 flex flex-col px-2">
-        {navGroups.map((group, gi) => {
+        {visibleNavGroups.map((group, gi) => {
           const groupActive = isGroupActive(group);
           const isExpanded = !group.collapsible || expandedGroups.includes(group.section);
 

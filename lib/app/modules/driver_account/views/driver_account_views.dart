@@ -673,7 +673,11 @@ class DriverLegalView extends GetView<DriverAccountController> {
     });
     return Scaffold(
       appBar: DrewelAppBar(
-        title: type == 'terms' ? 'Terms & Conditions' : 'Privacy',
+        title: type == 'driver-terms'
+            ? 'Driver Terms & Conditions'
+            : type == 'terms'
+                ? 'Terms & Conditions'
+                : 'Privacy',
         showBackButton: true,
       ),
       backgroundColor: _pageColor,
@@ -924,7 +928,7 @@ class DriverAboutView extends GetView<DriverAccountController> {
               icon: Icons.description_outlined,
               title: 'Terms & Conditions',
               onTap: () => Get.toNamed(Routes.DRIVER_LEGAL,
-                  parameters: {'type': 'terms'}),
+                  parameters: {'type': 'driver-terms'}),
             ),
             _MenuRow(
               icon: Icons.privacy_tip_outlined,

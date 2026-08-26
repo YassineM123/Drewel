@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ShieldCheck, UserPlus, Mail, Check, X } from "lucide-react";
 import {
-  getRolesCatalog, createAdmin, updateAdminRole, updateAdminStatus, rolesErrorMessage,
+  getRolesCatalog, createAdmin, updateAdminRole, updateAdminStatus, resetAdminPassword, rolesErrorMessage,
 } from "../api/domains/roles";
 import { useAuth } from "../context/AuthContext";
 import {
@@ -77,6 +77,10 @@ const TeamRoles = () => {
   const [statusTarget, setStatusTarget] = useState(null);
   const [statusBusy, setStatusBusy] = useState(false);
   const [statusError, setStatusError] = useState("");
+  const [passwordTarget, setPasswordTarget] = useState(null);
+  const [newPassword, setNewPassword] = useState("");
+  const [passwordBusy, setPasswordBusy] = useState(false);
+  const [passwordError, setPasswordError] = useState("");
   const [toast, setToast] = useState(null);
 
   const load = useCallback(async (signal) => {
@@ -178,6 +182,32 @@ const TeamRoles = () => {
       setStatusError(rolesErrorMessage(err, "Could not update this admin's status."));
     } finally {
       setStatusBusy(false);
+    }
+  };
+
+  const openPasswordModal = (member) => {
+    setPasswordTarget(member);
+    setNewPassword("");
+    setPasswordError("");
+  };
+
+  const submitPasswordReset = async () => {
+    if (!passwordTarget || newPassword.length < 8) return;
+    setPasswordBusy(true);
+    setPasswordError("");
+    try {
+      const result = await resetAdminPassword(passwordTarget._id || passwordTarget.id, newPassword);
+      if (!result.success) {
+        setPasswordError(result.message || "Could not reset this admin's password.");
+        return;
+      }
+      setToast(`${passwordTarget.email}'s password was reset.`);
+      setPasswordTarget(null);
+      setNewPassword("");
+    } catch (err) {
+      setPasswordError(rolesErrorMessage(err, "Could not reset this admin's password."));
+    } finally {
+      setPasswordBusy(false);
     }
   };
 
@@ -284,6 +314,7 @@ const TeamRoles = () => {
                                 ) : (
                                   <>
                                     <Button variant="secondary" size="sm" onClick={() => openRoleModal(member)}>Edit Role</Button>
+                                    <Button variant="secondary" size="sm" onClick={() => openPasswordModal(member)}>Reset password</Button>
                                     <Button variant={isActive ? "danger" : "secondary"} size="sm" onClick={() => setStatusTarget(member)}>
                                       {isActive ? "Deactivate" : "Reactivate"}
                                     </Button>
@@ -439,6 +470,24 @@ const TeamRoles = () => {
               <Button variant={statusTarget.isActive === false ? "primary" : "danger"} loading={statusBusy} onClick={submitStatusChange}>
                 {statusTarget.isActive === false ? "Reactivate" : "Deactivate"}
               </Button>
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      <Modal open={Boolean(passwordTarget)} onClose={() => setPasswordTarget(null)} title="Reset password">
+        {passwordTarget && (
+          <div className="flex flex-col gap-4">
+            {passwordError && <div className="bg-red-50 border border-red-200 rounded-[10px] px-3.5 py-2.5 text-sm text-red-700" role="alert">{passwordError}</div>}
+            <p className="text-sm text-slate-600">
+              Set a new password for <strong>{passwordTarget.fullName}</strong> ({passwordTarget.email}). Share it with them through a secure channel.
+            </p>
+            <input type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)}
+              placeholder="At least 8 characters"
+              className="w-full h-10 bg-white border border-slate-200 rounded-[10px] px-3 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#BE1B2C]/20" />
+            <div className="flex justify-end gap-3">
+              <Button variant="secondary" onClick={() => setPasswordTarget(null)}>Cancel</Button>
+              <Button variant="primary" disabled={newPassword.length < 8} loading={passwordBusy} onClick={submitPasswordReset}>Reset password</Button>
             </div>
           </div>
         )}

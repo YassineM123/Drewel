@@ -29,5 +29,10 @@ export const updateAdminStatus = async (id, isActive) => {
   return data.admin;
 };
 
+export const resetAdminPassword = async (id, newPassword) => {
+  const data = await apiClient.patch(`/admin/team/${id}/password`, { newPassword });
+  return { success: Boolean(data.success), message: data.message };
+};
+
 export const rolesErrorMessage = (error, fallback = "Unable to load roles.") =>
   error?.response?.data?.message || error?.message || fallback;

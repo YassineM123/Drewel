@@ -62,6 +62,7 @@ export default function Login() {
   const [remember, setRemember] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [showForgotHelp, setShowForgotHelp] = useState(false);
 
   useEffect(() => {
     const token = localStorage.getItem("authToken");
@@ -81,7 +82,7 @@ export default function Login() {
     }
     setLoading(true);
     try {
-      const res = await axios.post(`${API_URL}/admin/login`, { email, password });
+      const res = await axios.post(`${API_URL}/admin/login`, { email, password, remember });
       if (!res.data?.success || !res.data?.token || !res.data?.admin) {
         throw new Error(res.data?.message || "Login failed.");
       }
@@ -190,10 +191,16 @@ export default function Login() {
             <div className="flex flex-col gap-1.5">
               <div className="flex items-center justify-between">
                 <label className="text-sm font-semibold text-slate-700">Password</label>
-                <button type="button" className="text-xs text-[#BE1B2C] hover:text-[#A31725] font-semibold transition-colors">
+                <button type="button" onClick={() => setShowForgotHelp(true)} className="text-xs text-[#BE1B2C] hover:text-[#A31725] font-semibold transition-colors">
                   Forgot password?
                 </button>
               </div>
+              {showForgotHelp && (
+                <div className="bg-sky-50 border border-sky-200 rounded-[10px] px-3.5 py-2.5 text-xs text-sky-800 flex items-start justify-between gap-2">
+                  <span>Admin passwords cannot be self-reset. Ask your Drewel Owner to sign in and reset it from Team &amp; Roles.</span>
+                  <button type="button" onClick={() => setShowForgotHelp(false)} className="text-sky-400 hover:text-sky-700 shrink-0">&times;</button>
+                </div>
+              )}
               <div className="relative">
                 <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"><Lock size={15} /></span>
                 <input

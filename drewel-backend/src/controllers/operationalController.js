@@ -805,6 +805,53 @@ export const resolveDispute = async (req, res) => {
 // SYSTEM HEALTH
 // ---------------------------------------------------------------------------
 
+const HEALTH_TREND_RANGES = {
+  "1h": { bucketMinutes: 5, buckets: 12 },
+  "6h": { bucketMinutes: 30, buckets: 12 },
+  "24h": { bucketMinutes: 120, buckets: 12 },
+  "7d": { bucketMinutes: 720, buckets: 14 },
+};
+
+export const getOperationalHealthTrend = async (req, res) => {
+  try {
+    const range = HEALTH_TREND_RANGES[req.query.range] ? req.query.range : "1h";
+    const { bucketMinutes, buckets } = HEALTH_TREND_RANGES[range];
+    const bucketMs = bucketMinutes * 60 * 1000;
+    const now = new Date();
+    const since = new Date(now.getTime() - buckets * bucketMs);
+
+    // Bucket and sum server-side via aggregation rather than pulling every
+    // 60-second health-check document (potentially thousands for a 7-day
+    // range) into Node.
+    const grouped = await OperationalHealth.aggregate([
+      { $match: { checkedAt: { $gte: since } } },
+      {
+        $project: {
+          docErrors: { $sum: "$services.errorCount" },
+          bucketIndex: {
+            $floor: {
+              $divide: [{ $subtract: [now, "$checkedAt"] }, bucketMs],
+            },
+          },
+        },
+      },
+      { $group: { _id: "$bucketIndex", errors: { $sum: "$docErrors" } } },
+    ]);
+    const errorsByBucket = new Map(grouped.map((g) => [g._id, g.errors]));
+
+    const trend = Array.from({ length: buckets }, (_, i) => {
+      const bucketIndexFromNow = buckets - 1 - i;
+      const minutesAgo = bucketIndexFromNow * bucketMinutes;
+      const label = range === "7d" ? `${Math.round(minutesAgo / 60 / 24)}d` : `${minutesAgo}m`;
+      return { label, errors: errorsByBucket.get(bucketIndexFromNow) || 0 };
+    });
+
+    return res.status(200).json({ success: true, range, trend });
+  } catch (error) {
+    return sendError(res, error);
+  }
+};
+
 export const getOperationalHealth = async (req, res) => {
   try {
     const latest = await OperationalHealth.findOne({}).sort({ checkedAt: -1 }).lean();

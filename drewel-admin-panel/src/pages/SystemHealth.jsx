@@ -5,7 +5,7 @@ import {
   Wifi, Map, Route, Server, Activity, Plus,
 } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
-import { getOperationalHealth, createIncident, updateIncident, operationalErrorMessage } from "../api/domains/operational";
+import { getOperationalHealth, getOperationalHealthTrend, createIncident, updateIncident, operationalErrorMessage } from "../api/domains/operational";
 import { getSystemHealth } from "../api/domains/health";
 import { getOperationalAlerts } from "../api/domains/operational";
 import {
@@ -170,12 +170,17 @@ const SystemHealth = () => {
   const degraded = services.filter((s) => s.status === "degraded").length;
   const outage = services.filter((s) => s.status === "outage").length;
 
-  const trendData = useMemo(() => {
-    const buckets = timeRange === "1h" ? 12 : timeRange === "6h" ? 12 : timeRange === "24h" ? 12 : 14;
-    return Array.from({ length: buckets }, (_, i) => ({
-      label: timeRange === "7d" ? `${i + 1}d` : `${(buckets - 1 - i) * (timeRange === "1h" ? 5 : timeRange === "6h" ? 30 : 120)}m`,
-      errors: Math.floor(Math.random() * 5),
-    }));
+  const [trendData, setTrendData] = useState([]);
+  const [trendLoading, setTrendLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    setTrendLoading(true);
+    getOperationalHealthTrend(timeRange)
+      .then((trend) => { if (!cancelled) setTrendData(trend); })
+      .catch(() => { if (!cancelled) setTrendData([]); })
+      .finally(() => { if (!cancelled) setTrendLoading(false); });
+    return () => { cancelled = true; };
   }, [timeRange]);
 
   const handleCreateIncident = useCallback(async () => {
@@ -270,7 +275,7 @@ const SystemHealth = () => {
         <div className="flex items-center justify-between mb-4">
           <div>
             <h2 className="text-sm font-bold text-slate-800">Failed Request Trend</h2>
-            <p className="text-xs text-slate-400 mt-0.5">Error counts by service \u2014 last {timeRange}</p>
+            <p className="text-xs text-slate-400 mt-0.5">Total error count across services \u2014 last {timeRange}</p>
           </div>
           <div className="flex items-center bg-slate-100 rounded-[8px] p-0.5">
             {["1h", "6h", "24h", "7d"].map((r) => (
@@ -282,14 +287,20 @@ const SystemHealth = () => {
           </div>
         </div>
         <div style={{ height: 180 }}>
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={trendData} barSize={8} barGap={2} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
-              <XAxis dataKey="label" tick={{ fontSize: 10, fill: "#94A3B8" }} tickLine={false} axisLine={false} interval={1} />
-              <YAxis tick={{ fontSize: 10, fill: "#94A3B8" }} tickLine={false} axisLine={false} allowDecimals={false} />
-              <Tooltip contentStyle={{ fontSize: 12, borderRadius: 8, border: "1px solid #E2E8F0", boxShadow: "0 4px 12px rgba(0,0,0,0.08)" }} cursor={{ fill: "rgba(148,163,184,0.08)" }} />
-              <Bar dataKey="errors" name="Errors" fill="#EF4444" radius={[2, 2, 0, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
+          {trendLoading ? (
+            <div className="w-full h-full flex items-center justify-center text-xs text-slate-400">Loading trend\u2026</div>
+          ) : trendData.every((bucket) => !bucket.errors) ? (
+            <div className="w-full h-full flex items-center justify-center text-xs text-slate-400">No errors recorded in this window.</div>
+          ) : (
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={trendData} barSize={8} barGap={2} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
+                <XAxis dataKey="label" tick={{ fontSize: 10, fill: "#94A3B8" }} tickLine={false} axisLine={false} interval={1} />
+                <YAxis tick={{ fontSize: 10, fill: "#94A3B8" }} tickLine={false} axisLine={false} allowDecimals={false} />
+                <Tooltip contentStyle={{ fontSize: 12, borderRadius: 8, border: "1px solid #E2E8F0", boxShadow: "0 4px 12px rgba(0,0,0,0.08)" }} cursor={{ fill: "rgba(148,163,184,0.08)" }} />
+                <Bar dataKey="errors" name="Errors" fill="#EF4444" radius={[2, 2, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          )}
         </div>
       </Card>
 

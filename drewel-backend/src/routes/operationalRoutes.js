@@ -15,6 +15,7 @@ import {
   addDisputeNote,
   resolveDispute,
   getOperationalHealth,
+  getOperationalHealthTrend,
   createIncident,
   updateIncident,
   listOperationalAuditLogs,
@@ -41,6 +42,7 @@ router.post("/disputes/:id/resolve", requireSignIn, isAdmin, resolveDispute);
 
 // System Health
 router.get("/health", requireSignIn, isAdmin, getOperationalHealth);
+router.get("/health/trend", requireSignIn, isAdmin, getOperationalHealthTrend);
 router.post("/incidents", requireSignIn, isAdmin, createIncident);
 router.patch("/incidents/:id", requireSignIn, isAdmin, updateIncident);
 

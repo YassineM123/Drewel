@@ -475,6 +475,45 @@ export const updateAdminStatus = async (req, res) => {
   }
 };
 
+export const resetAdminPassword = async (req, res) => {
+  try {
+    if (req.admin?.role !== "owner") {
+      return res.status(403).json({
+        success: false,
+        message: "Only the Drewel Owner can reset another admin's password",
+      });
+    }
+    const { id } = req.params;
+    const newPassword = String(req.body?.newPassword || "");
+    if (newPassword.length < 8) {
+      return res.status(400).json({
+        success: false,
+        message: "New password must be at least 8 characters",
+      });
+    }
+    const target = await Admin.findById(id);
+    if (!target) {
+      return res.status(404).json({ success: false, message: "Admin not found" });
+    }
+    target.password = await bcrypt.hash(newPassword, 10);
+    target.passwordChangedAt = new Date();
+    await target.save();
+    await AuthAudit.create({
+      action: "password_changed",
+      actorId: req.admin._id,
+      actorRole: req.admin.role,
+      actorName: req.admin.fullName,
+      actorEmail: req.admin.email,
+      targetType: "admin",
+      targetId: target._id,
+      description: `Reset password for admin account ${target.email}`,
+    });
+    return res.status(200).json({ success: true, message: "Password reset" });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: "Failed to reset admin password" });
+  }
+};
+
 export const loginAdmin = async (req, res) => {
   try {
     const { email, password } = req.body;
@@ -539,10 +578,11 @@ export const loginAdmin = async (req, res) => {
     }
 
     // 4. Generate JWT token
+    const remember = Boolean(req.body?.remember);
     const token = jwt.sign(
       { _id: existingAdmin._id, role: "admin" },
       process.env.JWT_SECRET,
-      { expiresIn: process.env.ADMIN_JWT_EXPIRES_IN || "8h" }
+      { expiresIn: remember ? (process.env.ADMIN_JWT_REMEMBER_EXPIRES_IN || "30d") : (process.env.ADMIN_JWT_EXPIRES_IN || "8h") }
     );
 
     const admin = existingAdmin.toObject();

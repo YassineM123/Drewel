@@ -91,6 +91,11 @@ export const getOperationalHealth = async (signal) => {
   return data.health || data;
 };
 
+export const getOperationalHealthTrend = async (range, signal) => {
+  const data = await apiClient.get(`${OPS}/health/trend`, { params: { range }, signal });
+  return data.trend || [];
+};
+
 export const createIncident = async (payload) =>
   apiClient.post(`${OPS}/incidents`, payload);
 

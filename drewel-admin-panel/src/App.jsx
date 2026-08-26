@@ -34,6 +34,7 @@ import DriverWalletDetail from "./pages/driverPoints/DriverWalletDetail";
 import PurchaseRequests from "./pages/driverPoints/PurchaseRequests";
 import PointTransactions from "./pages/driverPoints/PointTransactions";
 import PointsSettings from "./pages/driverPoints/PointsSettings";
+import RequirePointsAccess from "./components/driverPoints/RequirePointsAccess";
 
 function App() {
   return (
@@ -70,13 +71,21 @@ function App() {
                 <Route path="/rides/stuck" element={<Rides initialFilter="stuck" lockedFilter />} />
                 <Route path="/rides/:rideId" element={<RideDetail />} />
 
-                <Route path="/points/overview" element={<PointsOverview />} />
-                <Route path="/points/balances" element={<DriverWallets />} />
-                <Route path="/points/balances/:driverId" element={<DriverWalletDetail />} />
-                <Route path="/points/requests" element={<PurchaseRequests />} />
-                <Route path="/points/transactions" element={<PointTransactions />} />
-                <Route path="/points/packs" element={<PointPacks />} />
-                <Route path="/points/settings" element={<PointsSettings />} />
+                <Route element={<RequirePointsAccess permission="read" />}>
+                  <Route path="/points/overview" element={<PointsOverview />} />
+                  <Route path="/points/balances" element={<DriverWallets />} />
+                  <Route path="/points/balances/:driverId" element={<DriverWalletDetail />} />
+                  <Route path="/points/transactions" element={<PointTransactions />} />
+                </Route>
+                <Route element={<RequirePointsAccess permission="manageRequests" />}>
+                  <Route path="/points/requests" element={<PurchaseRequests />} />
+                </Route>
+                <Route element={<RequirePointsAccess permission="managePacks" />}>
+                  <Route path="/points/packs" element={<PointPacks />} />
+                </Route>
+                <Route element={<RequirePointsAccess permission="manageSettings" />}>
+                  <Route path="/points/settings" element={<PointsSettings />} />
+                </Route>
 
                 <Route path="/chat" element={<AdminChat />} />
                 <Route path="/support-chat" element={<ChatWrapper />} />
