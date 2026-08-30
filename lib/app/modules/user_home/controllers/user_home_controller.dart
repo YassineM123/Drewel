@@ -2208,11 +2208,8 @@ class UserHomeController extends GetxController
         checkResponse: (int status) => responseStatus = status,
       );
       if (!_canUpdateView) return DriverDiscoveryOutcome.failed;
-      if (driverListModel != null &&
-          driverListModel.success != null &&
-          driverListModel.success! &&
-          driverListModel.drivers != null) {
-        _prepareVehicleDiscoveryResults(driverListModel.drivers!);
+      if (driverListModel != null && driverListModel.success == true) {
+        _prepareVehicleDiscoveryResults(driverListModel.drivers ?? <Drivers>[]);
         unawaited(_preloadVehicleMarkerIcons());
         _consecutiveDriverRefreshFailures = 0;
         isDriverServiceUnavailable.value = false;
@@ -2241,15 +2238,19 @@ class UserHomeController extends GetxController
           isDriverServiceUnavailable.value = true;
           driverServiceMessage.value =
               'Driver service is temporarily unavailable.';
-        } else if (!socketService.isConnected) {
+        } else if (driverListModel == null || responseStatus == null) {
           isDriverServiceUnavailable.value = true;
           driverServiceMessage.value =
               'Driver service is temporarily unavailable.';
+        } else {
+          isDriverServiceUnavailable.value = false;
+          driverServiceMessage.value = '';
         }
       }
     } catch (e) {
       _consecutiveDriverRefreshFailures++;
-      if (!socketService.isConnected) {
+      final int? status = responseStatus;
+      if (status == null || status >= 500) {
         isDriverServiceUnavailable.value = true;
         driverServiceMessage.value = 'Unable to load drivers. Please retry.';
       }
