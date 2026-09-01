@@ -116,21 +116,21 @@ class DriverAccountRepository {
     );
   }
 
-  Future<LegalContentModel> legal(String type) async {
+  Future<LegalContentModel> legal(String type, {String language = 'en'}) async {
     try {
-      final Map<String, dynamic> response =
-          await _api.get('${ApiUrlConstants.baseUrl}account/legal/$type');
+      final Map<String, dynamic> response = await _api.get(
+          '${ApiUrlConstants.baseUrl}account/legal/$type?language=$language');
       final dynamic raw = response['legal'] ?? response['data'];
       final LegalContentModel legal =
           LegalContentModel.fromJson(Map<String, dynamic>.from(raw as Map));
       return legal.body.trim().isEmpty
-          ? LegalContentModel.fallback(type)
+          ? LegalContentModel.fallback(type, language: language)
           : legal;
     } on CommunicationApiException catch (error) {
       if (error.statusCode == 404 ||
           error.code == 'API_ROUTE_NOT_FOUND' ||
           error.message.contains('Cannot GET')) {
-        return LegalContentModel.fallback(type);
+        return LegalContentModel.fallback(type, language: language);
       }
       rethrow;
     }

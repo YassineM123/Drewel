@@ -655,9 +655,13 @@ class LegalView extends GetView<PassengerAccountController> {
   @override
   Widget build(BuildContext context) {
     final String type = Get.parameters['type'] ?? 'privacy';
+    final String language = controller.preferences.value?.language ??
+        Get.locale?.languageCode ??
+        'en';
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (controller.legalContent.value == null ||
-          controller.legalType.value != type) {
+          controller.legalType.value != type ||
+          controller.legalLanguage.value != language) {
         controller.loadLegal(type);
       }
     });

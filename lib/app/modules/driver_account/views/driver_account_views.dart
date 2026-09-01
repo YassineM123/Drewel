@@ -665,9 +665,13 @@ class DriverLegalView extends GetView<DriverAccountController> {
   @override
   Widget build(BuildContext context) {
     final String type = Get.parameters['type'] ?? 'privacy';
+    final String language = controller.preferences.value?.language ??
+        Get.locale?.languageCode ??
+        'en';
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (controller.legalContent.value == null ||
-          controller.legalType.value != type) {
+          controller.legalType.value != type ||
+          controller.legalLanguage.value != language) {
         controller.loadLegal(type);
       }
     });
@@ -736,7 +740,8 @@ class DriverSecurityView extends StatelessWidget {
                   'Password and session controls will appear here when the backend exposes driver-safe security actions.',
             ),
             _InfoBlock('Login', 'Verified phone / WhatsApp OTP'),
-            _InfoBlock('Private messages', 'Passenger phone numbers stay hidden'),
+            _InfoBlock(
+                'Private messages', 'Passenger phone numbers stay hidden'),
             _InfoBlock(
                 'Account changes', 'Sensitive updates go through review'),
           ],

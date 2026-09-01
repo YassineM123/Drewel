@@ -30,6 +30,7 @@ class PassengerAccountController extends GetxController {
   final preferences = Rxn<PassengerPreferenceModel>();
   final legalContent = Rxn<LegalContentModel>();
   final legalType = ''.obs;
+  final legalLanguage = ''.obs;
   final appVersion = ''.obs;
   final loading = false.obs;
   final saving = false.obs;
@@ -254,11 +255,14 @@ class PassengerAccountController extends GetxController {
   }
 
   Future<void> loadLegal(String type) async {
+    final String language =
+        preferences.value?.language ?? Get.locale?.languageCode ?? 'en';
     legalType.value = type;
+    legalLanguage.value = language;
     legalContent.value = null;
     error.value = '';
     try {
-      legalContent.value = await _repository.legal(type);
+      legalContent.value = await _repository.legal(type, language: language);
     } on CommunicationApiException catch (catchError) {
       error.value = catchError.message;
     }

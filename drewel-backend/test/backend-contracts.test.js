@@ -328,6 +328,21 @@ test("legal document endpoint is public and mounted before account authenticatio
   assert.match(indexSource, /app\.use\("\/api\/account", accountRoutes\)/);
 });
 
+test("driver terms are supported by the public legal endpoint", () => {
+  const source = readFileSync(
+    new URL("../src/controllers/accountController.js", import.meta.url),
+    "utf8"
+  );
+
+  assert.match(source, /\["privacy",\s*"terms",\s*"driver-terms"\]/);
+  assert.match(source, /DRIVER_TERMS_CONTENT/);
+  assert.match(source, /DRIVER_TERMS_CONTENT_AR/);
+  assert.match(source, /Driver Terms and Conditions/);
+  assert.match(source, /شروط وأحكام السائق/);
+  assert.match(source, /12\. Governing Law and Acceptance/);
+  assert.match(source, /12\. القانون والموافقة/);
+});
+
 test("MongoDB SRV DNS override is opt-in and parses multiple resolvers", () => {
   assert.deepEqual(parseMongoDnsServers(" 1.1.1.1, 8.8.8.8 ,, "), [
     "1.1.1.1",
