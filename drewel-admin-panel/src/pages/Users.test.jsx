@@ -46,7 +46,7 @@ describe("Users admin", () => {
     expect(screen.getByText("7 completed")).toBeInTheDocument();
     expect(screen.getByText("RIDE-1")).toBeInTheDocument();
     expect(screen.getByText("3 messages")).toBeInTheDocument();
-    expect(screen.getByText("9715***567")).toBeInTheDocument();
+    expect(screen.getByText("971501234567")).toBeInTheDocument();
     expect(getUserList).toHaveBeenCalledWith(expect.objectContaining({
       page: 1,
       limit: 10,

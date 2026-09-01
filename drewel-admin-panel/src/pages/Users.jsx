@@ -7,7 +7,6 @@ import {
 import { getUserList } from "../utils/api";
 import { toggleUserRestriction } from "../api/domains/users";
 
-function maskPhone(p) { return p && p.length > 7 ? p.slice(0, 4) + "***" + p.slice(-3) : p || "N/A"; }
 function maskEmail(e) { if (!e) return "N/A"; const [u, d] = e.split("@"); return (u?.slice(0, 2) || "") + "***@" + (d || ""); }
 function fmtRelative(iso) {
   if (!iso) return "N/A";
@@ -225,7 +224,7 @@ function UserDetailDrawer({ user, onToast }) {
                   {revealed ? "Mask" : "Reveal"}
                 </button>
               </div>
-              <StatRow label="Phone" value={<span className="font-mono text-xs">{revealed ? user.phone : maskPhone(user.phone)}</span>} />
+              <StatRow label="Phone" value={<span className="font-mono text-xs">{user.phone || "N/A"}</span>} />
               <StatRow label="Email" value={<span className="font-mono text-xs">{revealed ? user.email : maskEmail(user.email)}</span>} />
               <StatRow label="Account created" value={fmtDate(user.createdAt)} />
               <StatRow label="Last activity" value={user.lastActivityAt ? fmtRelative(user.lastActivityAt) : "N/A"} />
@@ -459,7 +458,7 @@ export default function Users() {
                       </div>
                     </div>
                   </td>
-                  <td className="px-5 py-3"><span className="font-mono text-xs text-slate-600">{maskPhone(user.phone)}</span></td>
+                  <td className="px-5 py-3"><span className="font-mono text-xs text-slate-600">{user.phone || "N/A"}</span></td>
                   <td className="px-5 py-3">
                     <Badge variant={user.isRestricted ? "restricted" : "active"} dot />
                   </td>

@@ -91,7 +91,7 @@ class DriverProfileView extends GetView<DriverAccountController> {
                       ),
                       _MenuRow(
                         icon: Icons.toll_rounded,
-                        title: 'Points',
+                        title: 'Balance',
                         subtitle: _pointsSummary(controller.wallet),
                         onTap: () => Get.toNamed(Routes.MY_POINTS),
                       ),
@@ -121,7 +121,7 @@ class DriverProfileView extends GetView<DriverAccountController> {
                       _MenuRow(
                         icon: Icons.notifications_none_rounded,
                         title: 'Notifications',
-                        subtitle: 'Ride, message, points and system updates',
+                        subtitle: 'Ride, message, balance and system updates',
                         onTap: () => Get.toNamed(Routes.NOTIFICATIONS),
                       ),
                     ],
@@ -139,7 +139,7 @@ class DriverProfileView extends GetView<DriverAccountController> {
                         icon: Icons.flag_outlined,
                         title: 'Report a Problem',
                         subtitle:
-                            'Passenger, ride, points, document or app issue',
+                            'Passenger, ride, balance, document or app issue',
                         onTap: () => Get.toNamed(Routes.DRIVER_REPORT_PROBLEM),
                       ),
                     ],
@@ -619,7 +619,7 @@ class DriverNotificationPreferencesView
               const _PageIntro(
                 icon: Icons.notifications_none_rounded,
                 title: 'Notification controls',
-                message: 'Manage ride, message, points and system alerts.',
+                message: 'Manage ride, message, balance and system alerts.',
               ),
               _SwitchRow(
                   title: 'Ride updates',
@@ -777,7 +777,7 @@ class DriverHelpSupportView extends StatelessWidget {
                 onTap: () => _report('passenger')),
             _MenuRow(
                 icon: Icons.toll_rounded,
-                title: 'Points issue',
+                title: 'Balance issue',
                 subtitle: 'Balance, transactions or recharge request',
                 onTap: () => _report('points')),
             _MenuRow(
@@ -919,7 +919,7 @@ class DriverAboutView extends GetView<DriverAccountController> {
               icon: Icons.local_taxi_rounded,
               title: 'Drewel Driver',
               message:
-                  'Driver marketplace operations, secure ride communication and points.',
+                  'Driver marketplace operations, secure ride communication and balance.',
               footer: Obx(
                 () => Text(
                   controller.appVersion.value.isEmpty
@@ -1034,8 +1034,8 @@ class _UrgentDriverBanners extends StatelessWidget {
     if (wallet != null && wallet!.balanceState == 'low') {
       banners.add(_StatusBanner(
           icon: Icons.toll_rounded,
-          title: 'Low points balance',
-          message: 'Recharge points before sending more offers.',
+          title: 'Low balance',
+          message: 'Recharge balance before sending more offers.',
           actionLabel: 'Recharge',
           onAction: () => Get.toNamed(Routes.BUY_POINTS)));
     }
@@ -1564,7 +1564,7 @@ String _documentSummary(Driver? driver) {
 
 String _pointsSummary(DriverPointsWallet? wallet) => wallet == null
     ? 'Balance and transactions'
-    : '${wallet.availablePoints} points available';
+    : '${wallet.availablePoints} balance available';
 
 String _statusLabel(String value) =>
     value.replaceAll('_', ' ').split(' ').map((String part) {

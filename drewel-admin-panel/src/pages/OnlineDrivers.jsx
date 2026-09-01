@@ -24,12 +24,6 @@ const reasonLabels = {
 
 const driverName = (driver) => `${driver.firstName || ""} ${driver.lastName || ""}`.trim() || driver.fullName || "N/A";
 
-const maskPhone = (value) => {
-  const phone = String(value || "").trim();
-  if (phone.length <= 6) return phone || "N/A";
-  return `${phone.slice(0, 4)}***${phone.slice(-3)}`;
-};
-
 const formatLocationAge = (driver) => {
   const seconds = Number(driver.locationAgeSeconds);
   if (!Number.isFinite(seconds)) return "No GPS";
@@ -266,7 +260,7 @@ const OnlineDrivers = () => {
                         <div className="text-sm text-slate-700">{driver.vehicleType || "N/A"}</div>
                         <div className="text-xs text-slate-400">{driver.vehicleModel || driver.registration || ""}</div>
                       </Td>
-                      <Td><span className="font-mono text-xs text-slate-600">{maskPhone(driver.whatsappNumber || driver.phone)}</span></Td>
+                      <Td><span className="font-mono text-xs text-slate-600">{driver.whatsappNumber || driver.phone || "N/A"}</span></Td>
                       <Td><Badge variant={String(driver.status || "pending").toLowerCase()} /></Td>
                       <Td>{driver.presenceLastHeartbeatAt ? new Date(driver.presenceLastHeartbeatAt).toLocaleTimeString() : "Active"}</Td>
                       <Td>

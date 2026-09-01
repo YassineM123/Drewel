@@ -65,8 +65,8 @@ describe("OnlineDrivers", () => {
     expect(screen.getAllByText("Discoverable").length).toBeGreaterThan(0);
     expect(screen.getByText("GPS warnings")).toBeInTheDocument();
     expect(screen.getByText("Stale GPS +1")).toBeInTheDocument();
-    expect(screen.getByText("+971***567")).toBeInTheDocument();
-    expect(screen.getByText("+971***888")).toBeInTheDocument();
+    expect(screen.getByText("+971501234567")).toBeInTheDocument();
+    expect(screen.getByText("+971509998888")).toBeInTheDocument();
   });
 
   it("filters to drivers blocked from discovery", async () => {

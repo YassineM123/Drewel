@@ -815,6 +815,34 @@ export const addDriverDetails = async (req, res) => {
   try {
     const body = req.body || {};
     const files = req.files || {};
+    const phone = String(body.phone || "").replace(/\D/g, "");
+    const email = String(body.email || "").trim().toLowerCase();
+
+    if (!phone || phone.length < 6) {
+      return res.status(400).send({
+        success: false,
+        message: "A valid driver phone number is required",
+      });
+    }
+    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return res.status(400).send({
+        success: false,
+        message: "A valid driver email is required",
+      });
+    }
+
+    const duplicateFilters = [{ phone }];
+    if (email) duplicateFilters.push({ email });
+    const existingDriver = await Driver.findOne({ $or: duplicateFilters }).select("phone email").lean();
+    if (existingDriver) {
+      return res.status(409).send({
+        success: false,
+        message:
+          existingDriver.phone === phone
+            ? "A driver with this phone number already exists"
+            : "A driver with this email already exists",
+      });
+    }
 
     const hashedPassword = body.password
       ? await bcrypt.hash(body.password, 10)
@@ -832,9 +860,9 @@ export const addDriverDetails = async (req, res) => {
       whatsappNumber: body.whatsappNumber ?? "",
       lat: body.lat ?? 0,
       long: body.long ?? 0,
-      phone: body.phone,
+      phone,
       countryCode: body.countryCode || "+1",
-      email: body.email ?? "",
+      email,
       password: hashedPassword,
       contractNumber: body.contractNumber ?? "",
       licenseCompany: body.licenseCompany ?? "",
@@ -897,6 +925,12 @@ export const addDriverDetails = async (req, res) => {
       driver: newDriver,
     });
   } catch (error) {
+    if (error?.code === 11000) {
+      return res.status(409).send({
+        success: false,
+        message: "A driver with this phone number or email already exists",
+      });
+    }
     return res.status(500).send({
       success: false,
       message: "Failed to add driver details",

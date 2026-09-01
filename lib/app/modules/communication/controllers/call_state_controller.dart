@@ -53,6 +53,7 @@ class CallStateController extends GetxService with WidgetsBindingObserver {
   final RxBool notificationsLoading = false.obs;
   final RxBool isBusy = false.obs;
   final RxString contactingDriverId = ''.obs;
+  final RxInt driverRequestCooldownSeconds = 0.obs;
   final RxString userFacingError = ''.obs;
 
   NotificationSoundService? get _soundsService =>
@@ -61,10 +62,9 @@ class CallStateController extends GetxService with WidgetsBindingObserver {
           : null;
 
   String _role = 'user';
-  String _selfId = '';
   String _sessionToken = '';
   String _pushRegisteredForSession = '';
-  final bool _socketEventInFlight = false;
+  Timer? _driverRequestCooldownTimer;
 
   bool get hasAuthorizedRide => activeRide.value?.canCommunicate == true;
   RideParticipantModel? get counterpart =>
@@ -105,14 +105,36 @@ class CallStateController extends GetxService with WidgetsBindingObserver {
       pendingRide.value = null;
       return contact;
     } on CommunicationApiException catch (error) {
-      userFacingError.value = error.statusCode == 409
-          ? 'This driver is no longer available.'
-          : error.message;
+      if (error.statusCode == 429 &&
+          error.code == 'DRIVER_REQUEST_COOLDOWN') {
+        final int seconds =
+            _asInt(error.payload['retryAfterSeconds']).clamp(1, 45);
+        _startDriverRequestCooldown(seconds);
+        userFacingError.value =
+            'Waiting for driver\'s response... ${seconds}s';
+      } else {
+        userFacingError.value = error.statusCode == 409
+            ? 'This driver is no longer available.'
+            : error.message;
+      }
       return null;
     } finally {
       contactingDriverId.value = '';
       isBusy.value = false;
     }
+  }
+
+  bool get isDriverRequestCoolingDown => driverRequestCooldownSeconds.value > 0;
+
+  void _startDriverRequestCooldown(int seconds) {
+    _driverRequestCooldownTimer?.cancel();
+    driverRequestCooldownSeconds.value = seconds;
+    _driverRequestCooldownTimer =
+        Timer.periodic(const Duration(seconds: 1), (Timer timer) {
+      final int next = driverRequestCooldownSeconds.value - 1;
+      driverRequestCooldownSeconds.value = next <= 0 ? 0 : next;
+      if (next <= 0) timer.cancel();
+    });
   }
 
   Future<void> openDriverChat(
@@ -241,7 +263,6 @@ class CallStateController extends GetxService with WidgetsBindingObserver {
   Future<void> configureSession() async {
     final SharedPreferences preferences = await SharedPreferences.getInstance();
     _role = preferences.getString(ApiKeyConstants.type) ?? 'user';
-    _selfId = preferences.getString(ApiKeyConstants.userId) ?? '';
     final String token = preferences.getString(ApiKeyConstants.token) ?? '';
     if (token.isNotEmpty && token != _sessionToken) {
       _socketService.disconnect();
@@ -514,17 +535,27 @@ class CallStateController extends GetxService with WidgetsBindingObserver {
   @override
   void onClose() {
     WidgetsBinding.instance.removeObserver(this);
+    _driverRequestCooldownTimer?.cancel();
     _socketService.disconnect();
     super.onClose();
   }
 
   Future<void> disposeForLogout() async {
     activeRide.value = null;
+    pendingRide.value = null;
+    driverRequestCooldownSeconds.value = 0;
+    _driverRequestCooldownTimer?.cancel();
     notifications.clear();
     notificationUnread.value = 0;
     conversationUnread.value = 0;
     _socketService.disconnect();
   }
+}
+
+int _asInt(dynamic value) {
+  if (value is int) return value;
+  if (value is num) return value.round();
+  return int.tryParse(value?.toString() ?? '') ?? 0;
 }
 
 class CommunicationBinding extends Bindings {

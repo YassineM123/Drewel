@@ -95,7 +95,7 @@ describe("Chat admin", () => {
     render(<MemoryRouter><AdminChat /></MemoryRouter>);
     await screen.findByText("RIDE-001");
 
-    await userEvent.selectOptions(screen.getByRole("combobox"), "active");
+    await userEvent.selectOptions(screen.getByLabelText("Chat status filter"), "active");
     await waitFor(() => {
       expect(getChatThreads).toHaveBeenLastCalledWith(expect.objectContaining({ status: "active" }));
     });

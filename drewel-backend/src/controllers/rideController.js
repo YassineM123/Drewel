@@ -266,6 +266,8 @@ const recalculateDriverRating = async (driverId) => {
 const hasMissionPointInput = (value) =>
   value && (value.lat !== undefined || value.long !== undefined || value.address !== undefined);
 
+const CONTACT_COOLDOWN_SECONDS = 45;
+
 export const createDriverContact = async (req, res) => {
   try {
     const principal = await resolvePrincipal(req.user?._id);
@@ -289,6 +291,27 @@ export const createDriverContact = async (req, res) => {
       ...buildFreshDubaiMarketplaceAvailabilityFilter(),
     }).select("_id");
     if (!driver) throw new CommunicationPolicyError("Driver is not available", 409, "DRIVER_NOT_AVAILABLE");
+    const now = new Date();
+    const blockingContact = await Ride.findOne({
+      passengerId: principal.id,
+      driverId: { $ne: driverId },
+      status: "contacting",
+      contactEndsAt: { $gt: now },
+    }).select("_id driverId contactEndsAt");
+    if (blockingContact) {
+      const retryAfterSeconds = Math.max(
+        1,
+        Math.ceil((blockingContact.contactEndsAt.getTime() - now.getTime()) / 1000)
+      );
+      return res.status(429).json({
+        success: false,
+        code: "DRIVER_REQUEST_COOLDOWN",
+        message: "Waiting for driver's response. Please try another driver after the countdown.",
+        retryAfterSeconds,
+        activeDriverId: String(blockingContact.driverId),
+        rideId: String(blockingContact._id),
+      });
+    }
     const pickup = hasMissionPointInput(req.body?.pickup)
       ? parseMissionPoint(req.body.pickup, "pickup")
       : null;
@@ -328,6 +351,7 @@ export const createDriverContact = async (req, res) => {
       passengerId: principal.id,
       driverId,
       status: "contacting",
+      contactEndsAt: new Date(now.getTime() + CONTACT_COOLDOWN_SECONDS * 1000),
       reference: `DRW-${Date.now().toString(36).toUpperCase()}-${crypto.randomBytes(3).toString("hex").toUpperCase()}`,
     };
     if (pickup && destination) {

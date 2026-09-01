@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import {
   Search, MessageSquare, Shield, ShieldAlert, AlertTriangle,
   ExternalLink, Eye, Clock, CheckCheck, Send, StickyNote, Mic, Play, Pause, Loader2,
@@ -179,6 +179,12 @@ function ThreadDetail({ thread, onToast }) {
           <div className="rounded-[12px] border border-slate-200 bg-slate-50/50 p-3">
             <p className="text-[10px] text-slate-400 uppercase tracking-wider mb-1">Passenger</p>
             <p className="text-sm font-semibold text-slate-800">{conversation.passenger?.fullName || "Passenger"}</p>
+            {conversation.passenger?.id && (
+              <button type="button" onClick={() => navigate(`/users/${conversation.passenger.id}`)}
+                className="mt-2 h-7 inline-flex items-center gap-1.5 px-2.5 rounded-[8px] border border-slate-200 bg-white text-[10px] font-semibold text-slate-600 hover:bg-slate-50 transition-all">
+                <ExternalLink size={11} /> View Profile
+              </button>
+            )}
           </div>
           <div className="rounded-[12px] border border-slate-200 bg-slate-50/50 p-3">
             <p className="text-[10px] text-slate-400 uppercase tracking-wider mb-1">Driver</p>
@@ -187,6 +193,12 @@ function ThreadDetail({ thread, onToast }) {
               <p className="text-xs text-slate-500 mt-0.5">
                 {[conversation.driver?.vehicleType, conversation.driver?.vehicleModel].filter(Boolean).join(" · ") || "—"}
               </p>
+            )}
+            {conversation.driver?.id && (
+              <button type="button" onClick={() => navigate(`/driver-detail/${conversation.driver.id}`)}
+                className="mt-2 h-7 inline-flex items-center gap-1.5 px-2.5 rounded-[8px] border border-slate-200 bg-white text-[10px] font-semibold text-slate-600 hover:bg-slate-50 transition-all">
+                <ExternalLink size={11} /> View Profile
+              </button>
             )}
           </div>
         </div>
@@ -321,12 +333,16 @@ function ThreadDetail({ thread, onToast }) {
 
 export default function AdminChat() {
   const navigate = useNavigate();
+  const location = useLocation();
+  const driverTargetId = new URLSearchParams(location.search).get("driver") || "";
+  const userTargetId = new URLSearchParams(location.search).get("user") || "";
   const [metadata, setMetadata] = useState(null);
   const [threads, setThreads] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("all");
+  const [participantRole, setParticipantRole] = useState("all");
   const [unreadOnly, setUnreadOnly] = useState(false);
   const [reportedOnly, setReportedOnly] = useState(false);
   const [page, setPage] = useState(1);
@@ -349,6 +365,9 @@ export default function AdminChat() {
     try {
       const result = await getChatThreads({
         q: search,
+        driverId: driverTargetId || undefined,
+        userId: userTargetId || undefined,
+        participantRole: participantRole === "all" ? undefined : participantRole,
         status: status === "all" ? undefined : status,
         unread: unreadOnly ? "true" : undefined,
         reported: reportedOnly ? "true" : undefined,
@@ -356,6 +375,9 @@ export default function AdminChat() {
         limit: 25,
       });
       setThreads(result.threads || []);
+      if ((driverTargetId || userTargetId) && result.threads?.length) {
+        setSelected((current) => current || result.threads[0]);
+      }
       setPagination(result.pagination || { page, limit: 25, total: 0, totalPages: 1 });
     } catch (err) {
       setThreads([]);
@@ -363,7 +385,7 @@ export default function AdminChat() {
     } finally {
       setLoading(false);
     }
-  }, [search, status, unreadOnly, reportedOnly, page]);
+  }, [search, driverTargetId, userTargetId, participantRole, status, unreadOnly, reportedOnly, page]);
 
   useEffect(() => { fetchMetadata(); }, [fetchMetadata]);
   useEffect(() => { fetchThreads(); }, [fetchThreads]);
@@ -392,6 +414,11 @@ export default function AdminChat() {
           <p className="text-sm text-slate-500 mt-0.5">
             In-app ride conversations. Chat stays inside Drewel — no public phone numbers or external contacts.
           </p>
+          {(driverTargetId || userTargetId) && (
+            <p className="text-xs text-slate-400 mt-1 font-mono">
+              Filtered profile: {(driverTargetId || userTargetId).slice(-12)}
+            </p>
+          )}
         </div>
       </div>
 
@@ -416,12 +443,21 @@ export default function AdminChat() {
         </div>
         <div className="flex flex-col gap-1">
           <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Status</span>
-          <select value={status} onChange={(e) => { setStatus(e.target.value); setPage(1); }}
+          <select aria-label="Chat status filter" value={status} onChange={(e) => { setStatus(e.target.value); setPage(1); }}
             className="h-10 bg-white border border-slate-200 rounded-[10px] px-3 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-red-700/20 focus:border-red-400 transition-all">
             <option value="all">All statuses</option>
             <option value="active">Active</option>
             <option value="completed">Completed</option>
             <option value="cancelled">Cancelled</option>
+          </select>
+        </div>
+        <div className="flex flex-col gap-1">
+          <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Conversation type</span>
+          <select aria-label="Conversation type filter" value={participantRole} onChange={(e) => { setParticipantRole(e.target.value); setPage(1); }}
+            className="h-10 bg-white border border-slate-200 rounded-[10px] px-3 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-red-700/20 focus:border-red-400 transition-all">
+            <option value="all">All</option>
+            <option value="passenger">Users</option>
+            <option value="driver">Drivers</option>
           </select>
         </div>
         <div className="flex items-center gap-3 pb-1">
@@ -503,7 +539,12 @@ export default function AdminChat() {
                   </td>
                   <td className="px-5 py-3">
                     <p className="text-xs text-slate-600 max-w-[220px] truncate">
-                      <span className="text-slate-400">{thread.lastMessageSenderRole ? `${thread.lastMessageSenderRole}: ` : ""}</span>
+                      {thread.lastMessageSenderRole && (
+                        <span className={`mr-1 text-[10px] font-bold uppercase px-1.5 py-0.5 rounded
+                          ${thread.lastMessageSenderRole === "driver" ? "bg-sky-50 text-sky-700" : "bg-amber-50 text-amber-700"}`}>
+                          {thread.lastMessageSenderRole === "driver" ? "DRIVER" : "USER"}
+                        </span>
+                      )}
                       {thread.lastMessagePreview || "No messages"}
                     </p>
                     <p className="text-[10px] text-slate-400 mt-0.5">{fmtRelative(thread.lastMessageAt)}</p>

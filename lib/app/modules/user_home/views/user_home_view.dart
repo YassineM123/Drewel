@@ -380,6 +380,24 @@ class _UserHomeViewState extends State<UserHomeView> {
                               StringConstants.chooseTheDriver,
                               style: MyTextStyle.titleStyle18bb,
                             ),
+                            Obx(() {
+                              final int seconds = Get
+                                  .find<CallStateController>()
+                                  .driverRequestCooldownSeconds
+                                  .value;
+                              if (seconds <= 0) return const SizedBox.shrink();
+                              return Padding(
+                                padding: EdgeInsets.only(top: 8.px),
+                                child: Text(
+                                  'Waiting for driver\'s response... ${seconds}s',
+                                  textAlign: TextAlign.center,
+                                  style: MyTextStyle.titleStyle12b.copyWith(
+                                    color: primaryColor,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              );
+                            }),
                             SizedBox(height: 10.px),
                           ],
                         );
@@ -797,9 +815,10 @@ class _UserHomeViewState extends State<UserHomeView> {
         selected: selected,
         distanceKm: distance,
         index: index,
-        actionsLoading: communication.contactingDriverId.value == driver.sId,
+        actionsLoading: communication.contactingDriverId.value == driver.sId ||
+            communication.isDriverRequestCoolingDown,
         onTap: () => controller.clickOnDriverIndex(index),
-        onChat: driver.canChat
+        onChat: driver.canChat && !communication.isDriverRequestCoolingDown
             ? () => _requestTripFromDriver(context, driver, communication)
             : null,
       ),

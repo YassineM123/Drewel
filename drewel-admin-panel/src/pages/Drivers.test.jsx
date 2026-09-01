@@ -10,6 +10,12 @@ vi.mock("../utils/api", () => ({
   updateDriverReviewStatus: vi.fn(),
 }));
 
+vi.mock("../api/domains/drivers", () => ({
+  addDriver: vi.fn(),
+  getDriverDetail: vi.fn(),
+  updateDriverRestriction: vi.fn(),
+}));
+
 describe("Drivers admin", () => {
   beforeEach(() => {
     vi.clearAllMocks();

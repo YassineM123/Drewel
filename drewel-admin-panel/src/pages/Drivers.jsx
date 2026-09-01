@@ -6,10 +6,9 @@ import {
   Navigation, ExternalLink, FileText, Clock,
 } from "lucide-react";
 import { getDriverList, updateDriverReviewStatus } from "../utils/api";
-import { getDriverDetail, updateDriverRestriction } from "../api/domains/drivers";
+import { addDriver, getDriverDetail, updateDriverRestriction } from "../api/domains/drivers";
 import { getPointsAccess } from "../utils/pointsPermissions";
 
-function maskPhone(p) { return p && p.length > 7 ? p.slice(0, 4) + "***" + p.slice(-3) : p || "N/A"; }
 function maskEmail(e) { if (!e) return "N/A"; const [u, d] = e.split("@"); return (u?.slice(0, 2) || "") + "***@" + (d || ""); }
 function fmtDate(iso) {
   if (!iso) return "N/A";
@@ -223,7 +222,7 @@ function DriverCard({ driver, onClick }) {
       <div className="mt-3 pt-3 border-t border-slate-100 grid grid-cols-2 gap-2 text-xs">
         <div><p className="text-slate-400">Vehicle</p><p className="text-slate-600 font-medium truncate">{vehicleType}</p></div>
         <div><p className="text-slate-400">Documents</p><p className="text-slate-600 font-medium">{driver.documentSummary?.available || 0}/{driver.documentSummary?.total || 0}</p></div>
-        <div><p className="text-slate-400">Points</p><p className="text-slate-600 font-medium">{pts}</p></div>
+        <div><p className="text-slate-400">Balance</p><p className="text-slate-600 font-medium">{pts}</p></div>
         <div className="flex items-center justify-between"><p className="text-slate-400">Rides</p><p className="text-slate-600 font-medium">{Number(driver.rideSummary?.completed || 0).toLocaleString()} completed</p></div>
         <div><p className="text-slate-400">Cancel rate</p><p className={`text-slate-600 font-medium ${Number(driver.cancellationRate || 0) > 5 ? "text-red-600" : ""}`}>{Number(driver.cancellationRate || 0).toFixed(1)}%</p></div>
         <div><p className="text-slate-400">Last GPS</p><p className="text-slate-600 font-medium">{gpsLabel(driver)}</p></div>
@@ -268,7 +267,7 @@ function DriverDetailDrawer({ driver, onToast, onChanged }) {
     { id: "documents", label: "Documents" },
     { id: "active_ride", label: "Active Ride" },
     { id: "ride_history", label: "Ride History" },
-    { id: "points", label: "Points" },
+    { id: "points", label: "Balance" },
   ];
 
   const handleAction = async (action, reason) => {
@@ -364,12 +363,12 @@ function DriverDetailDrawer({ driver, onToast, onChanged }) {
             {pts !== undefined && (
               <div className="grid grid-cols-2 gap-3">
                 <div className={`rounded-[12px] p-3.5 border ${hasLowBalance ? "bg-amber-50 border-amber-200" : "bg-slate-50 border-slate-100"}`}>
-                  <p className="text-[10px] text-slate-400 uppercase tracking-wider mb-1">Available points</p>
+                  <p className="text-[10px] text-slate-400 uppercase tracking-wider mb-1">Available balance</p>
                   <p className={`text-2xl font-black tabular-nums ${hasLowBalance ? "text-amber-700" : "text-slate-900"}`}>{pts}</p>
                   {hasLowBalance && <p className="text-[10px] text-amber-700 mt-0.5 font-medium">Below 20pt minimum</p>}
                 </div>
                 <div className="bg-slate-50 rounded-[12px] p-3.5 border border-slate-100">
-                  <p className="text-[10px] text-slate-400 uppercase tracking-wider mb-1">Reserved points</p>
+                  <p className="text-[10px] text-slate-400 uppercase tracking-wider mb-1">Reserved balance</p>
                   <p className="text-2xl font-black tabular-nums text-slate-700">{Number(d.pointsWallet?.reservedPoints || 0)}</p>
                 </div>
               </div>
@@ -384,7 +383,7 @@ function DriverDetailDrawer({ driver, onToast, onChanged }) {
                   {revealed ? "Mask" : "Reveal"}
                 </button>
               </div>
-              <StatRow label="Phone" value={<span className="font-mono text-xs">{revealed ? d.phone : maskPhone(d.phone)}</span>} />
+              <StatRow label="Phone" value={<span className="font-mono text-xs">{d.phone || "N/A"}</span>} />
               <StatRow label="Email" value={<span className="font-mono text-xs">{revealed ? d.email : maskEmail(d.email)}</span>} />
               <StatRow label="Area" value={d.area || "N/A"} />
               <StatRow label="Member since" value={fmtDate(d.createdAt)} />
@@ -445,7 +444,7 @@ function DriverDetailDrawer({ driver, onToast, onChanged }) {
                 {access.canAddPurchasedPoints && (
                   <button type="button" onClick={() => navigate(`/points/balances/${d._id}`)}
                     className="h-9 inline-flex items-center gap-2 px-3.5 rounded-[10px] bg-green-600 text-xs font-semibold text-white hover:bg-green-700 transition-all">
-                    <Plus size={13} /> Add Points
+                    <Plus size={13} /> Add Balance
                   </button>
                 )}
                 <button type="button" onClick={() => navigate(`/chat?driver=${d._id}`)}
@@ -535,6 +534,135 @@ function DriverDetailDrawer({ driver, onToast, onChanged }) {
   );
 }
 
+const initialDriverForm = {
+  firstName: "",
+  lastName: "",
+  phone: "",
+  email: "",
+  password: "",
+  countryCode: "+971",
+  vehicleType: "",
+  vehicleModel: "",
+  registration: "",
+  city: "",
+  address: "",
+  contractNumber: "",
+  licenseCompany: "",
+  initialBalance: "",
+};
+
+function AddDriverDrawer({ onClose, onCreated, onToast }) {
+  const [form, setForm] = useState(initialDriverForm);
+  const [files, setFiles] = useState({});
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  const set = (key) => (event) => setForm((value) => ({ ...value, [key]: event.target.value }));
+  const setFile = (key) => (event) => setFiles((value) => ({ ...value, [key]: event.target.files?.[0] || null }));
+
+  const requiredMissing =
+    !form.firstName.trim() ||
+    !form.lastName.trim() ||
+    form.phone.replace(/\D/g, "").length < 6 ||
+    !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim()) ||
+    !form.vehicleType.trim() ||
+    !form.city.trim();
+
+  const submit = async (event) => {
+    event.preventDefault();
+    if (requiredMissing || saving) return;
+    setSaving(true);
+    setError("");
+    try {
+      const payload = new FormData();
+      Object.entries(form).forEach(([key, value]) => {
+        if (key !== "initialBalance") payload.append(key, String(value || "").trim());
+      });
+      payload.append("fullName", `${form.firstName.trim()} ${form.lastName.trim()}`.trim());
+      Object.entries(files).forEach(([key, file]) => {
+        if (file) payload.append(key, file);
+      });
+      await addDriver(payload);
+      onToast("Driver created successfully.");
+      onCreated();
+    } catch (err) {
+      setError(err?.response?.data?.message || err?.response?.data?.error || "Driver could not be created.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <form onSubmit={submit} className="flex flex-col h-full overflow-hidden">
+      <div className="px-6 pt-5 pb-4 border-b border-slate-100 shrink-0">
+        <h2 className="text-base font-bold text-slate-900">New Driver</h2>
+        <p className="text-xs text-slate-500 mt-1">Create a verified driver using the existing Drewel driver account flow.</p>
+      </div>
+      <div className="flex-1 overflow-y-auto px-6 py-5 flex flex-col gap-5">
+        {error && <div className="bg-red-50 border border-red-200 rounded-[10px] px-3 py-2 text-xs text-red-700" role="alert">{error}</div>}
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="First name" value={form.firstName} onChange={set("firstName")} required />
+          <Field label="Last name" value={form.lastName} onChange={set("lastName")} required />
+          <Field label="Country code" value={form.countryCode} onChange={set("countryCode")} required />
+          <Field label="Phone" value={form.phone} onChange={set("phone")} required inputMode="tel" />
+          <Field label="Email" value={form.email} onChange={set("email")} required type="email" />
+          <Field label="Password" value={form.password} onChange={set("password")} type="password" />
+          <Field label="Vehicle type" value={form.vehicleType} onChange={set("vehicleType")} required />
+          <Field label="Vehicle model" value={form.vehicleModel} onChange={set("vehicleModel")} />
+          <Field label="Plate number" value={form.registration} onChange={set("registration")} />
+          <Field label="City" value={form.city} onChange={set("city")} required />
+          <Field label="Address" value={form.address} onChange={set("address")} />
+          <Field label="Contract number" value={form.contractNumber} onChange={set("contractNumber")} />
+          <Field label="License company" value={form.licenseCompany} onChange={set("licenseCompany")} />
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          {[
+            ["profileImage", "Profile image"],
+            ["licenseCompany", "Company licence"],
+            ["carLicenseFront", "Vehicle registration front"],
+            ["carLicenseBack", "Vehicle registration back"],
+            ["drivingLicenseFront", "Driving licence front"],
+            ["drivingLicenseBack", "Driving licence back"],
+            ["idProofFront", "ID front"],
+            ["idProofBack", "ID back"],
+            ["passportCopy", "Passport copy"],
+          ].map(([key, label]) => (
+            <label key={key} className="flex flex-col gap-1.5 text-xs font-medium text-slate-700">
+              {label}
+              <input type="file" onChange={setFile(key)}
+                className="block w-full text-xs text-slate-500 file:mr-3 file:rounded-[8px] file:border-0 file:bg-slate-100 file:px-3 file:py-2 file:text-xs file:font-semibold file:text-slate-700 hover:file:bg-slate-200" />
+            </label>
+          ))}
+        </div>
+        <div className="bg-amber-50 border border-amber-200 rounded-[10px] p-3 text-xs text-amber-800">
+          Initial balance is managed through the audited Add Balance action after the driver is created.
+        </div>
+      </div>
+      <div className="px-6 py-4 border-t border-slate-100 flex justify-end gap-3 shrink-0">
+        <button type="button" onClick={onClose}
+          className="h-9 inline-flex items-center gap-2 px-3.5 rounded-[10px] border border-slate-200 bg-white text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-all">
+          Cancel
+        </button>
+        <button type="submit" disabled={requiredMissing || saving}
+          className="h-9 inline-flex items-center gap-2 px-3.5 rounded-[10px] bg-[#BE1B2C] text-xs font-semibold text-white hover:bg-[#A31725] disabled:opacity-50 transition-all">
+          {saving ? <span className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <Plus size={13} />}
+          Create Driver
+        </button>
+      </div>
+    </form>
+  );
+}
+
+function Field({ label, ...props }) {
+  return (
+    <label className="flex flex-col gap-1.5 text-xs font-medium text-slate-700">
+      {label}{props.required && <span className="sr-only"> required</span>}
+      <input {...props}
+        className="h-10 bg-white border border-slate-200 rounded-[10px] px-3 text-sm text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-red-700/20 focus:border-red-400 transition-all" />
+    </label>
+  );
+}
+
 export default function Drivers() {
   const [drivers, setDrivers] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -545,6 +673,7 @@ export default function Drivers() {
   const [page, setPage] = useState(1);
   const [pagination, setPagination] = useState({ page: 1, limit: 20, total: 0, totalPages: 1 });
   const [selectedDriver, setSelectedDriver] = useState(null);
+  const [addingDriver, setAddingDriver] = useState(false);
   const [toast, setToast] = useState(null);
 
   const fetchDrivers = useCallback(async () => {
@@ -589,6 +718,10 @@ export default function Drivers() {
           <h1 className="text-[22px] font-bold text-slate-900 leading-tight tracking-[-0.01em]">Drivers</h1>
           <p className="text-sm text-slate-500 mt-0.5">Manage your driver network, verification status and account health.</p>
         </div>
+        <button type="button" onClick={() => setAddingDriver(true)}
+          className="h-10 shrink-0 inline-flex items-center gap-2 px-4 rounded-[10px] bg-[#BE1B2C] text-sm font-semibold text-white hover:bg-[#A31725] transition-all">
+          <Plus size={15} /> New Driver
+        </button>
       </div>
 
       <div className="flex items-center border-b border-slate-200">
@@ -671,6 +804,14 @@ export default function Drivers() {
 
       <Drawer open={!!selectedDriver} onClose={() => setSelectedDriver(null)} width="w-[640px]">
         {selectedDriver && <DriverDetailDrawer key={selectedDriver._id} driver={selectedDriver} onClose={() => setSelectedDriver(null)} onToast={(msg, type = "success") => { setToast({ message: msg, type }); if (type === "error") return; setSelectedDriver(null); fetchDrivers(); }} />}
+      </Drawer>
+
+      <Drawer open={addingDriver} onClose={() => setAddingDriver(false)} width="w-[720px]">
+        <AddDriverDrawer
+          onClose={() => setAddingDriver(false)}
+          onToast={(msg, type = "success") => setToast({ message: msg, type })}
+          onCreated={() => { setAddingDriver(false); fetchDrivers(); }}
+        />
       </Drawer>
 
       {toast && <Toast message={toast?.message || toast} type={toast?.type || "success"} onClose={() => setToast(null)} />}

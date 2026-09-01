@@ -427,6 +427,21 @@ export const listChatThreads = async (req, res) => {
     if (req.query.status && ["active", "completed", "cancelled"].includes(req.query.status)) {
       filter.status = req.query.status;
     }
+    if (req.query.driverId) {
+      if (!isObjectId(req.query.driverId)) {
+        return res.status(400).json({ success: false, message: "Invalid driver id" });
+      }
+      filter.driverId = req.query.driverId;
+    }
+    if (req.query.userId) {
+      if (!isObjectId(req.query.userId)) {
+        return res.status(400).json({ success: false, message: "Invalid user id" });
+      }
+      filter.passengerId = req.query.userId;
+    }
+    if (["passenger", "driver"].includes(req.query.participantRole)) {
+      filter.lastMessageSenderRole = req.query.participantRole;
+    }
     const clauses = [];
     if (req.query.unread === "true") {
       clauses.push({

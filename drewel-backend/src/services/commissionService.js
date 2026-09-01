@@ -6,14 +6,12 @@
  *
  * Formula:
  *   commissionAED  = ridePriceAED * commissionRate
- *   pointsToDeduct = commissionAED * pointsPerAED
+ *   balanceToDeduct = commissionAED
  *
  * Defaults:
  *   commissionRate = 10% (0.10)
- *   pointsPerAED   = 10
- *
- * Because 10% * 10 = 1, pointsToDeduct numerically equals ridePriceAED
- * for the default configuration, but the explicit formula is always used.
+ * Balance units are AED-aligned for commission charging: a 200 AED ride
+ * deducts 20 balance units at the default 10% commission rate.
  */
 
 /**
@@ -39,7 +37,7 @@ export const calculateRideCommission = (ridePriceAED, settings) => {
   }
 
   const commissionAED = ridePriceAED * commissionRate;
-  const pointsToDeduct = commissionAED * pointsPerAED;
+  const pointsToDeduct = commissionAED;
   const driverNetAED = ridePriceAED - commissionAED;
 
   return {

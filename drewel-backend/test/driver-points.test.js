@@ -49,6 +49,18 @@ import { issueAppAuthToken } from "../src/controllers/authController.js";
 const testDbName = process.env.POINTS_INTEGRATION_TEST_DB || "";
 const integrationEnabled = /^drewel-points-test-[a-z0-9-]+$/i.test(testDbName);
 
+test("ride commission deducts ten percent of ride amount as balance units", () => {
+  const settings = { commissionRate: 0.10, pointsPerAED: 10 };
+  assert.deepEqual(
+    {
+      ride200: calculateRideCommission(200, settings).pointsToDeduct,
+      ride50: calculateRideCommission(50, settings).pointsToDeduct,
+      ride120: calculateRideCommission(120, settings).pointsToDeduct,
+    },
+    { ride200: 20, ride50: 5, ride120: 12 }
+  );
+});
+
 const driverData = (suffix, overrides = {}) => ({
   countryCode: "+216",
   phone: `22${String(suffix).padStart(6, "0")}`,
