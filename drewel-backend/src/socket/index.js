@@ -388,10 +388,24 @@ io.on("connection", async (socket) => {
         });
         const event = {
           rideId: String(ride._id),
+          driverId: String(ride.driverId),
           status: ride.status,
           location: ride.lastDriverLocation,
         };
         io.to(`ride:${ride._id}`).to(String(ride.passengerId)).emit("ride:driver_location", event);
+        io.to(ADMIN_TRACKING_ROOM).emit("driver:location", {
+          driverId: String(ride.driverId),
+          lat: ride.lastDriverLocation.lat,
+          long: ride.lastDriverLocation.long,
+          heading: ride.lastDriverLocation.heading,
+          speed: ride.lastDriverLocation.speed,
+          locationAccuracyM: ride.lastDriverLocation.accuracy,
+          locationUpdatedAt: ride.lastDriverLocation.recordedAt,
+          availabilityStatus: "Busy",
+          isOnline: true,
+          rideId: String(ride._id),
+          rideStatus: ride.status,
+        });
         acknowledgeSocketEvent(acknowledge, { ok: true, ...event });
       } catch (error) {
         const code = error.code || "LOCATION_UPDATE_FAILED";

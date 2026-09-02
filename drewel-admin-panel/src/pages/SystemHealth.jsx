@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   RefreshCw, CheckCircle2, AlertTriangle, XCircle, Clock,
-  Database, MessageSquare, Phone, Bell, HardDrive,
+  Database, MessageSquare, Bell, HardDrive,
   Wifi, Map, Route, Server, Activity, Plus,
 } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
@@ -27,7 +27,7 @@ const INCIDENT_SEV = {
 
 const SERVICE_ICONS = {
   api: Server, database: Database, socket_io: Wifi, notifications: Bell,
-  chat: MessageSquare, secure_calls: Phone, storage: HardDrive, maps: Map,
+  chat: MessageSquare, storage: HardDrive, maps: Map,
   google_maps: Map, google_routes: Route, location_stream: Activity,
 };
 
@@ -116,7 +116,7 @@ function ServiceCard({ svc }) {
 
 const HEALTH_SERVICE_OPTIONS = [
   "api", "database", "socket_io", "location_stream", "google_maps",
-  "google_routes", "chat", "secure_calls", "notifications", "storage",
+  "google_routes", "chat", "notifications", "storage",
 ].map((s) => ({ value: s, label: s.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()) }));
 
 const SystemHealth = () => {
@@ -164,8 +164,14 @@ const SystemHealth = () => {
     load(controller.signal).finally(() => setRefreshing(false));
   }, [load]);
 
-  const services = useMemo(() => health?.services || [], [health]);
-  const incidents = useMemo(() => health?.incidents || [], [health]);
+  const services = useMemo(
+    () => (health?.services || []).filter((service) => service.id !== "secure_calls"),
+    [health],
+  );
+  const incidents = useMemo(
+    () => (health?.incidents || []).filter((incident) => incident.serviceId !== "secure_calls"),
+    [health],
+  );
   const operational = services.filter((s) => s.status === "operational").length;
   const degraded = services.filter((s) => s.status === "degraded").length;
   const outage = services.filter((s) => s.status === "outage").length;

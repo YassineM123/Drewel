@@ -21,7 +21,7 @@ describe("Adjustment modal", () => {
   it("prevents a debit that would create a negative balance", () => {
     render(<AdjustmentModal driver={driver} mode="debit" onClose={() => {}} onSuccess={() => {}} />);
     fireEvent.change(screen.getByLabelText("Points"), { target: { value: "21" } });
-    fireEvent.change(screen.getByLabelText("Reason"), { target: { value: "Correction required" } });
+    fireEvent.change(screen.getByLabelText(/reason/i), { target: { value: "Correction required" } });
     expect(screen.getByRole("alert")).toHaveTextContent("negative");
     expect(screen.getByRole("button", { name: "Review debit" })).toBeDisabled();
   });
@@ -33,7 +33,7 @@ describe("Adjustment modal", () => {
     fireEvent.change(screen.getByLabelText("Points"), { target: { value: "50" } });
     fireEvent.change(screen.getByLabelText("Payment reference"), { target: { value: "PAY-001" } });
     fireEvent.change(screen.getByLabelText("Payment method"), { target: { value: "bank transfer" } });
-    fireEvent.change(screen.getByLabelText("Reason"), { target: { value: "Owner recorded payment" } });
+    fireEvent.change(screen.getByLabelText(/reason/i), { target: { value: "Owner recorded payment" } });
     fireEvent.click(screen.getByRole("button", { name: "Review add" }));
     const confirm = screen.getByRole("button", { name: "Review and confirm" });
     fireEvent.click(confirm);

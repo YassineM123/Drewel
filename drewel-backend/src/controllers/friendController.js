@@ -1,3 +1,4 @@
+import mongoose from "mongoose";
 import Friend from "../models/Friend.js";
 
 export const addFriends = async (req, res) => {
@@ -74,10 +75,17 @@ export const getFriendsList = async (req, res) => {
   try {
     const { userId } = req.params;
 
-    if (!userId) {
+    if (!userId || !mongoose.Types.ObjectId.isValid(userId)) {
       return res
-        .status(200)
-        .json({ success: false, message: "User ID is required." });
+        .status(400)
+        .json({ success: false, message: "Valid user ID is required." });
+    }
+
+    if (String(req.user?._id) !== String(userId)) {
+      return res.status(403).json({
+        success: false,
+        message: "You are not authorized to view this friend list.",
+      });
     }
 
     // Find the friend list for the user
@@ -92,8 +100,7 @@ export const getFriendsList = async (req, res) => {
         friends: friendList?.friends ?? [],
       });
   } catch (error) {
-    res
-      .status(500)
-      .json({ success: true, message: "Server error.", error: error.message });
+    console.error("Failed to fetch friend list:", error.message);
+    res.status(500).json({ success: false, message: "Server error." });
   }
 };

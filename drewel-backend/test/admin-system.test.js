@@ -2,14 +2,18 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import adminRoute from "../src/routes/adminRoute.js";
+import operationalRoutes from "../src/routes/operationalRoutes.js";
 import {
   getSystemHealth,
   listAdminAlerts,
   listAdminAuditLogs,
   listChatThreads,
-  listSecureCalls,
   sendAdminNotification,
 } from "../src/controllers/adminMetaController.js";
+import {
+  getLiveOperationsMap,
+  searchLiveOperationsMap,
+} from "../src/controllers/operationalController.js";
 import { ADMIN_ROLES } from "../src/models/Admin.js";
 import { POINTS_ADMIN_AUDIT_ACTIONS } from "../src/models/PointsAdminAudit.js";
 
@@ -29,7 +33,6 @@ test("admin meta endpoints require authentication and admin role", () => {
     "/audit-logs",
     "/chat/metadata",
     "/chat/threads",
-    "/secure-calls",
     "/roles",
     "/notifications",
     "/settings",
@@ -48,13 +51,27 @@ test("admin broadcast endpoint requires authentication and admin role", () => {
   ]);
 });
 
-test("health, alerts, threads and secure-call controllers exist and bound pagination", () => {
+test("live operations map endpoints require authentication and admin role", () => {
+  assert.deepEqual(mountedGuards(operationalRoutes, "/live-map", "get"), [
+    "requireSignIn",
+    "isAdmin",
+    "getLiveOperationsMap",
+  ]);
+  assert.deepEqual(mountedGuards(operationalRoutes, "/live-map/search", "get"), [
+    "requireSignIn",
+    "isAdmin",
+    "searchLiveOperationsMap",
+  ]);
+});
+
+test("health, alerts, chat and live-map controllers exist and bound pagination", () => {
   assert.equal(typeof getSystemHealth, "function");
   assert.equal(typeof listAdminAlerts, "function");
   assert.equal(typeof listAdminAuditLogs, "function");
   assert.equal(typeof listChatThreads, "function");
-  assert.equal(typeof listSecureCalls, "function");
   assert.equal(typeof sendAdminNotification, "function");
+  assert.equal(typeof getLiveOperationsMap, "function");
+  assert.equal(typeof searchLiveOperationsMap, "function");
 });
 
 test("broadcast validation rejects unknown recipient targets and empty messages", async () => {
@@ -98,22 +115,6 @@ test("audit-logs endpoint rejects invalid date ranges before querying", async ()
   assert.match(result.body.message, /from/);
 });
 
-test("secure-calls endpoint rejects a non-object-id ride filter", async () => {
-  const result = {};
-  const res = {
-    status: (code) => {
-      result.status = code;
-      return { json: (body) => (result.body = body) };
-    },
-  };
-  await listSecureCalls(
-    { query: { rideId: "not-an-id" }, admin: { _id: "admin" } },
-    res
-  );
-  assert.equal(result.status, 400);
-  assert.match(result.body.message, /rideId/);
-});
-
 test("roles catalog advertises the full ADMIN_ROLES enum without secrets", () => {
   assert.deepEqual(ADMIN_ROLES, [
     "owner",
@@ -140,6 +141,37 @@ test("audit DTOs never project raw credential or token fields", () => {
     assert.doesNotMatch(source, new RegExp(forbidden.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")), `leaked ${forbidden}`);
   }
   assert.match(source, /export const listAdminAuditLogs/);
+});
+
+test("admin settings snapshot includes all non-sensitive operational point fields", () => {
+  const source = readFileSync(
+    new URL("../src/controllers/adminMetaController.js", import.meta.url),
+    "utf8"
+  );
+  for (const field of [
+    "lowBalanceThreshold",
+    "largeAdjustmentThreshold",
+    "welcomeDriverPoints",
+    "rideOfferPointsCost",
+    "commissionRate",
+    "pointsPerAED",
+    "offerExpirationSeconds",
+    "maximumConcurrentOffers",
+  ]) {
+    assert.match(source, new RegExp(`${field}: settings\\.${field}`), `missing ${field}`);
+  }
+});
+
+test("live operations map uses real backend state and read-only commission estimates", () => {
+  const source = readFileSync(
+    new URL("../src/controllers/operationalController.js", import.meta.url),
+    "utf8"
+  );
+  assert.match(source, /Driver\.find\(/);
+  assert.match(source, /Ride\.find\(\{\s*status:\s*\{\s*\$in:\s*ACTIVE_RIDE_STATUSES\s*\}/);
+  assert.match(source, /DriverPointsWallet\.find/);
+  assert.match(source, /estimatedCommissionAED/);
+  assert.doesNotMatch(source, /runPointsTransaction|transitionRideState|commissionService/);
 });
 
 test("points audit source is bounded by the append-only action enum contract", () => {

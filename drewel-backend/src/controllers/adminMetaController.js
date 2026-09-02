@@ -15,7 +15,6 @@ import RideAudit from "../models/RideAudit.js";
 import PointsAdminAudit from "../models/PointsAdminAudit.js";
 import Admin, { ADMIN_ROLES } from "../models/Admin.js";
 import Notification from "../models/Notification.js";
-import CallLog, { CALL_STATUSES } from "../models/CallLog.js";
 import ContentAudit, { CONTENT_ENTITY_TYPES } from "../models/ContentAudit.js";
 import {
   dispatchNotification,
@@ -214,7 +213,7 @@ export const listAdminAlerts = async (req, res) => {
       alerts.push(build("info", "RESTRICTED_ACCOUNTS", "Restricted accounts", restrictedUsers + restrictedDrivers, "/", `${restrictedUsers} users, ${restrictedDrivers} drivers`));
     }
     if (recentCommunicationDenials) {
-      alerts.push(build("info", "COMMUNICATION_DENIALS", "Blocked communication attempts today", recentCommunicationDenials, "/secure-calls"));
+      alerts.push(build("info", "COMMUNICATION_DENIALS", "Blocked communication attempts today", recentCommunicationDenials, "/audit-logs?source=communication"));
     }
     if (activeReservations) {
       alerts.push(build("info", "ACTIVE_RESERVATIONS", "Active reservations", activeReservations, "/rides"));
@@ -592,7 +591,7 @@ export const getAdminConversationMessages = async (req, res) => {
         audioDuration: message.audioDuration || null,
         audioMimeType: message.audioMimeType || null,
         audioUrl: message.audioKey
-          ? `/rides/${String(message.rideId)}/messages/${String(message._id)}/audio`
+          ? `/api/rides/${String(message.rideId)}/messages/${String(message._id)}/audio`
           : null,
         status: message.status,
         createdAt: message.createdAt,
@@ -716,80 +715,8 @@ export const listContentAudits = async (req, res) => {
 };
 
 // ---------------------------------------------------------------------------
-// GET /api/admin/secure-calls — secure call metadata feed (metadata only)
+// Communication audit metadata helpers.
 // ---------------------------------------------------------------------------
-export const listSecureCalls = async (req, res) => {
-  try {
-    const { page, limit } = pagination(req);
-    const filter = {};
-    if (req.query.rideId) {
-      if (!isObjectId(req.query.rideId)) {
-        const error = new Error("rideId is invalid");
-        error.statusCode = 400;
-        throw error;
-      }
-      filter.rideId = req.query.rideId;
-    }
-    if (req.query.status && CALL_STATUSES.includes(req.query.status)) {
-      filter.status = req.query.status;
-    }
-    Object.assign(filter, dateRange(req, "startedAt"));
-
-    const [entries, total, summary] = await Promise.all([
-      CallLog.find(filter)
-        .sort({ startedAt: -1, _id: -1 })
-        .skip((page - 1) * limit)
-        .limit(limit)
-        .lean(),
-      CallLog.countDocuments(filter),
-      CallLog.aggregate([
-        { $match: filter },
-        {
-          $group: {
-            _id: null,
-            completed: { $sum: { $cond: [{ $eq: ["$status", "completed"] }, 1, 0] } },
-            failed: { $sum: { $cond: [{ $eq: ["$status", "failed"] }, 1, 0] } },
-            missed: { $sum: { $cond: [{ $eq: ["$status", "missed"] }, 1, 0] } },
-            totalDurationSec: { $sum: "$durationSec" },
-          },
-        },
-      ]),
-    ]);
-
-    const summaryRow = summary[0] || {};
-
-    return res.status(200).json({
-      success: true,
-      items: entries.map((entry) => ({
-        id: String(entry._id),
-        callId: entry.callId,
-        rideId: entry.rideId ? String(entry.rideId) : null,
-        participants: {
-          passenger: { id: entry.passengerId ? String(entry.passengerId) : null, name: entry.passengerName || "" },
-          driver: { id: entry.driverId ? String(entry.driverId) : null, name: entry.driverName || "" },
-        },
-        startedAt: entry.startedAt,
-        endedAt: entry.endedAt,
-        durationSec: entry.durationSec,
-        status: entry.status,
-        failureReason: entry.failureReason || "",
-        providerReference: entry.providerReference || "",
-        recordingEnabled: Boolean(entry.recordingEnabled),
-      })),
-      summary: {
-        total,
-        completed: summaryRow.completed || 0,
-        failed: summaryRow.failed || 0,
-        missed: summaryRow.missed || 0,
-        totalDurationSec: summaryRow.totalDurationSec || 0,
-      },
-      pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
-    });
-  } catch (error) {
-    return sendError(res, error);
-  }
-};
-
 export const getCommunicationActions = async (req, res) => {
   const actions = await CommunicationAudit.distinct("action");
   return res.status(200).json({ success: true, actions });
@@ -800,7 +727,7 @@ export const getCommunicationActions = async (req, res) => {
 // ---------------------------------------------------------------------------
 export const getRolesCatalog = async (req, res) => {
   try {
-    const adminId = req.admin?._id || req.admin?._id;
+    const adminId = req.admin?._id;
     const current = adminId
       ? await Admin.findById(adminId).select("_id fullName email role permissions isActive lastLoginAt").lean()
       : null;
@@ -963,6 +890,8 @@ export const getAdminSettings = async (req, res) => {
         largeAdjustmentThreshold: settings.largeAdjustmentThreshold,
         welcomeDriverPoints: settings.welcomeDriverPoints,
         rideOfferPointsCost: settings.rideOfferPointsCost,
+        commissionRate: settings.commissionRate,
+        pointsPerAED: settings.pointsPerAED,
         offerExpirationSeconds: settings.offerExpirationSeconds,
         maximumConcurrentOffers: settings.maximumConcurrentOffers,
       },
@@ -981,7 +910,6 @@ export default {
   listChatThreads,
   getAdminConversationMessages,
   addAdminConversationNote,
-  listSecureCalls,
   listContentAudits,
   getCommunicationActions,
   getRolesCatalog,

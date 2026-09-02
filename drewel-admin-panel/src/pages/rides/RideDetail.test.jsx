@@ -23,6 +23,10 @@ vi.mock("../../api/domains/rides", () => ({
   unlockRide: vi.fn(),
 }));
 
+vi.mock("../../context/SocketContext", () => ({
+  useSocket: () => ({ socket: null, isConnected: false }),
+}));
+
 const baseRide = {
   id: "ride-1",
   reference: "RIDE-XYZ",

@@ -4,7 +4,7 @@ import Swal from "sweetalert2";
 import PropTypes from "prop-types";
 import {
   ArrowLeft, CheckCircle2, XCircle, RotateCw, AlertTriangle,
-  FileText, Eye, Download, X, Clock,
+  FileText, Eye, Download, X, Clock, MapPin,
 } from "lucide-react";
 import SafeImage from "../components/SafeImage";
 import { updateDriverReviewStatus } from "../utils/api";
@@ -417,7 +417,10 @@ const DriverDetail = () => {
               </div>
             </div>
           </div>
-          <Button variant="secondary" size="sm" icon={<RotateCw size={14} />} onClick={loadDetail} loading={loading}>Refresh</Button>
+          <div className="flex items-center gap-2">
+            <Button variant="secondary" size="sm" icon={<MapPin size={14} />} onClick={() => navigate(`/live-map?driverId=${encodeURIComponent(id)}`)}>View on Live Map</Button>
+            <Button variant="secondary" size="sm" icon={<RotateCw size={14} />} onClick={loadDetail} loading={loading}>Refresh</Button>
+          </div>
         </div>
       </div>
 

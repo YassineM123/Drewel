@@ -49,10 +49,9 @@ export const resolvePrincipal = async (userId) => {
   throw new CommunicationPolicyError("Authenticated account not found", 401, "PRINCIPAL_NOT_FOUND");
 };
 
-export const isRideContactAllowed = (ride, now = new Date()) => {
+export const isRideContactAllowed = (ride, role, now = new Date()) => {
   if (ride.communicationBlockedAt) return false;
-  if (CONTACT_RIDE_STATUSES.includes(ride.status)) return true;
-  return ride.status === "completed" && ride.contactEndsAt && new Date(ride.contactEndsAt) > now;
+  return true;
 };
 
 export const assertRideParticipant = async (principal, rideOrId, { requireContact = false } = {}) => {
@@ -80,7 +79,7 @@ export const assertRideParticipant = async (principal, rideOrId, { requireContac
     }).catch((error) => console.error("Communication denial audit failed", error.message));
     throw new CommunicationPolicyError("You are not a participant of this ride", 403, "NOT_RIDE_PARTICIPANT");
   }
-  if (requireContact && !isRideContactAllowed(ride)) {
+  if (requireContact && !isRideContactAllowed(ride, isDriver ? "driver" : "passenger")) {
     if (ride.communicationBlockedAt) {
       await CommunicationAudit.create({
         rideId: ride._id, action: "communication_denied", actorId: principal.id,

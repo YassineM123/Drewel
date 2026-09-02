@@ -8,15 +8,7 @@ import {
   isAuthTokenUsable,
   notifyAdminSessionChanged,
 } from "../utils/session";
-
-function DrewelMark() {
-  return (
-    <svg width="20" height="20" viewBox="0 0 18 18" fill="none">
-      <path d="M3 9C3 6.239 5.239 4 8 4h2a5 5 0 010 10H8C5.239 14 3 11.761 3 9z" fill="white" fillOpacity="0.95" />
-      <circle cx="13" cy="9" r="2" fill="white" fillOpacity="0.45" />
-    </svg>
-  );
-}
+import drewelLogo from "../assets/images/drewel-mark.jpeg";
 
 function RoutePattern() {
   return (
@@ -106,9 +98,7 @@ export default function Login() {
 
         <div className="relative z-10">
           <div className="flex items-center gap-3 mb-20">
-            <div className="w-11 h-11 rounded-[13px] bg-[#BE1B2C] flex items-center justify-center shadow-lg shadow-red-900/40">
-              <DrewelMark />
-            </div>
+            <img src={drewelLogo} alt="Drewel" className="w-11 h-11 rounded-[13px] object-cover shadow-lg shadow-red-900/40" />
             <div>
               <div className="text-white font-bold text-xl tracking-tight">Drewel</div>
               <div className="text-white/40 text-[10px] uppercase tracking-[0.18em]">Operations Platform</div>
@@ -147,9 +137,7 @@ export default function Login() {
 
       <div className="flex-1 flex flex-col items-center justify-center p-8 bg-[#F6F8FB]">
         <div className="lg:hidden flex items-center gap-2.5 mb-10">
-          <div className="w-9 h-9 rounded-[11px] bg-[#BE1B2C] flex items-center justify-center">
-            <DrewelMark />
-          </div>
+          <img src={drewelLogo} alt="Drewel" className="w-9 h-9 rounded-[11px] object-cover" />
           <span className="font-bold text-slate-800 text-xl">Drewel</span>
         </div>
 

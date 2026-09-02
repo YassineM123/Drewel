@@ -2,17 +2,24 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import apiClient from "./client";
 import { getAlerts } from "./domains/alerts";
 import { getAuditLogs } from "./domains/auditLogs";
-import { getChatThreads } from "./domains/chat";
-import { getSecureCalls } from "./domains/secureCalls";
+import {
+  getChatThreads,
+  getConversationMessageAudioBlob,
+  normalizeConversationAudioUrl,
+} from "./domains/chat";
 import { getRolesCatalog } from "./domains/roles";
 import { getSystemHealth } from "./domains/health";
 import { sendAdminNotification } from "./domains/notifications";
+import { getAdminSettings } from "./domains/settings";
 
 vi.mock("./client", () => ({
   __esModule: true,
   default: {
     get: vi.fn(),
     post: vi.fn(),
+    instance: {
+      get: vi.fn(),
+    },
   },
 }));
 
@@ -48,28 +55,53 @@ describe("admin meta domain contracts", () => {
     );
   });
 
-  it("requests the secure-call audit feed", async () => {
-    apiClient.get.mockResolvedValue({ success: true, items: [], pagination: {} });
-    await getSecureCalls({ page: 1 });
-    expect(apiClient.get).toHaveBeenCalledWith(
-      "/admin/secure-calls",
-      expect.objectContaining({ params: { page: 1 } })
+  it("normalizes voice-audio paths through the configured admin API base", async () => {
+    expect(normalizeConversationAudioUrl("/api/rides/ride-1/messages/msg-1/audio"))
+      .toBe("/rides/ride-1/messages/msg-1/audio");
+    expect(normalizeConversationAudioUrl("/rides/ride-1/messages/msg-1/audio"))
+      .toBe("/rides/ride-1/messages/msg-1/audio");
+    expect(normalizeConversationAudioUrl("https://cdn.example.com/audio.m4a"))
+      .toBe("https://cdn.example.com/audio.m4a");
+
+    apiClient.instance.get.mockResolvedValue({
+      data: new Blob(["voice"], { type: "audio/mp4" }),
+      headers: { "content-type": "audio/mp4" },
+    });
+    await getConversationMessageAudioBlob("/api/rides/ride-1/messages/msg-1/audio");
+    expect(apiClient.instance.get).toHaveBeenCalledWith(
+      "/rides/ride-1/messages/msg-1/audio",
+      expect.objectContaining({ responseType: "blob" })
     );
   });
 
   it("requests the roles catalog and team", async () => {
-    apiClient.get.mockResolvedValue({ success: true, roles: [], permissions: {}, current: null, team: [] });
-    await getRolesCatalog();
+    apiClient.get.mockResolvedValue({
+      success: true,
+      roles: ["owner", "admin"],
+      permissions: ["rides_read", "rides_manage"],
+      current: null,
+      team: [],
+    });
+    const result = await getRolesCatalog();
     expect(apiClient.get).toHaveBeenCalledWith(
       "/admin/roles",
       expect.objectContaining({})
     );
+    expect(result.permissions).toEqual({});
+    expect(result.permissionNames).toEqual(["rides_read", "rides_manage"]);
   });
 
   it("requests system health", async () => {
     apiClient.get.mockResolvedValue({ success: true, health: { api: "operational" } });
     await getSystemHealth();
     expect(apiClient.get).toHaveBeenCalledWith("/admin/health", expect.any(Object));
+  });
+
+  it("requests the admin settings snapshot", async () => {
+    apiClient.get.mockResolvedValue({ success: true, settings: { pointsPerAED: 10 } });
+    const result = await getAdminSettings();
+    expect(result).toEqual({ pointsPerAED: 10 });
+    expect(apiClient.get).toHaveBeenCalledWith("/admin/settings", expect.any(Object));
   });
 
   it("posts a broadcast notification payload", async () => {

@@ -19,6 +19,7 @@ export const ROUTE_META = {
   "/rides/disputes": { section: "Operations", title: "Disputes" },
   "/rides/stuck": { section: "Operations", title: "Stuck Rides" },
   "/online-drivers": { section: "Operations", title: "Online Drivers" },
+  "/live-map": { section: "Operations", title: "Live Map" },
 
   "/points/overview": { section: "Driver Points", title: "Overview" },
   "/points/balances": { section: "Driver Points", title: "Wallets" },
@@ -29,7 +30,6 @@ export const ROUTE_META = {
 
   "/chat": { section: "Communication", title: "Chat" },
   "/support-chat": { section: "Communication", title: "Support Chat" },
-  "/secure-calls": { section: "Communication", title: "Secure Calls" },
 
   "/banners": { section: "Content", title: "Sponsor Banners" },
 

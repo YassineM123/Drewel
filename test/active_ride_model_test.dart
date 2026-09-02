@@ -78,6 +78,23 @@ void main() {
       expect(ride.passengerReview?.comment, 'Good trip');
     });
 
+    test(
+        'lets the driver keep messaging a completed ride while the '
+        'passenger loses access once the grace period ends', () {
+      final ActiveRideModel ride = ActiveRideModel.fromJson(
+        <String, dynamic>{
+          'id': 'ride-2',
+          'status': 'completed',
+          'contactAllowed': true,
+          'contactExpiresAt': '2000-01-01T00:00:00.000Z',
+        },
+      );
+
+      expect(ride.canCommunicateAs('driver'), isTrue);
+      expect(ride.canCommunicateAs('user'), isFalse);
+      expect(ride.canCommunicate, isFalse);
+    });
+
     test('rejects malformed coordinates locally', () {
       final RideCoordinateModel location = RideCoordinateModel.fromJson(
         <String, dynamic>{'lat': 120, 'long': 10},

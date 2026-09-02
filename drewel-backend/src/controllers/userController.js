@@ -673,7 +673,7 @@ export const getUserDetails = async (req, res) => {
         },
         recentRides,
         recentMessages,
-        recentCalls,
+        recentCalls: [],
         supportReports,
       },
     });
@@ -692,17 +692,59 @@ export const dashBoardData = async (req, res) => {
     const now = new Date();
     const startOfToday = new Date(now);
     startOfToday.setHours(0, 0, 0, 0);
+
+    let rangeStart = startOfToday;
+    let rangeEnd = now;
+    const from = String(req.query.from || "").trim();
+    if (from) {
+      const fromDate = new Date(from);
+      if (Number.isNaN(fromDate.getTime())) {
+        return res.status(400).json({ success: false, message: "Invalid from date filter" });
+      }
+      rangeStart = fromDate;
+    }
+    const to = String(req.query.to || "").trim();
+    if (to) {
+      const toDate = new Date(to);
+      if (Number.isNaN(toDate.getTime())) {
+        return res.status(400).json({ success: false, message: "Invalid to date filter" });
+      }
+      toDate.setHours(23, 59, 59, 999);
+      rangeEnd = toDate;
+    }
+
+    let vehicleTypeFilter = null;
+    const vehicleType = String(req.query.vehicleType || "").trim();
+    if (vehicleType) {
+      const escaped = vehicleType.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      vehicleTypeFilter = new RegExp(escaped, "i");
+    }
+
     const settings = await PointsSettings.getEffective();
     const lowBalanceThreshold = settings.lowBalanceThreshold;
-    const activeRideFilter = { status: { $in: ACTIVE_RIDE_STATUSES } };
+    const activeRideFilter = {
+      status: { $in: ACTIVE_RIDE_STATUSES },
+      ...(vehicleTypeFilter ? { vehicleType: vehicleTypeFilter } : {}),
+    };
     const cancelledTodayFilter = {
       status: { $in: ["cancelled", "cancelled_by_user", "cancelled_by_driver", "cancelled_by_admin"] },
       $or: [
-        { endedAt: { $gte: startOfToday } },
-        { "cancellation.timestamp": { $gte: startOfToday } },
-        { updatedAt: { $gte: startOfToday } },
+        { endedAt: { $gte: rangeStart, $lte: rangeEnd } },
+        { "cancellation.timestamp": { $gte: rangeStart, $lte: rangeEnd } },
+        { updatedAt: { $gte: rangeStart, $lte: rangeEnd } },
       ],
+      ...(vehicleTypeFilter ? { vehicleType: vehicleTypeFilter } : {}),
     };
+    const disputedFilter = {
+      status: "disputed",
+      ...(vehicleTypeFilter ? { vehicleType: vehicleTypeFilter } : {}),
+    };
+    const stuckRidesFilter = {
+      status: { $in: ACTIVE_RIDE_STATUSES },
+      updatedAt: { $lt: new Date(now.getTime() - 60 * 60 * 1000) },
+      ...(vehicleTypeFilter ? { vehicleType: vehicleTypeFilter } : {}),
+    };
+    const recentReservationsFilter = vehicleTypeFilter ? { vehicleType: vehicleTypeFilter } : {};
 
     const [
       totalUsers,
@@ -736,13 +778,14 @@ export const dashBoardData = async (req, res) => {
         Driver.countDocuments({ profileRequestStatus: "pending" }),
         Ride.countDocuments(activeRideFilter),
         TripOffer.countDocuments({ status: "pending", expiresAt: { $gt: now } }),
-        Ride.countDocuments({ status: "completed", endedAt: { $gte: startOfToday } }),
-        Ride.countDocuments(cancelledTodayFilter),
-        Ride.countDocuments({ status: "disputed" }),
         Ride.countDocuments({
-          status: { $in: ACTIVE_RIDE_STATUSES },
-          updatedAt: { $lt: new Date(now.getTime() - 60 * 60 * 1000) },
+          status: "completed",
+          endedAt: { $gte: rangeStart, $lte: rangeEnd },
+          ...(vehicleTypeFilter ? { vehicleType: vehicleTypeFilter } : {}),
         }),
+        Ride.countDocuments(cancelledTodayFilter),
+        Ride.countDocuments(disputedFilter),
+        Ride.countDocuments(stuckRidesFilter),
         DriverPointsWallet.countDocuments({
           $expr: {
             $lt: [
@@ -754,7 +797,7 @@ export const dashBoardData = async (req, res) => {
         PointPurchaseRequest.countDocuments({ status: { $in: ["pending", "contacted", "payment_pending", "payment_verified"] } }),
         RideMessage.countDocuments({ status: { $ne: "read" } }),
         SupportReport.countDocuments({ status: { $in: ["open", "reviewing"] } }),
-        Ride.find({})
+        Ride.find(recentReservationsFilter)
           .sort({ updatedAt: -1, _id: -1 })
           .limit(6)
           .select("reference status vehicleType pickup destination updatedAt requestedAt endedAt passengerId driverId")

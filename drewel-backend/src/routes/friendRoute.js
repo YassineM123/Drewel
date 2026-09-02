@@ -5,6 +5,6 @@ import { addFriends, getFriendsList, } from '../controllers/friendController.js'
 const router = express.Router();
 
 router.post('/add-friends', requireSignIn, addFriends);
-router.get('/friend-list/:userId',getFriendsList)
+router.get('/friend-list/:userId', requireSignIn, getFriendsList)
 
 export  default router;

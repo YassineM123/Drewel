@@ -34,6 +34,19 @@ test("realtime location commands provide success and structured error acknowledg
   assert.match(source, /ok:\s*false,\s*error:/);
 });
 
+test("active ride driver GPS is broadcast to the admin tracking room", () => {
+  const socketSource = readProjectFile("drewel-backend/src/socket/index.js");
+  const rideSource = readProjectFile("drewel-backend/src/controllers/rideController.js");
+
+  for (const source of [socketSource, rideSource]) {
+    assert.match(source, /ADMIN_TRACKING_ROOM/);
+    assert.match(
+      source,
+      /io\.to\(ADMIN_TRACKING_ROOM\)\.emit\("driver:location",\s*\{[\s\S]*?driverId:[\s\S]*?lat:[\s\S]*?long:[\s\S]*?rideId:/
+    );
+  }
+});
+
 test("mobile socket retains the latest driver fix and resends after server readiness", () => {
   const source = readProjectFile("lib/common/socket_services.dart");
 

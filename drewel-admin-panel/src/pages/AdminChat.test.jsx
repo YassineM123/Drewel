@@ -4,6 +4,7 @@ import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   addConversationNote,
+  getConversationMessageAudioBlob,
   getChatMetadata,
   getChatThreads,
   getConversationMessages,
@@ -14,6 +15,7 @@ vi.mock("../api/domains/chat", () => ({
   getChatMetadata: vi.fn(),
   getChatThreads: vi.fn(),
   getConversationMessages: vi.fn(),
+  getConversationMessageAudioBlob: vi.fn(),
   addConversationNote: vi.fn(),
   chatErrorMessage: (error, fallback) => error?.message || fallback,
 }));
@@ -73,6 +75,7 @@ describe("Chat admin", () => {
     addConversationNote.mockResolvedValue({
       conversation: { id: "thread-1", adminNote: "Contacted both sides", updatedAt: "2026-08-15T11:00:00.000Z" },
     });
+    getConversationMessageAudioBlob.mockResolvedValue({ blob: new Blob(["voice"], { type: "audio/mp4" }) });
   });
 
   afterEach(() => {
@@ -136,6 +139,7 @@ describe("Chat admin", () => {
           senderRole: "passenger",
           text: "",
           messageType: "voice",
+          audioUrl: "/api/rides/ride-1/messages/msg-voice/audio",
           audioDuration: 7.5,
           status: "delivered",
           createdAt: "2026-08-15T10:01:00.000Z",
@@ -159,5 +163,36 @@ describe("Chat admin", () => {
     expect(await screen.findByText("Voice message")).toBeInTheDocument();
     expect(screen.getByText("0:08")).toBeInTheDocument();
     expect(screen.getByText("On my way")).toBeInTheDocument();
+  });
+
+  it("fetches voice audio through the authenticated admin API client", async () => {
+    HTMLMediaElement.prototype.play = vi.fn().mockResolvedValue();
+    getConversationMessages.mockResolvedValue({
+      conversation: { ...thread, adminNote: "" },
+      messages: [{
+        id: "msg-voice",
+        senderRole: "passenger",
+        text: "",
+        messageType: "voice",
+        audioUrl: "/api/rides/ride-1/messages/msg-voice/audio",
+        audioDuration: 4,
+        status: "delivered",
+        createdAt: "2026-08-15T10:01:00.000Z",
+      }],
+      supports: [],
+      pagination: { page: 1, limit: 100, total: 1, totalPages: 1 },
+    });
+
+    render(<MemoryRouter><AdminChat /></MemoryRouter>);
+    await screen.findByText("RIDE-001");
+
+    await userEvent.click(screen.getByRole("button", { name: /Inspect/ }));
+    await userEvent.click(await screen.findByRole("button", { name: /Play voice message/ }));
+
+    await waitFor(() => {
+      expect(getConversationMessageAudioBlob).toHaveBeenCalledWith(
+        "/api/rides/ride-1/messages/msg-voice/audio",
+      );
+    });
   });
 });

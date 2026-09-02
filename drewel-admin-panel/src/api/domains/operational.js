@@ -124,5 +124,29 @@ export const getOperationalAuditLogs = async (params, signal) => {
   };
 };
 
+// --- Live Operations Map ---
+export const getLiveOperationsMap = async (params, signal) => {
+  const data = await apiClient.get(`${OPS}/live-map`, {
+    params: compactParams(params),
+    signal,
+  });
+  return {
+    drivers: data.drivers || [],
+    rides: data.rides || [],
+    totals: data.totals || {},
+    alerts: data.alerts || [],
+    settings: data.settings || {},
+    generatedAt: data.generatedAt || null,
+  };
+};
+
+export const searchLiveOperationsMap = async (query, signal) => {
+  const data = await apiClient.get(`${OPS}/live-map/search`, {
+    params: compactParams({ q: query }),
+    signal,
+  });
+  return data.results || [];
+};
+
 export const operationalErrorMessage = (error, fallback = "An error occurred.") =>
   error?.response?.data?.message || error?.message || fallback;

@@ -47,7 +47,6 @@ import {
   listChatThreads,
   getAdminConversationMessages,
   addAdminConversationNote,
-  listSecureCalls,
   listContentAudits,
   getRolesCatalog,
   listAdminNotifications,
@@ -113,7 +112,6 @@ router.get('/chat/metadata', requireSignIn, isAdmin, getChatMetadata);
 router.get('/chat/threads', requireSignIn, isAdmin, listChatThreads);
 router.get('/chat/threads/:id/messages', requireSignIn, isAdmin, getAdminConversationMessages);
 router.post('/chat/threads/:id/note', requireSignIn, isAdmin, addAdminConversationNote);
-router.get('/secure-calls', requireSignIn, isAdmin, listSecureCalls);
 router.get('/content-audits', requireSignIn, isAdmin, listContentAudits);
 router.get('/roles', requireSignIn, isAdmin, getRolesCatalog);
 router.get('/notifications', requireSignIn, isAdmin, listAdminNotifications);

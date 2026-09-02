@@ -1,6 +1,14 @@
 import apiClient from "../client";
 import { compactParams } from "../query";
 
+export const normalizeConversationAudioUrl = (audioUrl) => {
+  if (!audioUrl) return "";
+  const value = String(audioUrl).trim();
+  if (!value || /^https?:\/\//i.test(value)) return value;
+  const path = value.startsWith("/") ? value : `/${value}`;
+  return path.startsWith("/api/") ? path.slice(4) : path;
+};
+
 /**
  * Chat metadata — GET /api/admin/chat/metadata
  * Backend returns conversation/thread counts, unread totals and message
@@ -56,7 +64,10 @@ export const addConversationNote = async (threadId, note, signal) => {
  * blob since a bare <audio src> request would not carry the bearer token.
  */
 export const getConversationMessageAudioBlob = async (audioUrl, signal) => {
-  const response = await apiClient.instance.get(audioUrl, { responseType: "blob", signal });
+  const response = await apiClient.instance.get(normalizeConversationAudioUrl(audioUrl), {
+    responseType: "blob",
+    signal,
+  });
   return { blob: response.data, contentType: response.headers?.["content-type"] || "audio/mp4" };
 };
 

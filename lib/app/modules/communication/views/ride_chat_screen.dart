@@ -94,7 +94,7 @@ class _RideChatScreenState extends State<RideChatScreen> {
   /// read-only just because that global controller has not refreshed yet.
   // `contactAllowed` is the backend policy result for this exact ride. It
   // intentionally supports the server-defined post-completion grace period.
-  bool get _canChat => _routeRide?.canCommunicate == true;
+  bool get _canChat => _routeRide?.canCommunicateAs(_role) == true;
 
   String get _chatTitle {
     final RideConversationModel? conversation = _conversation;
@@ -147,18 +147,20 @@ class _RideChatScreenState extends State<RideChatScreen> {
     );
     final String echoClientId =
         message.clientMessageId ?? (data['clientMessageId'] ?? '').toString();
-    if (message.id.isEmpty ||
-        _seenMessageIds.contains(message.id) ||
+    if (message.id.isEmpty) return;
+    if (_seenMessageIds.contains(message.id) ||
         _messages.any((RideMessageModel existing) =>
             existing.id == message.id ||
             (echoClientId.isNotEmpty &&
                 (existing.clientMessageId ?? '') == echoClientId))) {
+      _reconcileConfirmedVoice(echoClientId);
       return;
     }
     if (message.isCancelledTripRequest) return;
     _seenMessageIds.add(message.id);
     if (!mounted) return;
     setState(() => _messages.add(message));
+    _reconcileConfirmedVoice(echoClientId);
     _scrollToBottom(animate: true);
     if (message.senderId != _selfId &&
         message.status != RideMessageStatus.read) {
@@ -242,6 +244,8 @@ class _RideChatScreenState extends State<RideChatScreen> {
         }
       }
       if (!mounted) return;
+      String? confirmedPendingPath;
+      String? confirmedFailedPath;
       setState(() {
         _selfId = selfId;
         _role = role;
@@ -263,11 +267,12 @@ class _RideChatScreenState extends State<RideChatScreen> {
             .toSet();
         if (_pendingVoice != null &&
             serverClientIds.contains(_pendingVoice!.clientMessageId)) {
+          confirmedPendingPath = _pendingVoice!.path;
           _pendingVoice = null;
         }
         if (_failedVoice != null &&
             serverClientIds.contains(_failedVoice!.clientMessageId)) {
-          _deleteQuietly(_failedVoice!.path);
+          confirmedFailedPath = _failedVoice!.path;
           _failedVoice = null;
         }
         _incomingOffers
@@ -276,6 +281,13 @@ class _RideChatScreenState extends State<RideChatScreen> {
         if (_failedMessageText == null) _error = null;
         if (showLoader) _loading = false;
       });
+      if (confirmedPendingPath != null) {
+        _deleteQuietly(confirmedPendingPath!);
+      }
+      if (confirmedFailedPath != null &&
+          confirmedFailedPath != confirmedPendingPath) {
+        _deleteQuietly(confirmedFailedPath!);
+      }
       if (showLoader) {
         // Open the thread at its latest message, not at the oldest one.
         WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -385,6 +397,30 @@ class _RideChatScreenState extends State<RideChatScreen> {
     });
   }
 
+  /// Replaces an optimistic/failed voice row once the server confirms the
+  /// same idempotency key through Socket.IO or a refresh.
+  void _reconcileConfirmedVoice(String clientMessageId) {
+    if (!mounted || clientMessageId.isEmpty) return;
+    final _PendingVoice? pending =
+        _pendingVoice?.clientMessageId == clientMessageId
+            ? _pendingVoice
+            : null;
+    final _PendingVoice? failed =
+        _failedVoice?.clientMessageId == clientMessageId ? _failedVoice : null;
+    if (pending == null && failed == null) return;
+    setState(() {
+      if (pending != null) _pendingVoice = null;
+      if (failed != null) {
+        _failedVoice = null;
+        if (_failedMessageText == null) _error = null;
+      }
+    });
+    if (pending != null) _deleteQuietly(pending.path);
+    if (failed != null && failed.path != pending?.path) {
+      _deleteQuietly(failed.path);
+    }
+  }
+
   Future<void> _startVoiceRecording() async {
     if (_recording || _sending || _pendingVoice != null) return;
     // The microphone and an active playback would otherwise overlap.
@@ -461,6 +497,10 @@ class _RideChatScreenState extends State<RideChatScreen> {
       _pendingVoice = pending;
       _error = null;
     });
+    // The optimistic upload row is appended below the existing messages.
+    // Reveal it now instead of waiting for the server response, otherwise the
+    // recording bar disappears while the new voice note stays off-screen.
+    _scrollToBottom(animate: true);
     try {
       final RideMessageModel sent =
           await _communication.messageRepository.sendVoice(
@@ -477,14 +517,26 @@ class _RideChatScreenState extends State<RideChatScreen> {
           _messages.add(sent);
         }
         _seenMessageIds.add(sent.id);
-        _pendingVoice = null;
+        if (_pendingVoice?.clientMessageId == pending.clientMessageId) {
+          _pendingVoice = null;
+        }
       });
       _scrollToBottom(animate: true);
     } catch (_) {
       if (!mounted) return;
+      // Socket.IO or polling may have confirmed the same upload even when
+      // the multipart HTTP response was lost. Do not turn that success into
+      // a false failed row.
+      if (_messages.any((RideMessageModel message) =>
+          (message.clientMessageId ?? '') == pending.clientMessageId)) {
+        _reconcileConfirmedVoice(pending.clientMessageId);
+        return;
+      }
       // Keep the file so Retry can re-upload with the same idempotency key.
       setState(() {
-        _pendingVoice = null;
+        if (_pendingVoice?.clientMessageId == pending.clientMessageId) {
+          _pendingVoice = null;
+        }
         _failedVoice = pending;
         _error = 'Voice message not sent. Please retry.';
       });
@@ -620,7 +672,11 @@ class _RideChatScreenState extends State<RideChatScreen> {
                 Obx(() {
                   final String rideId = _rideId ?? '';
                   final TripOffer? offer = _points!.offerForRide(rideId);
-                  return offer == null
+                  final bool rideEnded =
+                      _routeRide?.rideStatus.isTerminal == true ||
+                          _conversation?.conversationStatus ==
+                              ConversationStatus.cancelled;
+                  return offer == null || rideEnded
                       ? const SizedBox.shrink()
                       : TripOfferStatusCard(
                           offer: offer,
@@ -682,8 +738,7 @@ class _RideChatScreenState extends State<RideChatScreen> {
                   hintText: 'Message $_chatTitle...',
                   sending: _sending,
                   canRecord: _pendingVoice == null,
-                  canSendTripRequest: _role != ApiKeyConstants.driver &&
-                      _routeRide?.status == 'contacting',
+                  canSendTripRequest: _role != ApiKeyConstants.driver,
                   onSend: _send,
                   onTripRequest: _showPassengerTripRequest,
                   onRecordStart: _startVoiceRecording,
@@ -1211,7 +1266,8 @@ class _CounterpartProfileSheet extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 22),
-            _CounterpartAvatar(imageUrl: counterpart.profileImageUrl, radius: 44),
+            _CounterpartAvatar(
+                imageUrl: counterpart.profileImageUrl, radius: 44),
             const SizedBox(height: 14),
             Text(
               counterpart.displayName.isNotEmpty
@@ -1263,11 +1319,14 @@ class _CounterpartProfileSheet extends StatelessWidget {
                 ],
               ),
             ],
-            if (isDriver && (vehicle.isNotEmpty || (counterpart.registration ?? '').isNotEmpty)) ...<Widget>[
+            if (isDriver &&
+                (vehicle.isNotEmpty ||
+                    (counterpart.registration ?? '').isNotEmpty)) ...<Widget>[
               const SizedBox(height: 20),
               Container(
                 width: double.infinity,
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
                 decoration: BoxDecoration(
                   color: cartColor,
                   borderRadius: BorderRadius.circular(18),
@@ -1659,9 +1718,7 @@ class _ChatComposer extends StatelessWidget {
                             ),
                           )
                         : Icon(
-                            showMic
-                                ? Icons.mic_rounded
-                                : Icons.send_rounded,
+                            showMic ? Icons.mic_rounded : Icons.send_rounded,
                             size: 28,
                           ),
                   ),
@@ -1851,9 +1908,7 @@ class _MessageList extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (messages.isEmpty &&
-        pendingVoice == null &&
-        failedVoice == null) {
+    if (messages.isEmpty && pendingVoice == null && failedVoice == null) {
       return RefreshIndicator(
         onRefresh: () async => onRefresh(),
         child: ListView(
@@ -1884,8 +1939,8 @@ class _MessageList extends StatelessWidget {
       itemCount: messages.length + trailingCount,
       itemBuilder: (BuildContext context, int index) {
         if (index >= messages.length) {
-          final bool isPendingRow = pendingVoice != null &&
-              index == messages.length;
+          final bool isPendingRow =
+              pendingVoice != null && index == messages.length;
           final _PendingVoice voice =
               (isPendingRow ? pendingVoice : failedVoice)!;
           return _VoiceRow(
@@ -1936,10 +1991,12 @@ class _MessageList extends StatelessWidget {
                 : _MessageBubble(
                     message: message,
                     mine: mine,
-                    counterpartImageUrl:
-                        mine ? null : conversation?.counterpart?.profileImageUrl,
+                    counterpartImageUrl: mine
+                        ? null
+                        : conversation?.counterpart?.profileImageUrl,
                   );
-        final bool isNewest = index == messages.length - 1 && trailingCount == 0;
+        final bool isNewest =
+            index == messages.length - 1 && trailingCount == 0;
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: <Widget>[

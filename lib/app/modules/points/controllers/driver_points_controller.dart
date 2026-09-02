@@ -74,6 +74,7 @@ class DriverPointsController extends GetxController
   final RxBool isSendingOffer = false.obs;
   String? lastSendOfferError;
   final RxBool isCreatingPurchaseRequest = false.obs;
+  final RxString lastPurchaseRequestError = ''.obs;
   final RxBool isSocketConnected = false.obs;
   final RxBool isLoadingPacks = false.obs;
   final RxBool isLoadingPurchaseRequests = false.obs;
@@ -293,6 +294,7 @@ class DriverPointsController extends GetxController
   }) async {
     if (isCreatingPurchaseRequest.value) return null;
     isCreatingPurchaseRequest.value = true;
+    lastPurchaseRequestError.value = '';
     final retryId =
         _purchaseRetryIds.putIfAbsent(retryKey, () => _newClientId('purchase'));
     try {
@@ -304,8 +306,13 @@ class DriverPointsController extends GetxController
       _purchaseRetryIds.remove(retryKey);
       purchaseRequests.removeWhere((item) => item.id == request.id);
       purchaseRequests.insert(0, request);
+      unawaited(refreshPurchaseRequests());
       return request;
-    } catch (_) {
+    } on CommunicationApiException catch (error) {
+      lastPurchaseRequestError.value = error.message;
+      return null;
+    } catch (error) {
+      lastPurchaseRequestError.value = error.toString();
       return null;
     } finally {
       isCreatingPurchaseRequest.value = false;

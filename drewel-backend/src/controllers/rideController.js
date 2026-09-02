@@ -8,7 +8,7 @@ import Ride, { ACTIVE_RIDE_STATUSES } from "../models/Ride.js";
 import Driver from "../models/Driver.js";
 import RideMessage from "../models/RideMessage.js";
 import CommunicationAudit from "../models/CommunicationAudit.js";
-import { io } from "../socket/index.js";
+import { io, ADMIN_TRACKING_ROOM } from "../socket/index.js";
 import {
   CommunicationPolicyError,
   assertRideParticipant,
@@ -50,7 +50,7 @@ import {
 } from "../utils/chatAudioUpload.js";
 import { deleteS3Object, getS3Bucket, getS3Client, isS3StorageEnabled } from "../utils/s3Storage.js";
 
-const rideDto = (ride) => ({
+const rideDto = (ride, role) => ({
   id: String(ride._id),
   reference: ride.reference,
   passengerId: String(ride.passengerId),
@@ -63,7 +63,7 @@ const rideDto = (ride) => ({
   contactEndsAt: ride.contactEndsAt,
   contactExpiresAt: ride.contactEndsAt,
   blocked: Boolean(ride.communicationBlockedAt),
-  contactAllowed: isRideContactAllowed(ride),
+  contactAllowed: isRideContactAllowed(ride, role),
   createdAt: ride.createdAt,
   updatedAt: ride.updatedAt,
   stateVersion: ride.stateVersion || 0,
@@ -156,16 +156,16 @@ export const emitConversationUpdated = async (conversation) => {
 
 export { emitNotificationNew }; // re-exported for existing call sites
 
-const publicRideDto = async (ride) => {
+const publicRideDto = async (ride, role) => {
   const [passenger, driver] = await Promise.all([
     User.findById(ride.passengerId).select("fullName profilePicture").lean(),
     Driver.findById(ride.driverId).select("firstName lastName fullName profileImageUrl vehicleType vehicleModel registration registrationVisible rating").lean(),
   ]);
-  return { ...rideDto(ride), passenger: publicParticipantDto(passenger, "passenger"), driver: publicParticipantDto(driver, "driver") };
+  return { ...rideDto(ride, role), passenger: publicParticipantDto(passenger, "passenger"), driver: publicParticipantDto(driver, "driver") };
 };
 
 const participantRideDto = async (ride, principal) => {
-  const dto = await publicRideDto(ride);
+  const dto = await publicRideDto(ride, principal?.role);
   // Exact route data is visible only to the two participants of their own
   // requested contact, never through marketplace/list DTOs.
   if (ride.status === "contacting" && principal?.role !== "admin") {
@@ -897,10 +897,24 @@ export const postRideLocation = async (req, res) => {
     });
     const payload = {
       rideId: String(ride._id),
+      driverId: String(ride.driverId),
       status: ride.status,
       location: ride.lastDriverLocation,
     };
     io.to(`ride:${ride._id}`).to(String(ride.passengerId)).emit("ride:driver_location", payload);
+    io.to(ADMIN_TRACKING_ROOM).emit("driver:location", {
+      driverId: String(ride.driverId),
+      lat: ride.lastDriverLocation.lat,
+      long: ride.lastDriverLocation.long,
+      heading: ride.lastDriverLocation.heading,
+      speed: ride.lastDriverLocation.speed,
+      locationAccuracyM: ride.lastDriverLocation.accuracy,
+      locationUpdatedAt: ride.lastDriverLocation.recordedAt,
+      availabilityStatus: "Busy",
+      isOnline: true,
+      rideId: String(ride._id),
+      rideStatus: ride.status,
+    });
     return res.json({ success: true, ...payload });
   } catch (error) {
     return sendError(res, error);
@@ -973,20 +987,29 @@ export const sendRideMessage = async (req, res) => {
       participantRole,
     });
     await emitConversationUpdated(conversation);
+    const senderName =
+      participantRole === "passenger"
+        ? (conversation?.passengerName || "Passenger")
+        : (conversation?.driverName || "Driver");
+    const senderDisplay = String(senderName).split(/\s+/)[0] || "Drewel";
+    const pushTitle = senderDisplay;
+    const pushBody = String(message.text || "Sent you a message").slice(0, 140);
+
     if (String(recipientId) === String(notification?.userId)) {
       emitNotificationNew(notification);
       await sendPushToUser({
         userId: recipientId,
-        title: "New message",
-        body: notification?.message || message.text || "",
+        title: pushTitle,
+        body: pushBody,
         data: notification
           ? {
               id: String(notification._id),
               type: "RIDE_MESSAGE",
               rideId: String(ride._id),
-              conversationId: String(notification.conversationId || ""),
+              conversationId: String(ride._id),
               messageId: String(notification.messageId || message._id),
-              deepLink: `drewel://chat/ride?conversationId=${String(notification.conversationId || "")}`,
+              deepLink: `drewel://chat/ride?rideId=${String(ride._id)}`,
+              senderName: senderDisplay,
             }
           : {},
         type: "RIDE_MESSAGE",
@@ -1109,20 +1132,30 @@ export const sendRideVoiceMessage = async (req, res) => {
       participantRole,
     });
     await emitConversationUpdated(conversation);
+    const senderName =
+      participantRole === "passenger"
+        ? (conversation?.passengerName || "Passenger")
+        : (conversation?.driverName || "Driver");
+    const senderDisplay = String(senderName).split(/\s+/)[0] || "Drewel";
+    const pushTitle = `${senderDisplay} sent you a message`;
+    const pushBody = "🎤 Voice message";
+
     if (String(recipientId) === String(notification?.userId)) {
       emitNotificationNew(notification);
       await sendPushToUser({
         userId: recipientId,
-        title: "New message",
-        body: notification?.message || "sent you a voice message",
+        title: pushTitle,
+        body: pushBody,
         data: notification
           ? {
               id: String(notification._id),
               type: "RIDE_MESSAGE",
               rideId: String(ride._id),
-              conversationId: String(notification.conversationId || ""),
+              conversationId: String(ride._id),
               messageId: String(notification.messageId || message._id),
-              deepLink: `drewel://chat/ride?conversationId=${String(notification.conversationId || "")}`,
+              deepLink: `drewel://chat/ride?rideId=${String(ride._id)}`,
+              senderName: senderDisplay,
+              isVoice: "true",
             }
           : {},
         type: "RIDE_MESSAGE",

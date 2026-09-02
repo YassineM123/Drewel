@@ -14,8 +14,8 @@ import EditDriver from "./pages/EditDriver";
 import Sponsor from "./pages/Sponsor";
 import ChatWrapper from "./components/chat/ChatWrapper";
 import AdminChat from "./pages/AdminChat";
-import SecureCalls from "./pages/SecureCalls";
 import OnlineDrivers from "./pages/OnlineDrivers";
+import LiveOperationsMap from "./pages/LiveOperationsMap";
 import TeamRoles from "./pages/TeamRoles";
 import SystemHealth from "./pages/SystemHealth";
 import Settings from "./pages/Settings";
@@ -56,6 +56,7 @@ function App() {
                 <Route path="/edit-driver/:id" element={<EditDriver />} />
 
                 <Route path="/online-drivers" element={<OnlineDrivers />} />
+                <Route path="/live-map" element={<LiveOperationsMap />} />
 
                 <Route path="/verification/pending" element={<PendingRequests />} />
                 <Route path="/verification/approved" element={<ApprovedRequests />} />
@@ -89,7 +90,6 @@ function App() {
 
                 <Route path="/chat" element={<AdminChat />} />
                 <Route path="/support-chat" element={<ChatWrapper />} />
-                <Route path="/secure-calls" element={<SecureCalls />} />
                 <Route path="/banners" element={<Sponsor />} />
                 <Route path="/alerts" element={<Alerts />} />
                 <Route path="/notifications" element={<Notifications />} />

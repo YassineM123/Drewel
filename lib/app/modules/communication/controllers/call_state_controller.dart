@@ -66,7 +66,8 @@ class CallStateController extends GetxService with WidgetsBindingObserver {
   String _pushRegisteredForSession = '';
   Timer? _driverRequestCooldownTimer;
 
-  bool get hasAuthorizedRide => activeRide.value?.canCommunicate == true;
+  bool get hasAuthorizedRide =>
+      activeRide.value?.canCommunicateAs(_role) == true;
   RideParticipantModel? get counterpart =>
       activeRide.value?.counterpartFor(_role);
 
@@ -97,7 +98,7 @@ class CallStateController extends GetxService with WidgetsBindingObserver {
         pickup: pickup,
         destination: destination,
       );
-      if (!contact.canCommunicate) {
+      if (!contact.canCommunicateAs(_role)) {
         userFacingError.value = 'This driver is no longer available.';
         return null;
       }
@@ -221,6 +222,18 @@ class CallStateController extends GetxService with WidgetsBindingObserver {
     await refreshActiveRide();
     await refreshUnreadSummary();
     await refreshNotifications();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _checkPendingColdLaunchDeepLink();
+    });
+  }
+
+  void _checkPendingColdLaunchDeepLink() {
+    if (!Get.isRegistered<PushNotificationService>()) return;
+    final String? link =
+        Get.find<PushNotificationService>().consumePendingDeepLink();
+    if (link != null && link.isNotEmpty) {
+      unawaited(DeepLinkService.instance.handle(link));
+    }
   }
 
   /// Connects the push pipeline to the live controller. FCM may be absent
@@ -240,7 +253,109 @@ class CallStateController extends GetxService with WidgetsBindingObserver {
     if (data.isEmpty) return;
     final AppNotificationModel notification =
         AppNotificationModel.fromJson(data);
-    await _absorbNotification(notification);
+    await _absorbNotification(
+      notification,
+      systemNotificationAlreadyShown: data['_systemNotificationShown'] == true,
+    );
+  }
+
+  bool _isCurrentChatActive(AppNotificationModel notification) {
+    if (Get.currentRoute != Routes.RIDE_CHAT) return false;
+    final String targetRideId =
+        (notification.rideId ?? notification.conversationId ?? '').trim();
+    if (targetRideId.isEmpty) return false;
+    final Object? arguments = Get.arguments;
+    if (arguments is Map &&
+        arguments['rideId']?.toString().trim() == targetRideId) {
+      return true;
+    }
+    if (activeRide.value?.id == targetRideId) return true;
+    return false;
+  }
+
+  void _showInAppBanner(AppNotificationModel notification) {
+    final String title = notification.effectiveTitle;
+    final String body = notification.message;
+    if (title.isEmpty && body.isEmpty) return;
+
+    Get.rawSnackbar(
+      titleText: Text(
+        title.isNotEmpty ? title : 'Drewel',
+        style: const TextStyle(
+          color: Colors.white,
+          fontSize: 14,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+      messageText: Text(
+        body,
+        maxLines: 2,
+        overflow: TextOverflow.ellipsis,
+        style: const TextStyle(
+          color: Colors.white70,
+          fontSize: 13,
+          fontWeight: FontWeight.w500,
+        ),
+      ),
+      icon: Container(
+        margin: const EdgeInsets.only(left: 8),
+        padding: const EdgeInsets.all(8),
+        decoration: BoxDecoration(
+          color: Colors.white.withValues(alpha: 0.15),
+          shape: BoxShape.circle,
+        ),
+        child: const Icon(
+          Icons.notifications_active_rounded,
+          color: Colors.white,
+          size: 20,
+        ),
+      ),
+      snackPosition: SnackPosition.TOP,
+      backgroundColor: const Color(0xFF1E293B),
+      borderRadius: 16,
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      duration: const Duration(seconds: 4),
+      isDismissible: true,
+      animationDuration: const Duration(milliseconds: 300),
+      onTap: (_) => openNotification(notification),
+    );
+  }
+
+  /// Inserts a realtime/foreground notification into the list, bumps the
+  /// unread badge and plays the matching sound. Shared by the socket event
+  /// and the foreground push handler.
+  Future<void> _absorbNotification(
+    AppNotificationModel notification, {
+    bool systemNotificationAlreadyShown = false,
+  }) async {
+    final bool isInActiveChat = _isCurrentChatActive(notification);
+    notifications
+      ..removeWhere(
+        (AppNotificationModel existing) => existing.id == notification.id,
+      )
+      ..insert(0, notification);
+    if (notifications.length > 100) {
+      notifications.removeRange(100, notifications.length);
+    }
+    if (notification.isUnread) {
+      notificationUnread.value++;
+    }
+    if (!isInActiveChat) {
+      _showInAppBanner(notification);
+      if (!systemNotificationAlreadyShown &&
+          Get.isRegistered<PushNotificationService>()) {
+        unawaited(Get.find<PushNotificationService>().showLocalNotification(
+          <String, dynamic>{
+            'id': notification.id,
+            'type': notification.type ?? 'GENERAL',
+            'title': notification.effectiveTitle,
+            'message': notification.message,
+            'deepLink': notification.effectiveDeepLink,
+          },
+        ));
+      }
+      await _playNotificationSound(notification);
+    }
   }
 
   @override
@@ -377,24 +492,6 @@ class CallStateController extends GetxService with WidgetsBindingObserver {
     await _absorbNotification(notification);
   }
 
-  /// Inserts a realtime/foreground notification into the list, bumps the
-  /// unread badge and plays the matching sound. Shared by the socket event
-  /// and the foreground push handler.
-  Future<void> _absorbNotification(AppNotificationModel notification) async {
-    notifications
-      ..removeWhere(
-        (AppNotificationModel existing) => existing.id == notification.id,
-      )
-      ..insert(0, notification);
-    if (notifications.length > 100) {
-      notifications.removeRange(100, notifications.length);
-    }
-    if (notification.isUnread) {
-      notificationUnread.value++;
-    }
-    await _playNotificationSound(notification);
-  }
-
   /// Maps a realtime notification to its Drewel sound. The event never needs
   /// deduplication here because [NotificationSoundService] collapses multiple
   /// sources for the same logical id onto a single play.
@@ -432,7 +529,7 @@ class CallStateController extends GetxService with WidgetsBindingObserver {
   }
 
   /// A passenger has just contacted this driver with a new ride request.
-  /// This is the one authoritative source for the ride-request alert — REST
+  /// This is the one authoritative source for the ride-request alert: REST
   /// refreshes and the foreground panel never re-trigger it.
   Future<void> _handleDriverContact(dynamic data) async {
     if (_role == ApiKeyConstants.driver) {
@@ -530,7 +627,6 @@ class CallStateController extends GetxService with WidgetsBindingObserver {
       return false;
     }
   }
-
 
   @override
   void onClose() {

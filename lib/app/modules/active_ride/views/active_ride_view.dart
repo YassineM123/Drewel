@@ -134,6 +134,8 @@ class ActiveRideView extends GetView<ActiveRideController> {
       final RideCancellationResult? result =
           await showRideCancellationDialog(context);
       if (result == null || !context.mounted) return;
+      await Future<void>.delayed(Duration.zero);
+      if (!context.mounted) return;
       final bool success = await controller.cancel(
         reason: result.reason,
         note: result.note,
@@ -518,7 +520,9 @@ class _RideActionSheet extends StatelessWidget {
                       children: <Widget>[
                         IconButton(
                           tooltip: 'Message ride participant',
-                          onPressed: ride.canCommunicate &&
+                          onPressed: ride.canCommunicateAs(
+                                    driver ? 'driver' : 'user',
+                                  ) &&
                                   Get.isRegistered<CallStateController>()
                               ? Get.find<CallStateController>().openRideChat
                               : null,

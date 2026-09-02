@@ -170,9 +170,9 @@ export default function Dashboard() {
   const navigate = useNavigate();
   const { socket, isConnected } = useSocket();
   const [period, setPeriod] = useState("Today");
-  const [cityFilter, setCityFilter] = useState("all");
+  const [customFrom, setCustomFrom] = useState("");
+  const [customTo, setCustomTo] = useState("");
   const [vehicleFilter, setVehicleFilter] = useState("all");
-  const [statusFilter, setStatusFilter] = useState("all");
   const [dataState, setDataState] = useState("loading");
   const [error, setError] = useState("");
   const [lastUpdated, setLastUpdated] = useState(null);
@@ -183,12 +183,42 @@ export default function Dashboard() {
   const refreshTimer = useRef(null);
   const [secondsSince, setSecondsSince] = useState(0);
 
+  const periodRange = useMemo(() => {
+    const to = new Date();
+    if (period === "7 days") {
+      const from = new Date();
+      from.setDate(from.getDate() - 6);
+      from.setHours(0, 0, 0, 0);
+      return { from: from.toISOString(), to: to.toISOString() };
+    }
+    if (period === "30 days") {
+      const from = new Date();
+      from.setDate(from.getDate() - 29);
+      from.setHours(0, 0, 0, 0);
+      return { from: from.toISOString(), to: to.toISOString() };
+    }
+    if (period === "Custom" && customFrom && customTo) {
+      return { from: new Date(customFrom).toISOString(), to: new Date(customTo).toISOString() };
+    }
+    return null;
+  }, [period, customFrom, customTo]);
+
+  const dashboardParams = useMemo(() => {
+    const params = {};
+    if (periodRange) {
+      params.from = periodRange.from;
+      params.to = periodRange.to;
+    }
+    if (vehicleFilter !== "all") params.vehicleType = vehicleFilter;
+    return params;
+  }, [periodRange, vehicleFilter]);
+
   const loadDashboard = useCallback(async ({ background = false } = {}) => {
     if (!background) setDataState("loading");
     setError("");
     try {
       const [dashRes, txRes, rankRes] = await Promise.allSettled([
-        getDashboard(),
+        getDashboard(dashboardParams),
         getPointTransactions({ limit: 7, page: 1 }),
         getDriverRankings({ limit: 5, page: 1 }),
       ]);
@@ -211,7 +241,7 @@ export default function Dashboard() {
       setError(e?.response?.data?.message || e?.message || "Unable to load dashboard data.");
       setDataState("error");
     }
-  }, []);
+  }, [dashboardParams]);
 
   useEffect(() => {
     loadDashboard();
@@ -304,7 +334,13 @@ export default function Dashboard() {
     latency: svc.key === "api" ? dashboard.health?.latencyMs : null,
   })), [dashboard.health, dataState]);
 
-  const hasFilters = cityFilter !== "all" || vehicleFilter !== "all" || statusFilter !== "all";
+  const periodLabel =
+    period === "Today" ? "Today" :
+    period === "7 days" ? "Last 7 days" :
+    period === "30 days" ? "Last 30 days" :
+    "Custom range";
+
+  const hasFilters = period !== "Today" || vehicleFilter !== "all";
 
   return (
     <div className="flex flex-col gap-6">
@@ -334,17 +370,24 @@ export default function Dashboard() {
               </button>
             ))}
           </div>
-          <select className="h-9 bg-white border border-slate-200 rounded-[10px] px-3 text-xs text-slate-600 focus:outline-none focus:ring-2 focus:ring-red-700/20" value={cityFilter} onChange={(e) => setCityFilter(e.target.value)}>
-            <option value="all">All Cities</option>
-            <option value="production">Production</option>
-          </select>
+          {period === "Custom" && (
+            <div className="flex items-center gap-1.5">
+              <input type="date" value={customFrom} onChange={(e) => setCustomFrom(e.target.value)}
+                max={customTo || undefined}
+                className="h-9 bg-white border border-slate-200 rounded-[10px] px-2.5 text-xs text-slate-600 focus:outline-none focus:ring-2 focus:ring-red-700/20" />
+              <span className="text-xs text-slate-400">to</span>
+              <input type="date" value={customTo} onChange={(e) => setCustomTo(e.target.value)}
+                min={customFrom || undefined}
+                className="h-9 bg-white border border-slate-200 rounded-[10px] px-2.5 text-xs text-slate-600 focus:outline-none focus:ring-2 focus:ring-red-700/20" />
+            </div>
+          )}
           <select className="h-9 bg-white border border-slate-200 rounded-[10px] px-3 text-xs text-slate-600 focus:outline-none focus:ring-2 focus:ring-red-700/20" value={vehicleFilter} onChange={(e) => setVehicleFilter(e.target.value)}>
             <option value="all">All Vehicles</option>
             <option value="large_pickup">Large Pickup</option>
             <option value="small_pickup">Small Pickup</option>
           </select>
           {hasFilters && (
-            <button type="button" onClick={() => { setCityFilter("all"); setVehicleFilter("all"); setStatusFilter("all"); }}
+            <button type="button" onClick={() => { setPeriod("Today"); setCustomFrom(""); setCustomTo(""); setVehicleFilter("all"); }}
               className="flex items-center gap-1.5 text-xs text-[#BE1B2C] hover:text-[#A31725] font-medium transition-colors">
               <Filter size={11} /> Clear filters
             </button>
@@ -420,15 +463,15 @@ export default function Dashboard() {
           </button>
           <button type="button" onClick={() => navigate("/rides/all")}
             className="bg-white rounded-[14px] border border-slate-200 p-4 flex flex-col gap-2 text-left hover:shadow-md hover:border-red-200 transition-all cursor-pointer">
-            <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide">Completed Today</span>
+            <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide">Completed</span>
             <strong className="text-2xl font-bold text-slate-800 tabular-nums">{number(dashboard.completedToday)}</strong>
-            <span className="text-[11px] text-slate-400">Rides completed</span>
+            <span className="text-[11px] text-slate-400">Rides completed &middot; {periodLabel}</span>
           </button>
           <button type="button" onClick={() => navigate("/rides/cancelled")}
             className="bg-white rounded-[14px] border border-slate-200 p-4 flex flex-col gap-2 text-left hover:shadow-md hover:border-red-200 transition-all cursor-pointer">
-            <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide">Cancelled Today</span>
+            <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide">Cancelled</span>
             <strong className="text-2xl font-bold text-slate-800 tabular-nums">{number(dashboard.cancelledToday)}</strong>
-            <span className="text-[11px] text-slate-400">Rides cancelled</span>
+            <span className="text-[11px] text-slate-400">Rides cancelled &middot; {periodLabel}</span>
           </button>
           <button type="button" onClick={() => navigate("/rides/disputes")}
             className={`bg-white rounded-[14px] border p-4 flex flex-col gap-2 text-left hover:shadow-md transition-all cursor-pointer ${disputes > 0 ? "border-red-300 hover:border-red-400" : "border-slate-200 hover:border-red-200"}`}>

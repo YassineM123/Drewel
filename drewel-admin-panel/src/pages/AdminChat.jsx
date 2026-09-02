@@ -259,6 +259,7 @@ function ThreadDetail({ thread, onToast }) {
                           {message.audioUrl && (
                             <button type="button" onClick={() => toggleVoicePlayback(message)}
                               disabled={loadingAudioId === message.id}
+                              aria-label={playingId === message.id ? "Pause voice message" : "Play voice message"}
                               className="ml-1 w-6 h-6 inline-flex items-center justify-center rounded-full bg-slate-100 text-slate-600 hover:bg-slate-200 transition-colors disabled:opacity-50">
                               {loadingAudioId === message.id ? (
                                 <Loader2 size={12} className="animate-spin" />

@@ -46,10 +46,6 @@ class DrewelOsmMap extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => FlutterMap(
-        key: ValueKey<String>(
-          'osm-${center.latitude.toStringAsFixed(6)}-'
-          '${center.longitude.toStringAsFixed(6)}',
-        ),
         mapController: mapController,
         options: MapOptions(
           initialCenter: _point(center),

@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  RefreshCw, Search, Send, Bell, Filter,
+  RefreshCw, Search, Send, Bell,
 } from "lucide-react";
 import {
   getAdminNotifications, sendAdminNotification, notificationsErrorMessage,
@@ -52,37 +52,57 @@ const Notifications = () => {
   const [broadcastForm, setBroadcastForm] = useState({ recipients: "both", title: "", message: "", type: "GENERAL" });
   const [broadcastLoading, setBroadcastLoading] = useState(false);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (signal) => {
     try {
       setLoading(true);
       setError("");
-      const result = await getAdminNotifications({
-        page: pagination.page,
-        limit: pagination.limit,
-        recipientType: recipientFilter || undefined,
-      });
+      const result = await getAdminNotifications(
+        {
+          page: pagination.page,
+          limit: pagination.limit,
+          recipientType: recipientFilter || undefined,
+        },
+        signal,
+      );
       setNotifications(result.notifications);
       setPagination((p) => ({ ...p, total: result.pagination.total, totalPages: result.pagination.totalPages }));
     } catch (err) {
+      if (err?.name === "CanceledError" || err?.code === "ERR_CANCELED") return;
       setError(notificationsErrorMessage(err, "Failed to load notifications."));
     } finally {
       setLoading(false);
     }
   }, [pagination.page, pagination.limit, recipientFilter]);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    const controller = new AbortController();
+    load(controller.signal);
+    return () => controller.abort();
+  }, [load]);
+
+  const filteredNotifications = useMemo(() => {
+    const term = search.trim().toLowerCase();
+    if (!term) return notifications;
+    return notifications.filter((notification) =>
+      [notification.title, notification.message, notification.type]
+        .some((value) => String(value || "").toLowerCase().includes(term)),
+    );
+  }, [notifications, search]);
 
   const handleBroadcast = useCallback(async () => {
     if (!broadcastForm.message.trim()) return;
     setBroadcastLoading(true);
     try {
       await sendAdminNotification(broadcastForm);
-      setToast("Notification broadcast sent successfully.");
+      setToast({ message: "Notification broadcast sent successfully.", type: "success" });
       setBroadcastModal(false);
       setBroadcastForm({ recipients: "both", title: "", message: "", type: "GENERAL" });
       load();
     } catch (err) {
-      setToast(notificationsErrorMessage(err, "Failed to send notification."));
+      setToast({
+        message: notificationsErrorMessage(err, "Failed to send notification."),
+        type: "error",
+      });
     } finally {
       setBroadcastLoading(false);
     }
@@ -96,7 +116,7 @@ const Notifications = () => {
 
   return (
     <div className="space-y-6">
-      {toast && <Toast message={toast} type={toast.includes("Failed") ? "error" : "success"} onClose={() => setToast(null)} />}
+      {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
       <SectionHeader
         title="Notifications"
         description="View all in-app and push notifications sent across the platform. Broadcast new messages to users and drivers."
@@ -117,20 +137,29 @@ const Notifications = () => {
           <div className="min-w-[200px] flex-1">
             <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search notifications..." leftIcon={<Search size={14} />} />
           </div>
-          <Select value={recipientFilter} onChange={setRecipientFilter} options={RECIPIENT_OPTIONS} />
+          <Select
+            value={recipientFilter}
+            onChange={(value) => {
+              setRecipientFilter(value);
+              setPagination((previous) => ({ ...previous, page: 1 }));
+            }}
+            options={RECIPIENT_OPTIONS}
+          />
         </div>
 
         {loading ? (
           <LoadingState label="Loading notifications..." />
         ) : error ? (
           <ErrorState title="Unable to load notifications" description={error} action={<Button variant="secondary" onClick={load}>Retry</Button>} />
-        ) : notifications.length === 0 ? (
-          <EmptyState title="No notifications found" description="No notifications have been sent yet." icon={<Bell size={24} className="text-slate-300" />} />
+        ) : filteredNotifications.length === 0 ? (
+          <EmptyState
+            title="No notifications found"
+            description={search ? "No notifications on this page match your search." : "No notifications have been sent yet."}
+            icon={<Bell size={24} className="text-slate-300" />}
+          />
         ) : (
           <div className="divide-y divide-slate-100">
-            {notifications
-              .filter((n) => !search || n.title?.toLowerCase().includes(search.toLowerCase()) || n.message?.toLowerCase().includes(search.toLowerCase()))
-              .map((n) => (
+            {filteredNotifications.map((n) => (
               <div
                 key={n.id}
                 onClick={() => setSelected(n)}

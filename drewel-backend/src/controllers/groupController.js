@@ -77,7 +77,14 @@ export const getGroups = async (req, res) => {
 export const getGroupById = async (req, res) => {
   const { groupId } = req.params;
   try {
-    const group = await Group.findById(groupId)
+    if (!mongoose.Types.ObjectId.isValid(groupId)) {
+      return sendResponse(res, 400, false, "Please provide a valid group ID");
+    }
+    const userId = req.user._id;
+    const group = await Group.findOne({
+      _id: groupId,
+      $or: [{ createdBy: userId }, { members: userId }],
+    })
       .populate("members", "fullName email")
       .populate("createdBy", "fullName email");
     if (!group) {

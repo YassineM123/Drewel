@@ -12,6 +12,16 @@ import '../app/data/apis/communication_api_client.dart';
 import '../app/data/repositories/device_token_repository.dart';
 import 'deep_link_service.dart';
 
+/// Background message handler for FCM. Must be a top-level function annotated with vm:entry-point.
+@pragma('vm:entry-point')
+Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
+  try {
+    await Firebase.initializeApp();
+  } catch (_) {}
+  debugPrint(
+      'Background push received: ${message.messageId} (${message.data['type'] ?? 'GENERAL'})');
+}
+
 /// The single push entry point for Drewel.
 ///
 /// FCM delivery is fully optional: when Firebase is not configured yet (no
@@ -29,6 +39,7 @@ class PushNotificationService extends GetxService {
   bool _fcmAvailable = false;
   bool _init = false;
   bool _permissionRequested = false;
+  String? _pendingInitialDeepLink;
 
   /// Invoked for every FCM message received while the app is in the
   /// foreground. The data map mirrors the backend `notification:new` payload.
@@ -39,6 +50,7 @@ class PushNotificationService extends GetxService {
   void Function(String deepLink)? onDeepLink;
 
   bool get fcmAvailable => _fcmAvailable;
+  String? get pendingInitialDeepLink => _pendingInitialDeepLink;
 
   /// Ids must match the OS channels created in MainActivity.kt and the
   /// backend `notificationChannelForType` mapping.
@@ -46,21 +58,45 @@ class PushNotificationService extends GetxService {
       <AndroidNotificationChannel>[
     AndroidNotificationChannel(
       'drewel_ride_requests',
-      'New ride requests',
-      description: 'A new ride request is available for the driver.',
+      'Ride Requests',
+      description: 'High priority ride requests for drivers.',
       importance: Importance.max,
+    ),
+    AndroidNotificationChannel(
+      'drewel_ride_updates',
+      'Ride Updates',
+      description:
+          'Live ride updates such as driver arrived, trip started and completed.',
+      importance: Importance.high,
     ),
     AndroidNotificationChannel(
       'drewel_messages',
       'Messages',
-      description: 'New messages in an active ride chat.',
+      description: 'Chat and voice messages in active rides.',
       importance: Importance.high,
     ),
     AndroidNotificationChannel(
+      'drewel_calls',
+      'Calls',
+      description: 'Incoming and missed calls.',
+      importance: Importance.max,
+    ),
+    AndroidNotificationChannel(
+      'drewel_payments',
+      'Payments & Points',
+      description: 'Points balance, transactions, and purchase requests.',
+      importance: Importance.defaultImportance,
+    ),
+    AndroidNotificationChannel(
+      'drewel_general',
+      'General Notifications',
+      description: 'Account, verification and system announcements.',
+      importance: Importance.defaultImportance,
+    ),
+    AndroidNotificationChannel(
       'drewel_rides',
-      'Ride updates',
-      description:
-          'General ride updates such as driver accepted and ride completed.',
+      'Ride updates (Legacy)',
+      description: 'General ride updates.',
       importance: Importance.defaultImportance,
     ),
     AndroidNotificationChannel(
@@ -74,14 +110,22 @@ class PushNotificationService extends GetxService {
   static AndroidNotificationChannel channelForType(String type) {
     final String t = type.toUpperCase();
     if (t == 'RIDE_REQUEST' || t == 'NEW_RIDE') return channels[0];
-    if (t == 'RIDE_MESSAGE' || t == 'CHAT') return channels[1];
+    if (t == 'RIDE_MESSAGE' || t == 'CHAT') return channels[2];
+    if (t.startsWith('CALL')) return channels[3];
+    if (t.startsWith('POINTS') ||
+        t.startsWith('OFFER_POINTS') ||
+        t.startsWith('RIDE_POINTS') ||
+        t.startsWith('WELCOME') ||
+        t == 'POINT_PURCHASE_REQUEST_UPDATED') {
+      return channels[4];
+    }
     if (t.startsWith('RIDE') ||
         t.startsWith('DRIVER_ARRIVED') ||
         t.startsWith('TRIP_OFFER') ||
         t.startsWith('OFFER')) {
-      return channels[2];
+      return channels[1];
     }
-    return channels[3];
+    return channels[5];
   }
 
   static String soundAssetForType(String type) {
@@ -89,13 +133,16 @@ class PushNotificationService extends GetxService {
     if (t == 'RIDE_REQUEST' || t == 'NEW_RIDE') return 'drewel_ride_request';
     if (t == 'RIDE_MESSAGE' || t == 'CHAT') return 'drewel_message';
     if (t == 'DRIVER_ARRIVED') return 'drewel_driver_arrived';
+    if (t.startsWith('CALL')) return 'drewel_call';
     if (t == 'POINTS_LOW_BALANCE' || t == 'POINTS_INSUFFICIENT_BALANCE') {
       return 'drewel_warning';
     }
     if (t.startsWith('POINTS') ||
         t.startsWith('WELCOME') ||
         t.startsWith('OFFER_POINTS') ||
-        t.startsWith('RIDE_POINTS')) {
+        t.startsWith('RIDE_POINTS') ||
+        t == 'RIDE_COMPLETED' ||
+        t == 'POINT_PURCHASE_REQUEST_UPDATED') {
       return 'drewel_success';
     }
     return 'drewel_notification';
@@ -107,6 +154,13 @@ class PushNotificationService extends GetxService {
 
     _localNotifications = FlutterLocalNotificationsPlugin();
     try {
+      final NotificationAppLaunchDetails? launchDetails =
+          await _localNotifications!.getNotificationAppLaunchDetails();
+      if (launchDetails?.didNotificationLaunchApp == true &&
+          launchDetails?.notificationResponse?.payload?.isNotEmpty == true) {
+        _pendingInitialDeepLink = launchDetails!.notificationResponse!.payload;
+      }
+
       await _localNotifications!.initialize(
         settings: const InitializationSettings(
           android: AndroidInitializationSettings('ic_stat_drewel'),
@@ -141,6 +195,7 @@ class PushNotificationService extends GetxService {
     // ---- Firebase / FCM (optional) ----
     try {
       await Firebase.initializeApp();
+      FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
       _fcmAvailable = true;
     } catch (error) {
       debugPrint('Firebase unavailable; push delivery disabled: $error');
@@ -150,13 +205,32 @@ class PushNotificationService extends GetxService {
 
     final FirebaseMessaging messaging = FirebaseMessaging.instance;
     try {
-      await messaging.requestPermission(alert: true, badge: true, sound: true);
+      await messaging.requestPermission(
+        alert: true,
+        badge: true,
+        sound: true,
+        provisional: false,
+      );
+      await messaging.setForegroundNotificationPresentationOptions(
+        alert:
+            false, // Foreground notifications are handled gracefully by in-app banners
+        badge: true,
+        sound: false,
+      );
     } catch (_) {}
 
     FirebaseMessaging.onMessage.listen(_handleForegroundMessage);
     FirebaseMessaging.onMessageOpenedApp.listen(_handleOpenedMessage);
-    final RemoteMessage? initial = await messaging.getInitialMessage();
-    if (initial != null) _handleOpenedMessage(initial);
+    try {
+      final RemoteMessage? initial = await messaging.getInitialMessage();
+      if (initial != null) {
+        final String link = initial.data['deepLink']?.toString() ?? '';
+        if (link.isNotEmpty) {
+          _pendingInitialDeepLink = link;
+        }
+        _handleOpenedMessage(initial);
+      }
+    } catch (_) {}
 
     messaging.onTokenRefresh.listen((String token) {
       unawaited(_registerToken(token));
@@ -166,6 +240,13 @@ class PushNotificationService extends GetxService {
     } catch (error) {
       debugPrint('FCM token unavailable: $error');
     }
+  }
+
+  /// Consumes and returns any pending deep link from an app cold launch tap.
+  String? consumePendingDeepLink() {
+    final String? link = _pendingInitialDeepLink;
+    _pendingInitialDeepLink = null;
+    return link;
   }
 
   Future<void> _handleForegroundMessage(RemoteMessage message) async {
@@ -178,9 +259,9 @@ class PushNotificationService extends GetxService {
       data['body'] ??= note.body ?? '';
       data['message'] ??= note.body ?? '';
     }
+    data['_systemNotificationShown'] = true;
+    await showLocalNotification(data);
     onForegroundMessage?.call(data);
-    // Foreground apps must surface the notification themselves.
-    await _showLocalNotification(data);
   }
 
   void _handleOpenedMessage(RemoteMessage message) {
@@ -200,7 +281,7 @@ class PushNotificationService extends GetxService {
     }
   }
 
-  Future<void> _showLocalNotification(Map<String, dynamic> data) async {
+  Future<void> showLocalNotification(Map<String, dynamic> data) async {
     final FlutterLocalNotificationsPlugin? plugin = _localNotifications;
     if (plugin == null) return;
     final String type = (data['type'] ?? 'GENERAL').toString();

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import PropTypes from "prop-types";
-import { ArrowLeft, Plus, X, ShieldAlert } from "lucide-react";
+import { ArrowLeft, Navigation, Plus, X, ShieldAlert } from "lucide-react";
 import {
   addRideNote,
   cancelRide,
@@ -231,7 +231,12 @@ const RideDetail = () => {
             <h1 className="text-xl font-semibold text-slate-800">Reservation {ride.reference || ride.id || ride._id}</h1>
             <p className="text-sm text-slate-500 mt-0.5">Operational evidence and controlled resolution actions.</p>
           </div>
-          <Badge variant={ride.status === "disputed" ? "warning" : terminal(ride.status) ? (String(ride.status).includes("cancel") ? "rejected" : "approved") : "info"} label={label(ride.status)} />
+          <div className="flex items-center gap-2">
+            {activeOrDisputed(ride.status) && (
+              <Button variant="secondary" size="sm" icon={<Navigation size={14} />} onClick={() => navigate(`/live-map?rideId=${encodeURIComponent(ride.id || ride._id || rideId)}`)}>Track Live</Button>
+            )}
+            <Badge variant={ride.status === "disputed" ? "warning" : terminal(ride.status) ? (String(ride.status).includes("cancel") ? "rejected" : "approved") : "info"} label={label(ride.status)} />
+          </div>
         </div>
       </div>
 

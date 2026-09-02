@@ -8,10 +8,13 @@ export const HEALTH_SERVICE_IDS = [
   "google_maps",
   "google_routes",
   "chat",
-  "secure_calls",
   "notifications",
   "storage",
 ];
+
+// Historical health/incident records may still reference the retired call
+// service. Accept those records without scheduling new runtime checks for it.
+const HEALTH_SERVICE_SCHEMA_IDS = [...HEALTH_SERVICE_IDS, "secure_calls"];
 
 export const HEALTH_STATUSES = ["operational", "degraded", "outage", "maintenance"];
 
@@ -19,7 +22,7 @@ const healthCheckSchema = new mongoose.Schema(
   {
     serviceId: {
       type: String,
-      enum: HEALTH_SERVICE_IDS,
+      enum: HEALTH_SERVICE_SCHEMA_IDS,
       required: true,
       index: true,
     },
@@ -57,7 +60,7 @@ const incidentSchema = new mongoose.Schema(
   {
     incidentId: { type: String, required: true, unique: true },
     title: { type: String, required: true, maxlength: 300 },
-    serviceId: { type: String, enum: HEALTH_SERVICE_IDS, required: true },
+    serviceId: { type: String, enum: HEALTH_SERVICE_SCHEMA_IDS, required: true },
     severity: {
       type: String,
       enum: ["critical", "warning", "info"],

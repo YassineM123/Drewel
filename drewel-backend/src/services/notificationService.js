@@ -67,8 +67,14 @@ export const notificationChannelForType = (type) => {
   const t = String(type || "").toUpperCase();
   if (t === "RIDE_REQUEST" || t === "NEW_RIDE") return "drewel_ride_requests";
   if (t === "RIDE_MESSAGE" || t === "CHAT") return "drewel_messages";
-  if (t.startsWith("RIDE_") || t === "DRIVER_ARRIVED") return "drewel_rides";
-  return "drewel_system";
+  if (t.startsWith("CALL_") || t === "CALL") return "drewel_calls";
+  if (t.startsWith("POINTS") || t.startsWith("OFFER_POINTS") || t.startsWith("RIDE_POINTS") || t.startsWith("WELCOME") || t === "POINT_PURCHASE_REQUEST_UPDATED") {
+    return "drewel_payments";
+  }
+  if (t.startsWith("RIDE_") || t === "DRIVER_ARRIVED" || t.startsWith("TRIP_OFFER") || t === "OFFER") {
+    return "drewel_ride_updates";
+  }
+  return "drewel_general";
 };
 
 export const notificationSoundForType = (type) => {
@@ -76,6 +82,18 @@ export const notificationSoundForType = (type) => {
   if (t === "RIDE_REQUEST" || t === "NEW_RIDE") return "drewel_ride_request";
   if (t === "RIDE_MESSAGE" || t === "CHAT") return "drewel_message";
   if (t === "DRIVER_ARRIVED") return "drewel_driver_arrived";
+  if (t.startsWith("CALL_") || t === "CALL") return "drewel_call";
+  if (t === "POINTS_LOW_BALANCE" || t === "POINTS_INSUFFICIENT_BALANCE") return "drewel_warning";
+  if (
+    t.startsWith("POINTS") ||
+    t.startsWith("WELCOME") ||
+    t.startsWith("OFFER_POINTS") ||
+    t.startsWith("RIDE_POINTS") ||
+    t === "RIDE_COMPLETED" ||
+    t === "POINT_PURCHASE_REQUEST_UPDATED"
+  ) {
+    return "drewel_success";
+  }
   return "drewel_notification";
 };
 
@@ -84,20 +102,28 @@ export const pushPriorityForType = (type) => {
   if (
     t === "RIDE_REQUEST" ||
     t === "NEW_RIDE" ||
-    t === "DRIVER_ARRIVED"
+    t === "DRIVER_ARRIVED" ||
+    t.startsWith("CALL_") ||
+    t === "CALL"
   ) {
     return NOTIFICATION_PRIORITIES.CRITICAL;
   }
   if (
     t === "RIDE_ACCEPTED" ||
     t === "RIDE_CONFIRMED" ||
+    t === "RIDE_ON_THE_WAY" ||
     t === "RIDE_CANCELLED" ||
     t === "RIDE_COMPLETED" ||
     t === "RIDE_STARTED" ||
     t === "RIDE_DRIVER_CANCELLED" ||
     t === "RIDE_PASSENGER_CANCELLED" ||
     t === "POINTS_LOW_BALANCE" ||
-    t === "POINTS_INSUFFICIENT_BALANCE"
+    t === "POINTS_INSUFFICIENT_BALANCE" ||
+    t === "DOCUMENT_APPROVED" ||
+    t === "DOCUMENT_REJECTED" ||
+    t === "DOCUMENT_EXPIRING" ||
+    t === "DRIVER_ACCOUNT_APPROVED" ||
+    t === "DRIVER_ACCOUNT_REJECTED"
   ) {
     return NOTIFICATION_PRIORITIES.HIGH;
   }
@@ -105,10 +131,7 @@ export const pushPriorityForType = (type) => {
     t === "RIDE_MESSAGE" ||
     t === "CHAT" ||
     t.startsWith("POINTS") ||
-    t === "DOCUMENT_APPROVED" ||
-    t === "DOCUMENT_REJECTED" ||
-    t === "DRIVER_ACCOUNT_APPROVED" ||
-    t === "DRIVER_ACCOUNT_REJECTED"
+    t.startsWith("TRIP_OFFER")
   ) {
     return NOTIFICATION_PRIORITIES.NORMAL;
   }
@@ -130,6 +153,7 @@ export const isActionableType = (type) => {
     t === "TRIP_OFFER" ||
     t === "NEW_RIDE" ||
     t === "RIDE_REQUEST" ||
+    t.startsWith("CALL") ||
     t.startsWith("POINTS") ||
     t.startsWith("DOCUMENT") ||
     t.startsWith("DRIVER_ACCOUNT")
@@ -196,6 +220,7 @@ export const sendPushToUser = async ({
   body,
   data = {},
   type = "GENERAL",
+  deepLink = "",
 }) => {
   if (!userId) return { sent: 0, skipped: true };
   const tokens = await DeviceToken.find({ userId, isActive: true })
@@ -225,13 +250,26 @@ export const sendPushToUser = async ({
   const channel = notificationChannelForType(type);
   const sound = notificationSoundForType(type);
   const priority = pushPriorityForType(type);
+  const effectiveDeepLink = String(data?.deepLink || deepLink || "").trim();
+
+  // FCM data dictionary must consist strictly of string keys and string values
+  const stringifiedData = {};
+  if (data && typeof data === "object") {
+    for (const [k, v] of Object.entries(data)) {
+      if (v !== undefined && v !== null) {
+        stringifiedData[k] = typeof v === "object" ? JSON.stringify(v) : String(v);
+      }
+    }
+  }
+  stringifiedData.type = String(type || "GENERAL");
+  stringifiedData.click_action = "FLUTTER_NOTIFICATION_CLICK";
+  if (effectiveDeepLink) {
+    stringifiedData.deepLink = effectiveDeepLink;
+  }
+
   const payload = {
-    data: {
-      ...data,
-      type: String(type || "GENERAL"),
-      click_action: "FLUTTER_NOTIFICATION_CLICK",
-    },
-    notification: { title, body, sound },
+    data: stringifiedData,
+    notification: { title: String(title || "Drewel"), body: String(body || ""), sound },
     android: {
       priority: priority >= NOTIFICATION_PRIORITIES.HIGH ? "high" : "normal",
       notification: {

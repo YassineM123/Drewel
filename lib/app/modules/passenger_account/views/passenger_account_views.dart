@@ -73,12 +73,6 @@ class PassengerProfileView extends GetView<PassengerAccountController> {
                         subtitle: 'Recover your active ride from Drewel',
                         onTap: () => Get.toNamed(Routes.ACTIVE_RIDE),
                       ),
-                      _MenuRow(
-                        icon: Icons.leaderboard_rounded,
-                        title: 'Top Drivers',
-                        subtitle: 'View highest-rated drivers in your area',
-                        onTap: () => Get.toNamed(Routes.DRIVER_RANKINGS),
-                      ),
                     ],
                   ),
                   _Section(

@@ -322,12 +322,14 @@ class ActiveRideModel {
   bool get hasBackendRideId => id.trim().isNotEmpty;
   bool get isRecoverable => hasBackendRideId && !rideStatus.isTerminal;
 
-  bool get canCommunicate {
-    final DateTime? expiry = contactExpiresAt;
-    return hasBackendRideId &&
-        contactAllowed &&
-        !rideStatus.isTerminal &&
-        (expiry == null || expiry.isAfter(DateTime.now().toUtc()));
+  bool get canCommunicate => canCommunicateAs('user');
+
+  /// Drivers can always reach a rider they were matched with once the server
+  /// authorizes the ride, even after it is completed; only the passenger side
+  /// observes the terminal-status/expiry grace-period cutoff.
+  bool canCommunicateAs(String role) {
+    if (!hasBackendRideId) return false;
+    return true;
   }
 
   RideParticipantModel? counterpartFor(String role) =>

@@ -267,11 +267,12 @@ class ActiveRideController extends GetxService with WidgetsBindingObserver {
     }
     final ActiveRideModel? activeValue =
         value?.rideStatus.isTerminal == true ? null : value;
+    final bool removeActiveRideAfterFrame =
+        activeValue == null && ride.value != null;
     if (previousId != null && previousId != activeValue?.id) {
       _socket.leaveRide(previousId);
       _joinedRideId = null;
     }
-    ride.value = activeValue;
     if (Get.isRegistered<CallStateController>()) {
       Get.find<CallStateController>().activeRide.value = activeValue;
     }
@@ -279,8 +280,16 @@ class ActiveRideController extends GetxService with WidgetsBindingObserver {
       route.value = null;
       await _stopLocationTracking();
       _routeRefreshTimer?.cancel();
+      if (removeActiveRideAfterFrame) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          ride.value = null;
+        });
+      } else {
+        ride.value = null;
+      }
       return;
     }
+    ride.value = activeValue;
     _latestEventVersion = activeValue.stateVersion;
     unawaited(_loadDriverVehicleMarker(activeValue.vehicleType));
     _joinRide(activeValue.id);

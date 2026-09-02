@@ -29,6 +29,7 @@ import '../../../data/constants/icons_constant.dart';
 import '../../../data/constants/string_constants.dart';
 import '../../../data/apis/api_constants/api_url_constants.dart';
 import '../../../data/config/app_config.dart';
+import '../../../data/services/location_search_service.dart';
 import '../../communication/controllers/call_state_controller.dart';
 import '../utils/marketplace_driver_sort.dart';
 
@@ -61,7 +62,6 @@ class UserHomeController extends GetxController
   Timer? _reverseGeocodeDebounce;
   int _reverseGeocodeRequestId = 0;
   static const int _reverseGeocodeDebounceMs = 500;
-  static const Duration _placesHttpTimeout = Duration(seconds: 10);
 
   // Bumped on high-frequency, map-only changes (live driver marker
   // animation) so the search bar / bottom sheet don't rebuild on every
@@ -569,62 +569,26 @@ class UserHomeController extends GetxController
     increment();
   }
 
-  /// Get address from coordinates using Google Geocoding API (reverse geocoding)
+  /// Get address from coordinates (with Google + OSM fallback)
   Future<void> getAddressFromCoordinates(
     LatLng location, {
     int? requestId,
   }) async {
     final int activeRequestId = requestId ?? _reverseGeocodeRequestId;
-    final Uri uri = Uri.parse(
-      'https://maps.googleapis.com/maps/api/geocode/json?'
-      'latlng=${location.latitude},${location.longitude}'
-      '&key=${ApiKeyConstants.googleMapKey}',
-    );
-
-    final http.Response? response = await _getWithTimeout(uri);
+    final String? address =
+        await DrewelLocationSearchService.instance.reverseGeocode(location);
     if (!_canUpdateView || activeRequestId != _reverseGeocodeRequestId) return;
 
-    if (response == null) {
-      selectedLocationAddress.value = 'Location selected';
-    } else if (response.statusCode == 200) {
-      final data = json.decode(response.body);
-      if (data['status'] == 'OK' && data['results'].isNotEmpty) {
-        String address = data['results'][0]['formatted_address'];
-        selectedLocationAddress.value = address;
-        locationController.text = address;
-      } else {
-        debugPrint('Geocoding error: ${data['status']}');
-        selectedLocationAddress.value = 'Location selected';
-      }
+    if (address != null && address.trim().isNotEmpty) {
+      selectedLocationAddress.value = address.trim();
+      locationController.text = address.trim();
     } else {
-      debugPrint('Geocoding HTTP error: ${response.statusCode}');
       selectedLocationAddress.value = 'Location selected';
     }
     increment();
   }
 
-  /// Shared GET helper for Places/Geocoding HTTP calls: applies a timeout so
-  /// a slow/unreachable Google endpoint can't hang search or reverse-geocode
-  /// indefinitely, and reports a user-facing message distinguishing timeout
-  /// vs network vs generic failure instead of one generic error for everything.
-  Future<http.Response?> _getWithTimeout(
-    Uri uri, {
-    void Function(String message)? onError,
-  }) async {
-    try {
-      return await http.get(uri).timeout(_placesHttpTimeout);
-    } on TimeoutException {
-      debugPrint('Places/Geocoding request timed out: $uri');
-      onError?.call('Search timed out. Check your connection and try again.');
-    } on SocketException catch (error) {
-      debugPrint('Places/Geocoding network error: $error');
-      onError?.call('No internet connection. Check your network and try again.');
-    } catch (error) {
-      debugPrint('Places/Geocoding request failed: $error');
-      onError?.call('Unable to find locations. Try again.');
-    }
-    return null;
-  }
+
 
   /// Handle marker drag end
   void onMarkerDragEnd(LatLng newPosition) {
@@ -1546,46 +1510,19 @@ class UserHomeController extends GetxController
     );
   }
 
-  /// Fetch autocomplete suggestions from Google Places HTTP API
+  /// Fetch autocomplete suggestions (Google Places + OSM fallback)
   Future<void> _fetchPlaceSuggestions(String input) async {
     final int requestId = _placeSearchRequestId;
-    final uri = Uri.parse(
-        'https://maps.googleapis.com/maps/api/place/autocomplete/json'
-        '?input=$input'
-        '&key=${ApiKeyConstants.googleMapKey}'
-        '&language=en'
-        '&components=country:${AppConfig.marketplaceCountryCode}');
-
-    String? failureMessage;
-    final http.Response? response = await _getWithTimeout(
-      uri,
-      onError: (String message) => failureMessage = message,
+    final List<Prediction> results =
+        await DrewelLocationSearchService.instance.searchPlaces(
+      input,
+      nearLocation: referenceLocation,
     );
+
     if (!_canUpdateView || requestId != _placeSearchRequestId) return;
 
-    if (response == null) {
-      placeSuggestions.clear();
-      placesSearchError.value =
-          failureMessage ?? 'Unable to find locations. Try again.';
-    } else if (response.statusCode == 200) {
-      final data = json.decode(response.body);
-      final String status = data['status'] ?? '';
-      if (status == 'OK') {
-        final List preds = data['predictions'] ?? [];
-        placeSuggestions.value =
-            preds.map((e) => Prediction.fromJson(e)).toList();
-      } else if (status == 'ZERO_RESULTS') {
-        placeSuggestions.clear();
-      } else {
-        placeSuggestions.clear();
-        placesSearchError.value = status == 'REQUEST_DENIED'
-            ? 'Location search is temporarily unavailable.'
-            : 'Unable to find locations. Try again.';
-      }
-    } else {
-      placeSuggestions.clear();
-      placesSearchError.value = 'Unable to find locations. Try again.';
-    }
+    placeSuggestions.value = results;
+    placesSearchError.value = '';
     isPlacesLoading.value = false;
     increment();
   }
@@ -2084,59 +2021,35 @@ class UserHomeController extends GetxController
       TextPosition(offset: prediction.description?.length ?? 0),
     );
 
-    if (prediction.placeId != null) {
-      final placeId = prediction.placeId!;
-      final uri = Uri.parse(
-          "https://maps.googleapis.com/maps/api/place/details/json?place_id=$placeId&key=${ApiKeyConstants.googleMapKey}");
+    final ({LatLng point, String address})? details =
+        await DrewelLocationSearchService.instance.getPlaceDetails(prediction);
+    if (!_canUpdateView) return;
 
-      final http.Response? response = await _getWithTimeout(uri);
+    if (details != null) {
+      mapPosition = details.point;
+
+      // Set the selected location (this will add a draggable marker)
+      selectedLocationLat.value = details.point.latitude;
+      selectedLocationLng.value = details.point.longitude;
+      selectedLocationAddress.value = details.address;
+      isSelectedLocationSet.value = true;
+
+      // Update markers and filter drivers
+      updateDriverMarkers();
+      filterDriversByVisibleBounds();
+      unawaited(_refreshDiscoveryForReferenceLocation(showLoader: true));
+
+      await _animateCamera(
+        CameraUpdate.newCameraPosition(
+          CameraPosition(
+            target: mapPosition,
+            zoom: 14,
+          ),
+        ),
+      );
       if (!_canUpdateView) return;
 
-      if (response == null) {
-        CommonWidgets.snackBarView(
-          title: 'Unable to open this location. Try again.',
-          success: false,
-        );
-      } else if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-
-        if (data["status"] == "OK") {
-          final location = data["result"]["geometry"]["location"];
-          final lat = location["lat"];
-          final lng = location["lng"];
-
-          mapPosition = LatLng(lat, lng);
-
-          // Set the selected location (this will add a draggable marker)
-          selectedLocationLat.value = lat;
-          selectedLocationLng.value = lng;
-          selectedLocationAddress.value = prediction.description ?? '';
-          isSelectedLocationSet.value = true;
-
-          // Update markers and filter drivers
-          updateDriverMarkers();
-          filterDriversByVisibleBounds();
-          unawaited(_refreshDiscoveryForReferenceLocation(showLoader: true));
-
-          await _animateCamera(
-            CameraUpdate.newCameraPosition(
-              CameraPosition(
-                target: mapPosition,
-                zoom: 14,
-              ),
-            ),
-          );
-          if (!_canUpdateView) return;
-
-          increment();
-        } else {
-          print("Place Details Error: ${data["status"]}");
-          // Error silently - don't show snackbar
-        }
-      } else {
-        print("HTTP Error: ${response.statusCode}");
-        // Error silently - don't show snackbar
-      }
+      increment();
     }
   }
 

@@ -100,7 +100,6 @@ class DriverOnlineService {
 
     if (!isAndroidPlatform) return true;
     _initCommon(intervalMs);
-    await _requestAndroidBackgroundSurvivalPermissions();
     await FlutterForegroundTask.saveData(
       key: _sessionTaskKey,
       value: sessionId,
@@ -179,16 +178,6 @@ class DriverOnlineService {
     }
   }
 
-  static Future<void> _requestAndroidBackgroundSurvivalPermissions() async {
-    if (!isAndroidPlatform) return;
-    try {
-      if (!await FlutterForegroundTask.isIgnoringBatteryOptimizations) {
-        await FlutterForegroundTask.requestIgnoreBatteryOptimization();
-      }
-    } catch (error) {
-      debugPrint('Battery optimization permission unavailable: $error');
-    }
-  }
 }
 
 bool get isAndroidPlatform =>

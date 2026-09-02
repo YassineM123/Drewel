@@ -57,6 +57,7 @@ app.*.map.json
 drewel-backend/.env
 /tmp/device-check/
 /tmp/
+/release-artifacts/
 **/dist/
 **/build/
 android/key.properties

@@ -10,7 +10,6 @@ const SERVICE_NAMES = {
   google_maps: "Google Maps",
   google_routes: "Google Routes",
   chat: "In-App Chat",
-  secure_calls: "Secure Calls",
   notifications: "Notifications",
   storage: "File Storage",
 };
@@ -97,10 +96,6 @@ const SERVICE_CHECKERS = {
   google_maps: checkGoogleMaps,
   google_routes: checkGoogleRoutes,
   chat: async () => ({ status: Boolean(global.io) ? "operational" : "degraded", latencyMs: 0 }),
-  secure_calls: async () => {
-    const configured = Boolean(process.env.AGORA_APP_ID);
-    return { status: configured ? "operational" : "degraded", latencyMs: 0, lastError: configured ? "" : "Agora not configured" };
-  },
   notifications: checkNotifications,
   storage: checkStorage,
 };

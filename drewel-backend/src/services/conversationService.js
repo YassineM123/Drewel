@@ -328,15 +328,21 @@ export const touchConversationWithMessage = async ({ ride, message, participantR
         title: senderDisplayName,
         message: notificationBody,
         eventKey,
+      },
+      // Ride chat APIs are keyed by Ride._id. Keep the legacy
+      // `conversationId` key compatible with older mobile clients while also
+      // publishing the canonical rideId. `$set` repairs an existing
+      // idempotent notification if it was first created by the old contract.
+      $set: {
         rideId: ride._id,
-        conversationId: conversation._id,
+        conversationId: ride._id,
         messageId: String(message._id),
-        deepLink: `drewel://chat/ride?conversationId=${String(conversation._id)}`,
+        deepLink: `drewel://chat/ride?rideId=${String(ride._id)}`,
         data: {
           rideId: String(ride._id),
           rideReference: conversation.rideReference,
           messageId: String(message._id),
-          conversationId: String(conversation._id),
+          conversationId: String(ride._id),
           senderRole: participantRole,
           senderName: senderDisplayName,
         },

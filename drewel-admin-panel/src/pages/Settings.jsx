@@ -17,7 +17,6 @@ const operationalSettings = [
 const NOTIF_LABELS = [
   { key: "sla_breach",         label: "SLA breach alerts",            description: "Notified when a ride exceeds the stuck-ride threshold" },
   { key: "stuck_ride",         label: "Stuck ride alerts",             description: "Notified when a ride is automatically flagged as stuck" },
-  { key: "reported_calls",     label: "Reported calls",               description: "Notified when a driver or user reports a call for safety review" },
   { key: "low_balance",        label: "Low driver balance warnings",  description: "Notified when a driver's point balance drops below threshold" },
   { key: "restricted_changes", label: "Restricted account changes",   description: "Notified when a driver or user account is restricted or unrestricted" },
 ];
@@ -32,7 +31,6 @@ function getAdminInfo() {
 
 const Settings = () => {
   const [settings, setSettings] = useState(null);
-  const [adminSettings, setAdminSettings] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [editSetting, setEditSetting] = useState(null);
@@ -49,21 +47,23 @@ const Settings = () => {
   const admin = getAdminInfo();
   const adminName = admin.fullName || admin.name || "Admin";
   const adminEmail = admin.email || "—";
-  const adminRole = admin.role || "admin";
+  const adminRole = String(admin.role || "admin").trim().toLowerCase();
+  const isOwner = adminRole === "owner";
 
   const load = useCallback(async (signal) => {
     try {
       setLoading(true);
       setError("");
-      const [pointResult, adminResult] = await Promise.allSettled([
-        getPointSettings(signal),
-        getAdminSettings(signal),
-      ]);
-      if (pointResult.status === "fulfilled") {
-        setSettings(pointResult.value?.settings || pointResult.value);
-      }
-      if (adminResult.status === "fulfilled") {
-        setAdminSettings(adminResult.value?.settings || adminResult.value);
+      const adminResult = await getAdminSettings(signal);
+      const fallbackSettings = adminResult?.settings || adminResult;
+      setSettings(fallbackSettings);
+
+      const pointResult = await Promise.allSettled([getPointSettings(signal)]);
+      if (pointResult[0].status === "fulfilled") {
+        setSettings({
+          ...fallbackSettings,
+          ...(pointResult[0].value?.settings || pointResult[0].value),
+        });
       }
     } catch (err) {
       if (err?.name === "CanceledError" || err?.code === "ERR_CANCELED") return;
@@ -88,7 +88,7 @@ const Settings = () => {
   };
 
   const handleSaveSetting = async () => {
-    if (!editSetting) return;
+    if (!editSetting || !isOwner) return;
     setSaveLoading(true);
     try {
       const values = {};
@@ -108,7 +108,13 @@ const Settings = () => {
     }
   };
 
-  const valid = editReason.trim().length >= 3 && editValue !== "" && !isNaN(Number(editValue));
+  const numericEditValue = Number(editValue);
+  const valid = isOwner
+    && editReason.trim().length >= 3
+    && editValue !== ""
+    && !Number.isNaN(numericEditValue)
+    && numericEditValue >= Number(editSetting?.min ?? Number.NEGATIVE_INFINITY)
+    && numericEditValue <= Number(editSetting?.max ?? Number.POSITIVE_INFINITY);
 
   if (loading) return <LoadingState label="Loading settings..." />;
   if (error && !settings) return <ErrorState title="Unable to load settings" description={error} action={<Button variant="secondary" onClick={() => load()}>Retry</Button>} />;
@@ -154,7 +160,14 @@ const Settings = () => {
                   <span className="text-base font-semibold text-slate-800 tabular-nums">{settings?.[s.key] ?? "—"}</span>
                   {s.unit && <span className="text-xs text-slate-400 ml-1">{s.unit}</span>}
                 </div>
-                <Button variant="secondary" size="sm" onClick={() => { setEditSetting(s); setEditValue(String(settings?.[s.key] ?? "")); setEditReason(""); }}>Edit</Button>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  disabled={!isOwner || settings?.[s.key] === undefined}
+                  onClick={() => { setEditSetting(s); setEditValue(String(settings?.[s.key] ?? "")); setEditReason(""); }}
+                >
+                  Edit
+                </Button>
               </div>
             </div>
           ))}
@@ -221,7 +234,7 @@ const Settings = () => {
         )}
       </Modal>
 
-      {toast && <Toast message={toast} type="success" onClose={() => setToast(null)} />}
+      {toast && <Toast message={toast} type={toast.toLowerCase().includes("failed") ? "error" : "success"} onClose={() => setToast(null)} />}
     </div>
   );
 };

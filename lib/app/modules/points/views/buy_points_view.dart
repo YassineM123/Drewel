@@ -134,8 +134,11 @@ class BuyPointsView extends GetView<DriverPointsController> {
     final request = await pending;
     if (!context.mounted) return;
     if (request == null) {
+      final message = controller.lastPurchaseRequestError.value.isNotEmpty
+          ? controller.lastPurchaseRequestError.value
+          : 'points.request_failed'.tr;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('points.request_failed'.tr)),
+        SnackBar(content: Text(message)),
       );
       return;
     }

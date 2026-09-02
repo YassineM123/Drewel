@@ -6,6 +6,7 @@ import {
   applyForcedOfflinePresence,
   emitDriverPresenceTransition,
 } from "./driverPresenceService.js";
+import { dispatchNotification } from "./notificationService.js";
 
 export const DRIVER_STATUSES = ["pending", "approved", "rejected", "completed"];
 export const PROFILE_REQUEST_STATUSES = ["not_submitted", "pending", "approved", "rejected"];
@@ -259,6 +260,35 @@ export const transitionDriverRequest = async ({
           : "DRIVER_ELIGIBILITY_REVOKED"
       );
     }
+
+    // Notify driver asynchronously about the status update
+    if (newStatus === "approved" || newStatus === "rejected") {
+      const isProfile = requestStage === "profile";
+      const type = isProfile
+        ? (newStatus === "approved" ? "DOCUMENT_APPROVED" : "DOCUMENT_REJECTED")
+        : (newStatus === "approved" ? "DRIVER_ACCOUNT_APPROVED" : "DRIVER_ACCOUNT_REJECTED");
+      const title = isProfile
+        ? (newStatus === "approved" ? "Documents approved" : "Documents need review")
+        : (newStatus === "approved" ? "Application approved" : "Application update");
+      const defaultMsg = isProfile
+        ? (newStatus === "approved" ? "Your vehicle and driver documents have been approved." : "One or more documents require your attention.")
+        : (newStatus === "approved" ? "Your Drewel driver application has been approved." : "Your driver application could not be approved at this time.");
+      const message = (newStatus === "rejected" && normalizedReason) ? normalizedReason : defaultMsg;
+      const deepLink = isProfile ? "drewel://documents" : "drewel://driver/status";
+
+      dispatchNotification({
+        recipientId: transitionedDriver._id,
+        recipientType: "driver",
+        type,
+        title,
+        message,
+        deepLink,
+        eventKey: `driver:${transitionedDriver._id}:${requestStage}-${newStatus}:${Date.now()}`,
+      }).catch((err) => {
+        console.error("[notification] driver transition notify error:", err?.message);
+      });
+    }
+
     return transitionedDriver;
   } catch (error) {
     const message = String(error?.message || "");

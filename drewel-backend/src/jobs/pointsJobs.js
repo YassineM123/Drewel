@@ -31,9 +31,9 @@ export const dispatchNextPointsOutboxEvent = async () => {
   if (!event) return false;
 
   try {
-    const notification = event.payload?.notification;
+    let storedNotification = null;
     if (notification?.message) {
-      await Notification.findOneAndUpdate(
+      storedNotification = await Notification.findOneAndUpdate(
         { eventKey: `${event.eventKey}:notification` },
         {
           $setOnInsert: {
@@ -55,13 +55,29 @@ export const dispatchNextPointsOutboxEvent = async () => {
     const socketEvent =
       event.type === "points:notification" ? "notification:new" : event.type;
     io.to(String(event.recipientId)).emit(socketEvent, safeEventPayload(event.payload));
-    if (notification?.message && event.type === "points:notification") {
+    if (storedNotification && socketEvent !== "notification:new") {
+      io.to(String(event.recipientId)).emit("notification:new", {
+        id: String(storedNotification._id),
+        type: storedNotification.type,
+        title: storedNotification.title,
+        message: storedNotification.message,
+        read: Boolean(storedNotification.read),
+        data: storedNotification.data || {},
+        deepLink: storedNotification.deepLink,
+        createdAt: storedNotification.createdAt,
+      });
+    }
+    if (notification?.message) {
       sendPushToUser({
         userId: event.recipientId,
         type: notification.type || "POINTS_UPDATE",
         title: String(notification.title || "Points update").slice(0, 120),
         body: String(notification.message).slice(0, 1000),
         deepLink: String(notification.deepLink || "drewel://driver/points"),
+        data: {
+          deepLink: String(notification.deepLink || "drewel://driver/points"),
+          ...(safeEventPayload(event.payload) || {}),
+        },
       }).catch((error) =>
         console.error("Points notification push failed", error.message)
       );

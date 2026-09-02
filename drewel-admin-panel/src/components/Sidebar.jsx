@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { NavLink, useLocation } from "react-router-dom";
 import {
-  LayoutDashboard, Users, Car, MessageSquare, Phone,
+  LayoutDashboard, Users, Car, MessageSquare,
   Image, Settings, LogOut, ChevronLeft, ChevronRight,
   Navigation, AlertOctagon, Coins, MapPin, FileText,
   ArrowLeftRight, Bell, ScrollText, ChevronDown, ShieldCheck,
@@ -11,6 +11,7 @@ import {
 import { useAuth } from "../context/AuthContext";
 import { bestMatchingRoute } from "../utils/routeMeta";
 import { getPointsAccess } from "../utils/pointsPermissions";
+import drewelLogo from "../assets/images/drewel-mark.jpeg";
 
 const ROLE_LABELS = {
   owner: "Owner",
@@ -48,6 +49,7 @@ const navGroups = [
     collapsible: true,
     items: [
       { to: "/rides/live",     label: "Live Reservations", icon: <Navigation    size={16} /> },
+      { to: "/live-map",       label: "Live Map",          icon: <MapPin        size={16} /> },
       { to: "/rides/all",      label: "All Reservations",  icon: <FileText      size={16} /> },
       { to: "/online-drivers", label: "Online Drivers",    icon: <MapPin        size={16} /> },
       { to: "/rides/disputes", label: "Disputes",          icon: <AlertOctagon  size={16} /> },
@@ -70,7 +72,6 @@ const navGroups = [
     items: [
       { to: "/chat",         label: "Chat Admin",    icon: <MessageSquare size={16} /> },
       { to: "/support-chat", label: "Support Chat",  icon: <Headphones   size={16} /> },
-      { to: "/secure-calls", label: "Secure Calls",  icon: <Phone        size={16} /> },
     ],
   },
   {
@@ -92,15 +93,6 @@ const navGroups = [
     ],
   },
 ];
-
-function DrewelMark() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
-      <path d="M3 9C3 6.239 5.239 4 8 4h2a5 5 0 010 10H8C5.239 14 3 11.761 3 9z" fill="white" fillOpacity="0.95" />
-      <circle cx="13" cy="9" r="2" fill="white" fillOpacity="0.45" />
-    </svg>
-  );
-}
 
 export default function Sidebar({ collapsed, onToggle }) {
   const location = useLocation();
@@ -148,14 +140,10 @@ export default function Sidebar({ collapsed, onToggle }) {
     >
       <div className={`flex items-center h-[68px] border-b border-white/[0.07] shrink-0 ${collapsed ? "justify-center" : "px-5"}`}>
         {collapsed ? (
-          <div className="w-9 h-9 rounded-[10px] bg-[#BE1B2C] flex items-center justify-center shadow-lg shadow-red-900/50">
-            <DrewelMark />
-          </div>
+          <img src={drewelLogo} alt="Drewel" className="w-9 h-9 rounded-[10px] object-cover shadow-lg shadow-red-900/50" />
         ) : (
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-[10px] bg-[#BE1B2C] flex items-center justify-center shrink-0 shadow-lg shadow-red-900/40">
-              <DrewelMark />
-            </div>
+            <img src={drewelLogo} alt="Drewel" className="w-9 h-9 rounded-[10px] object-cover shrink-0 shadow-lg shadow-red-900/40" />
             <div>
               <div className="text-[15px] font-bold text-white tracking-tight leading-none">Drewel</div>
               <div className="text-[10px] text-white/35 mt-0.5 uppercase tracking-[0.15em]">Admin Portal</div>

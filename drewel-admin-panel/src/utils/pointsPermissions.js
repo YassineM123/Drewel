@@ -16,7 +16,7 @@ export const getPointsAccess = (admin = getStoredAdmin()) => {
     isFinanceAdmin: perms.isFinanceAdmin,
     canRead: perms["points.read"],
     canAdjust: perms["points.adjust"],
-    canAddPurchasedPoints: perms.isOwner,
+    canAddPurchasedPoints: perms["points.adjust"],
     canManageRequests: perms["points.purchase_requests.manage"],
     canManagePacks: perms["points.packs.manage"],
     canManageSettings: perms["points.settings.manage"],

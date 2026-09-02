@@ -31,15 +31,16 @@ const AdjustmentModal = ({ driver, mode, onClose, onSuccess }) => {
     : isPurchase
       ? "purchase"
       : form.source;
-  const purchaseFieldsValid =
-    !isPurchase ||
-    (form.paymentReference.trim().length >= 3 &&
-      form.paymentMethod.trim().length >= 2);
+  const defaultReason = isDebit
+    ? "Admin points debit"
+    : isPurchase
+      ? "Purchased points credit"
+      : "Admin points credit";
+  const reasonText = form.reason.trim() || defaultReason;
+  const driverId = driver.id || driver._id;
   const invalid =
     !Number.isSafeInteger(points) ||
     points <= 0 ||
-    form.reason.trim().length < 3 ||
-    !purchaseFieldsValid ||
     (isDebit && newBalance < 0);
   const key = useMemo(() => createIdempotencyKey(`admin-${mode}`), [mode]);
   const set = (name) => (event) =>
@@ -60,14 +61,14 @@ const AdjustmentModal = ({ driver, mode, onClose, onSuccess }) => {
       await adjustDriverPoints(
         isDebit ? "debit" : "credit",
         {
-          driverId: driver.id,
+          driverId,
           points,
           source,
-          reason: form.reason.trim(),
+          reason: reasonText,
           ...(isPurchase
             ? {
-                paymentReference: form.paymentReference.trim(),
-                paymentMethod: form.paymentMethod.trim(),
+                paymentReference: form.paymentReference.trim() || `PAY-${Date.now()}`,
+                paymentMethod: form.paymentMethod.trim() || "Admin credit",
               }
             : {}),
         },
@@ -118,7 +119,7 @@ const AdjustmentModal = ({ driver, mode, onClose, onSuccess }) => {
             <div><label htmlFor="adjust-points">Points</label><input id="adjust-points" type="number" min="1" step="1" value={form.points} onChange={set("points")} /></div>
             {isFreeCredit && <div><label htmlFor="adjust-source">Source</label><select id="adjust-source" value={form.source} onChange={set("source")}><option value="admin">Admin credit</option><option value="bonus">Bonus</option><option value="correction">Correction</option></select></div>}
             {isPurchase && <><div><label htmlFor="purchase-reference">Payment reference</label><input id="purchase-reference" value={form.paymentReference} onChange={set("paymentReference")} placeholder="Reference of the collected payment" /></div><div><label htmlFor="purchase-method">Payment method</label><input id="purchase-method" value={form.paymentMethod} onChange={set("paymentMethod")} placeholder="e.g. bank transfer, cash" /></div></>}
-            <div className="points-form__wide"><label htmlFor="adjust-reason">Reason</label><textarea id="adjust-reason" rows="3" required value={form.reason} onChange={set("reason")} /></div>
+            <div className="points-form__wide"><label htmlFor="adjust-reason">Reason (Optional)</label><textarea id="adjust-reason" rows="3" placeholder={`e.g. ${defaultReason}`} value={form.reason} onChange={set("reason")} /></div>
           </div>
           <div className="points-summary">
             <div><span>Current balance</span><strong>{current}</strong></div>
@@ -126,7 +127,6 @@ const AdjustmentModal = ({ driver, mode, onClose, onSuccess }) => {
             <div><span>New balance</span><strong>{Number.isFinite(newBalance) ? newBalance : current}</strong></div>
           </div>
           {isDebit && newBalance < 0 && <div className="points-alert" role="alert">A debit cannot create a negative available balance.</div>}
-          {isPurchase && !purchaseFieldsValid && <div className="points-alert" role="alert">Payment reference and payment method are required for purchased points.</div>}
         </div>
         <footer><button type="button" className="btn btn-light" onClick={onClose}>Cancel</button><button type="button" className={`btn ${isDebit ? "btn-danger" : "btn-primary"}`} disabled={invalid} onClick={() => setConfirming(true)}>{isDebit ? "Review debit" : "Review add"}</button></footer>
       </section>

@@ -19,6 +19,8 @@ import {
   createIncident,
   updateIncident,
   listOperationalAuditLogs,
+  getLiveOperationsMap,
+  searchLiveOperationsMap,
 } from "../controllers/operationalController.js";
 
 const router = express.Router();
@@ -48,5 +50,9 @@ router.patch("/incidents/:id", requireSignIn, isAdmin, updateIncident);
 
 // Audit Logs (cross-domain)
 router.get("/audit-logs", requireSignIn, isAdmin, listOperationalAuditLogs);
+
+// Live Operations Map
+router.get("/live-map", requireSignIn, isAdmin, getLiveOperationsMap);
+router.get("/live-map/search", requireSignIn, isAdmin, searchLiveOperationsMap);
 
 export default router;

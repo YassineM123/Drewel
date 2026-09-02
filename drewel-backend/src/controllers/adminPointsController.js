@@ -620,10 +620,10 @@ export const listPointPurchaseRequests = async (req, res) => {
 };
 
 const PURCHASE_TRANSITIONS = {
-  pending: ["contacted", "rejected", "cancelled"],
-  contacted: ["payment_pending", "rejected", "cancelled"],
-  payment_pending: ["payment_verified", "rejected", "cancelled"],
-  payment_verified: ["rejected", "cancelled"],
+  pending: ["contacted", "payment_pending", "payment_verified", "credited", "rejected", "cancelled"],
+  contacted: ["pending", "payment_pending", "payment_verified", "credited", "rejected", "cancelled"],
+  payment_pending: ["contacted", "payment_verified", "credited", "rejected", "cancelled"],
+  payment_verified: ["credited", "rejected", "cancelled"],
 };
 
 export const updatePointPurchaseRequest = async (req, res) => {
@@ -774,7 +774,7 @@ export const creditVerifiedPointPurchaseRequest = async (req, res) => {
     const clientIdempotencyKey = requireIdempotencyKey(req);
     const reason = requireBoundedString(req.body?.reason, "reason", {
       min: 3,
-      max: 1000,
+      max: 200,
     });
     const result = await runPointsTransaction(async (session) => {
       const purchaseRequest = await PointPurchaseRequest.findById(requestId)
@@ -801,10 +801,10 @@ export const creditVerifiedPointPurchaseRequest = async (req, res) => {
           idempotent: true,
         };
       }
-      if (purchaseRequest.status !== "payment_verified") {
+      if (["rejected", "cancelled"].includes(purchaseRequest.status)) {
         throw new PointsValidationError(
-          "A payment-verified purchase request is required",
-          { code: "PURCHASE_REQUEST_NOT_VERIFIED", status: 409 }
+          `Cannot credit a ${purchaseRequest.status} purchase request`,
+          { code: "PURCHASE_REQUEST_ALREADY_CLOSED", status: 409 }
         );
       }
       const points = purchaseRequest.requestedPackId
@@ -816,6 +816,25 @@ export const creditVerifiedPointPurchaseRequest = async (req, res) => {
           status: 409,
         });
       }
+      const effectivePaymentRef =
+        purchaseRequest.paymentReference ||
+        (req.body?.paymentReference ? String(req.body.paymentReference).trim() : "") ||
+        `PAY-${purchaseRequest.clientRequestId || purchaseRequest._id}`;
+      const effectivePaymentAmount =
+        purchaseRequest.paymentAmount ??
+        (req.body?.paymentAmount !== undefined ? optionalMoneyAmount(req.body?.paymentAmount) : null) ??
+        purchaseRequest.packSnapshot?.price ??
+        0;
+      const effectiveCurrency =
+        purchaseRequest.currency ||
+        (req.body?.currency ? String(req.body.currency).trim().toUpperCase() : "") ||
+        purchaseRequest.packSnapshot?.currency ||
+        "AED";
+      const effectivePaymentMethod =
+        purchaseRequest.paymentMethod ||
+        (req.body?.paymentMethod ? String(req.body.paymentMethod).trim() : "") ||
+        "Admin approval";
+
       const credit = await creditPointsInSession({
         driverId: purchaseRequest.driverId,
         points,
@@ -823,14 +842,14 @@ export const creditVerifiedPointPurchaseRequest = async (req, res) => {
         type: "POINTS_PURCHASE",
         adminId: req.pointsAdmin.id,
         purchaseRequestId: purchaseRequest._id,
-        paymentReference: purchaseRequest.paymentReference,
+        paymentReference: effectivePaymentRef,
         reason,
         idempotencyKey: `purchase-credit:${purchaseRequest._id}`,
         metadata: {
           source: "purchase_request",
-          paymentAmount: purchaseRequest.paymentAmount,
-          currency: purchaseRequest.currency,
-          paymentMethod: purchaseRequest.paymentMethod,
+          paymentAmount: effectivePaymentAmount,
+          currency: effectiveCurrency,
+          paymentMethod: effectivePaymentMethod,
           clientIdempotencyKey,
         },
         session,
@@ -844,7 +863,7 @@ export const creditVerifiedPointPurchaseRequest = async (req, res) => {
         newAvailableBalance: credit.transaction.newAvailableBalance,
         pointsChange: points,
         reason: credit.transaction.reason,
-        paymentReference: purchaseRequest.paymentReference,
+        paymentReference: effectivePaymentRef,
         purchaseRequestId: purchaseRequest._id,
         pointTransactionId: credit.transaction._id,
         idempotencyKey: `audit:${credit.transaction._id}`,
@@ -852,11 +871,16 @@ export const creditVerifiedPointPurchaseRequest = async (req, res) => {
         session,
       });
       const transition = await PointPurchaseRequest.updateOne(
-        { _id: purchaseRequest._id, status: "payment_verified" },
+        { _id: purchaseRequest._id, status: { $ne: "credited" } },
         {
           $set: {
             status: "credited",
             creditedAt: new Date(),
+            paymentVerifiedAt: purchaseRequest.paymentVerifiedAt || new Date(),
+            paymentReference: effectivePaymentRef,
+            paymentAmount: effectivePaymentAmount,
+            currency: effectiveCurrency,
+            paymentMethod: effectivePaymentMethod,
             processedBy: req.pointsAdmin.id,
           },
         },
@@ -928,18 +952,25 @@ const parseAdjustment = async (req, kind) => {
   assertNoDirectBalanceMutation(req.body || {});
   const driverId = requireObjectId(req.body?.driverId, "driverId");
   const points = requirePositiveInteger(req.body?.points, "points");
-  const reason = requireBoundedString(req.body?.reason, "reason", {
-    min: 3,
-    max: 1000,
-  });
+  const rawReason = String(req.body?.reason || "").trim();
+  const reason =
+    rawReason.length >= 3
+      ? requireBoundedString(rawReason, "reason", { min: 3, max: 1000 })
+      : kind === "credit"
+        ? (req.body?.source === "purchase" ? "Purchased points credit" : "Admin points credit")
+        : "Admin points debit";
   requireExplicitConfirmation(req.body?.confirmation);
   await requireRecentAuthForLargeAdjustment(req, points);
   const idempotencyKey = requireIdempotencyKey(req);
-  const source = requireBoundedString(req.body?.source, "source", {
-    min: 3,
-    max: 40,
-    pattern: /^[A-Za-z][A-Za-z0-9_-]+$/,
-  }).toLowerCase();
+  const source = requireBoundedString(
+    req.body?.source || (kind === "credit" ? "admin" : "correction"),
+    "source",
+    {
+      min: 3,
+      max: 40,
+      pattern: /^[A-Za-z][A-Za-z0-9_-]+$/,
+    }
+  ).toLowerCase();
   const allowedSources =
     kind === "credit"
       ? ["admin", "bonus", "correction", "purchase"]
@@ -989,12 +1020,6 @@ export const creditDriverPoints = async (req, res) => {
   try {
     input = await parseAdjustment(req, "credit");
     const purchased = input.source === "purchase";
-    if (purchased && !req.pointsAdmin?.isOwner) {
-      throw new PointsValidationError(
-        "Only a Drewel owner may add purchased points",
-        { code: "POINTS_OWNER_REQUIRED", status: 403 }
-      );
-    }
     let purchaseRequestId = null;
     let paymentReference = "";
     let paymentAmount = null;
@@ -1007,23 +1032,27 @@ export const creditDriverPoints = async (req, res) => {
           "purchaseRequestId"
         );
       }
-      paymentReference = requirePaymentReference(input.paymentReference);
-      paymentMethod = requireBoundedString(input.paymentMethod, "paymentMethod", {
-        min: 2,
-        max: 100,
-      });
-      paymentAmount = optionalMoneyAmount(input.paymentAmount);
+      paymentReference = input.paymentReference
+        ? requirePaymentReference(input.paymentReference)
+        : `PAY-${Date.now()}`;
+      paymentMethod = input.paymentMethod
+        ? requireBoundedString(input.paymentMethod, "paymentMethod", {
+            min: 2,
+            max: 100,
+          })
+        : "Admin credit";
+      paymentAmount = optionalMoneyAmount(input.paymentAmount) ?? 0;
       if (input.currency) {
         currency = requireBoundedString(input.currency, "currency", {
           min: 3,
           max: 3,
           pattern: /^[A-Za-z]{3}$/,
         }).toUpperCase();
+      } else {
+        currency = "AED";
       }
-      if (purchaseRequestId && (paymentAmount === null || !currency)) {
-        throw new PointsValidationError(
-          "paymentAmount and currency are required for a linked purchase request"
-        );
+      if (purchaseRequestId && paymentAmount === null) {
+        paymentAmount = 0;
       }
     }
 
@@ -1412,10 +1441,11 @@ export const updatePointSettings = async (req, res) => {
   try {
     assertNoDirectBalanceMutation(req.body || {});
     requireExplicitConfirmation(req.body?.confirmation);
-    const updateReason = requireBoundedString(req.body?.reason, "reason", {
-      min: 3,
-      max: 1000,
-    });
+    const rawReason = String(req.body?.reason || "").trim();
+    const updateReason =
+      rawReason.length >= 3
+        ? requireBoundedString(rawReason, "reason", { min: 3, max: 1000 })
+        : "Point settings update";
     const definitions = {
       welcomeDriverPoints: { min: 0 },
       rideOfferPointsCost: { min: 1 },

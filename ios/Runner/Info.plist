@@ -33,7 +33,7 @@
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Drewel uses your photo library to select profile photos and required driver documents.</string>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>Drewel uses your microphone so you can speak securely with your assigned driver or passenger during an active ride.</string>
+	<string>Drewel uses your microphone to record voice messages inside in-app ride chat.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Drewel uses your location while the app is in use to show your position, find nearby drivers, provide navigation, and keep your ride safe and on track.</string>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
@@ -62,6 +62,21 @@
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>audio</string>
+		<string>fetch</string>
+		<string>remote-notification</string>
+	</array>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLName</key>
+			<string>com.drewel</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>drewel</string>
+			</array>
+		</dict>
 	</array>
 </dict>
 </plist>

@@ -22,10 +22,11 @@ class DeepLinkService {
     final String role = prefs.getString(ApiKeyConstants.type) ?? 'user';
     final bool isDriver = role == ApiKeyConstants.driver;
 
-    final String path = uri.path;
+    final String path = normalizedDrewelDeepLinkPath(uri);
     final Map<String, String> query = uri.queryParameters;
-    final String rideId =
-        (query['rideId'] ?? query['conversationId'] ?? '').trim();
+    // Ride chat endpoints are keyed by Ride._id, but accept conversationId
+    // for backward compatibility with older push payloads.
+    final String rideId = (query['rideId'] ?? query['conversationId'] ?? '').trim();
 
     debugPrint('Deep link: $path${rideId.isNotEmpty ? '?rideId=$rideId' : ''}');
 
@@ -34,6 +35,7 @@ class DeepLinkService {
         await Get.toNamed(Routes.NOTIFICATIONS);
         return;
       case '/driver/ride-request':
+      case '/ride-request':
         if (isDriver) {
           await Get.offAllNamed(Routes.DRIVER_HOME);
         } else {
@@ -42,9 +44,12 @@ class DeepLinkService {
         return;
       case '/passenger/active-ride':
       case '/driver/active-ride':
+      case '/active-ride':
+      case '/passenger/ride-summary':
       case '/ride-summary':
         await Get.toNamed(Routes.ACTIVE_RIDE);
         return;
+      case '/chat':
       case '/chat/ride':
         if (rideId.isEmpty) {
           await Get.toNamed(Routes.MESSAGES);
@@ -53,11 +58,12 @@ class DeepLinkService {
               arguments: <String, dynamic>{'rideId': rideId});
         }
         return;
-      case '/call/active':
-        await Get.toNamed(Routes.ACTIVE_RIDE);
+      case '/messages':
+        await Get.toNamed(Routes.MESSAGES);
         return;
       case '/documents':
       case '/driver/status':
+      case '/status':
         if (isDriver) {
           await Get.toNamed(Routes.DRIVER_REGISTER);
         } else {
@@ -65,6 +71,7 @@ class DeepLinkService {
         }
         return;
       case '/driver/points':
+      case '/points':
         if (isDriver) {
           await Get.toNamed(Routes.MY_POINTS);
         } else {
@@ -74,6 +81,11 @@ class DeepLinkService {
       case '/rides':
         await Get.toNamed(isDriver ? Routes.DRIVER_HOME : Routes.USER_HOME);
         return;
+      case '/driver/rides':
+        await Get.toNamed(
+          isDriver ? Routes.DRIVER_RIDE_HISTORY : Routes.NOTIFICATIONS,
+        );
+        return;
       case '/support':
         await Get.toNamed(Routes.SUPPORT);
         return;
@@ -82,4 +94,18 @@ class DeepLinkService {
         return;
     }
   }
+}
+
+/// Custom-scheme links such as `drewel://chat/ride` encode `chat` as the URI
+/// host and `/ride` as the path. The app routes use the combined `/chat/ride`
+/// form. Triple-slash links (`drewel:///chat/ride`) already have no host, so
+/// this also keeps them compatible.
+@visibleForTesting
+String normalizedDrewelDeepLinkPath(Uri uri) {
+  final String path = uri.path.isEmpty
+      ? ''
+      : (uri.path.startsWith('/') ? uri.path : '/${uri.path}');
+  final String host = uri.host.trim();
+  if (host.isEmpty) return path.isEmpty ? '/' : path;
+  return '/$host$path';
 }

@@ -22,6 +22,7 @@ import Ride from "../models/Ride.js";
 import Driver from "../models/Driver.js";
 import User from "../models/User.js";
 import { ACTIVE_RIDE_STATUSES } from "../models/Ride.js";
+import DriverPointsWallet from "../models/DriverPointsWallet.js";
 
 const isObjectId = (value) => mongoose.isValidObjectId(value);
 
@@ -69,6 +70,243 @@ const sendError = (res, error) => {
     code: error.code || "OPERATIONAL_ERROR",
     message: status >= 500 ? "Internal server error" : error.message,
   });
+};
+
+const escapeRegex = (value) => String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+const pointsPerAED = () => {
+  const value = Number(process.env.DRIVER_POINTS_PER_AED || process.env.POINTS_PER_AED || 10);
+  return Number.isFinite(value) && value > 0 ? value : 10;
+};
+
+const adminDriverFields =
+  "firstName lastName fullName phone whatsappNumber profileImageUrl isOnline isApproved isRestricted isDeleted status lat long heading speed currentLocation currentServiceArea locationAccuracyM activeRideId vehicleType vehicleModel registration locationUpdatedAt availabilityStatus presenceStatus presenceLastHeartbeatAt presenceVersion rating updatedAt";
+
+const driverName = (driver) =>
+  driver.fullName || [driver.firstName, driver.lastName].filter(Boolean).join(" ").trim();
+
+const driverLocation = (driver) => {
+  const coordinates = driver.currentLocation?.coordinates;
+  const long = Array.isArray(coordinates) ? Number(coordinates[0]) : Number(driver.long);
+  const lat = Array.isArray(coordinates) ? Number(coordinates[1]) : Number(driver.lat);
+  if (!Number.isFinite(lat) || !Number.isFinite(long) || lat < -90 || lat > 90 || long < -180 || long > 180) {
+    return null;
+  }
+  return {
+    lat,
+    long,
+    heading: Number.isFinite(Number(driver.heading)) ? Number(driver.heading) : null,
+    speed: Number.isFinite(Number(driver.speed)) ? Number(driver.speed) : null,
+    accuracyM: Number.isFinite(Number(driver.locationAccuracyM)) ? Number(driver.locationAccuracyM) : null,
+    updatedAt: driver.locationUpdatedAt || null,
+  };
+};
+
+const availability = (driver) => {
+  if (!driver.isOnline || driver.presenceStatus === "Offline") return "offline";
+  if (driver.activeRideId) return "on_ride";
+  if (driver.availabilityStatus === "Busy") return "busy";
+  if (driver.availabilityStatus === "Online") return "available";
+  return "online";
+};
+
+const freshness = (driver, now = new Date()) => {
+  if (!driver.isOnline || driver.presenceStatus === "Offline") return "offline";
+  const time = driver.locationUpdatedAt ? new Date(driver.locationUpdatedAt).getTime() : NaN;
+  if (!Number.isFinite(time)) return "unavailable";
+  return time < now.getTime() - 2 * 60 * 1000 ? "stale" : "live";
+};
+
+const rideMapDto = (ride) => {
+  const fare = Number(ride.agreedPrice);
+  const hasFare = Number.isFinite(fare);
+  return {
+    id: String(ride._id),
+    reference: ride.reference,
+    status: ride.status,
+    driverId: ride.driverId?._id ? String(ride.driverId._id) : String(ride.driverId),
+    passengerId: ride.passengerId?._id ? String(ride.passengerId._id) : String(ride.passengerId),
+    driver: ride.driverId && typeof ride.driverId === "object"
+      ? { id: String(ride.driverId._id), fullName: driverName(ride.driverId), vehicleType: ride.driverId.vehicleType || "" }
+      : null,
+    passenger: ride.passengerId && typeof ride.passengerId === "object"
+      ? { id: String(ride.passengerId._id), fullName: ride.passengerId.fullName || "" }
+      : null,
+    pickup: ride.pickup || null,
+    destination: ride.destination || null,
+    estimatedFareAED: hasFare ? fare : null,
+    estimatedCommissionAED: hasFare ? Math.round(fare * 10) / 100 : null,
+    estimatedPoints: hasFare ? Math.round(fare * pointsPerAED() * 0.1) : null,
+    finalCommission: ride.commission || null,
+    startedAt: ride.startedAt || ride.pickupConfirmedAt || null,
+    requestedAt: ride.requestedAt || null,
+    distanceMeters: ride.routeSnapshot?.distanceMeters ?? null,
+    durationSeconds: ride.routeSnapshot?.durationSeconds ?? null,
+    routePolyline: ride.routeSnapshot?.encodedPolyline || "",
+    lastDriverLocation: ride.lastDriverLocation || null,
+    updatedAt: ride.updatedAt,
+  };
+};
+
+const buildLiveOperations = async (query = {}) => {
+  const now = new Date();
+  const lowBalanceThreshold = Math.max(0, Number.parseInt(query.lowBalanceThreshold || "100", 10) || 100);
+  const driverFilter = { isDeleted: { $ne: true } };
+  if (query.vehicleType && query.vehicleType !== "all") driverFilter.vehicleType = new RegExp(`^${escapeRegex(query.vehicleType)}$`, "i");
+
+  const [drivers, activeRides] = await Promise.all([
+    Driver.find(driverFilter).select(adminDriverFields).sort({ locationUpdatedAt: -1, _id: 1 }).limit(1500).lean(),
+    Ride.find({ status: { $in: ACTIVE_RIDE_STATUSES } })
+      .populate("driverId", "firstName lastName fullName vehicleType")
+      .populate("passengerId", "fullName")
+      .sort({ updatedAt: -1 })
+      .limit(300)
+      .lean(),
+  ]);
+
+  const driverIds = drivers.map((driver) => driver._id);
+  const [wallets, completedCounts] = await Promise.all([
+    DriverPointsWallet.find({ driverId: { $in: driverIds } }).lean({ virtuals: true }),
+    Ride.aggregate([
+      { $match: { driverId: { $in: driverIds }, status: "completed" } },
+      { $group: { _id: "$driverId", completed: { $sum: 1 } } },
+    ]),
+  ]);
+  const walletsByDriver = new Map(wallets.map((wallet) => [String(wallet.driverId), wallet]));
+  const completedByDriver = new Map(completedCounts.map((row) => [String(row._id), Number(row.completed || 0)]));
+  const activeRideByDriver = new Map(activeRides.map((ride) => [String(ride.driverId?._id || ride.driverId), ride]));
+
+  const liveDrivers = drivers.map((driver) => {
+    const wallet = walletsByDriver.get(String(driver._id)) || {};
+    const availablePoints =
+      Number(wallet.availablePoints) ||
+      Number(wallet.availableBonusPoints || 0) + Number(wallet.availablePurchasedPoints || 0);
+    const activeRide = activeRideByDriver.get(String(driver._id));
+    return {
+      id: String(driver._id),
+      _id: String(driver._id),
+      fullName: driverName(driver),
+      phone: driver.phone || driver.whatsappNumber || "",
+      profileImageUrl: driver.profileImageUrl || "",
+      rating: Number.isFinite(Number(driver.rating)) ? Number(driver.rating) : null,
+      isOnline: Boolean(driver.isOnline),
+      availabilityStatus: availability(driver),
+      rawAvailabilityStatus: driver.availabilityStatus || "",
+      gpsFreshness: freshness(driver, now),
+      location: driverLocation(driver),
+      vehicle: {
+        type: driver.vehicleType || "",
+        model: driver.vehicleModel || "",
+        plateNumber: driver.registration || "",
+      },
+      points: {
+        available: availablePoints,
+        creditAED: Math.round((availablePoints / pointsPerAED()) * 100) / 100,
+        lowBalance: availablePoints < lowBalanceThreshold,
+      },
+      completedRides: completedByDriver.get(String(driver._id)) || 0,
+      currentRideId: activeRide ? String(activeRide._id) : null,
+      currentRide: activeRide ? rideMapDto(activeRide) : null,
+      lastLocationAt: driver.locationUpdatedAt || null,
+      presenceLastHeartbeatAt: driver.presenceLastHeartbeatAt || null,
+      lastActivityAt: driver.locationUpdatedAt || driver.presenceLastHeartbeatAt || driver.updatedAt || null,
+    };
+  });
+
+  const totals = liveDrivers.reduce((acc, driver) => {
+    acc.totalDrivers += 1;
+    acc.online += driver.isOnline ? 1 : 0;
+    acc.available += driver.availabilityStatus === "available" ? 1 : 0;
+    acc.onRide += driver.availabilityStatus === "on_ride" ? 1 : 0;
+    acc.busy += driver.availabilityStatus === "busy" ? 1 : 0;
+    acc.offline += driver.availabilityStatus === "offline" ? 1 : 0;
+    acc.lowBalance += driver.points.lowBalance ? 1 : 0;
+    acc.staleGps += ["stale", "unavailable"].includes(driver.gpsFreshness) && driver.isOnline ? 1 : 0;
+    return acc;
+  }, { totalDrivers: 0, online: 0, available: 0, onRide: 0, busy: 0, offline: 0, lowBalance: 0, staleGps: 0, activeRides: activeRides.length });
+
+  const alerts = [
+    ...liveDrivers.filter((driver) => driver.points.lowBalance).slice(0, 20).map((driver) => ({
+      id: `low-points:${driver.id}`,
+      type: "driver_low_points",
+      severity: "warning",
+      driverId: driver.id,
+      title: "Low points",
+      description: `${driver.fullName || "Driver"} has ${driver.points.available} points.`,
+      detectedAt: now,
+    })),
+    ...liveDrivers.filter((driver) => driver.currentRideId && driver.gpsFreshness !== "live").slice(0, 20).map((driver) => ({
+      id: `ride-gps:${driver.currentRideId}`,
+      type: "driver_location_unavailable",
+      severity: "critical",
+      driverId: driver.id,
+      rideId: driver.currentRideId,
+      title: "Driver location unavailable",
+      description: `${driver.fullName || "Driver"} is on an active ride without fresh GPS.`,
+      detectedAt: now,
+    })),
+  ];
+
+  return {
+    drivers: liveDrivers,
+    rides: activeRides.map(rideMapDto),
+    totals,
+    alerts,
+    settings: { lowBalanceThreshold, pointsPerAED: pointsPerAED(), commissionRate: 0.1 },
+    generatedAt: now,
+  };
+};
+
+export const getLiveOperationsMap = async (req, res) => {
+  try {
+    const snapshot = await buildLiveOperations(req.query || {});
+    return res.status(200).json({ success: true, ...snapshot });
+  } catch (error) {
+    return sendError(res, error);
+  }
+};
+
+export const searchLiveOperationsMap = async (req, res) => {
+  try {
+    const term = String(req.query.q || "").trim();
+    if (term.length < 2) return res.status(200).json({ success: true, results: [] });
+    const pattern = new RegExp(escapeRegex(term), "i");
+    const [drivers, rides] = await Promise.all([
+      Driver.find({
+        isDeleted: { $ne: true },
+        $or: [
+          { fullName: pattern }, { firstName: pattern }, { lastName: pattern },
+          { phone: pattern }, { whatsappNumber: pattern }, { registration: pattern },
+        ],
+      }).select(adminDriverFields).limit(20).lean(),
+      Ride.find({ reference: pattern })
+        .populate("driverId", "firstName lastName fullName vehicleType")
+        .populate("passengerId", "fullName")
+        .limit(20)
+        .lean(),
+    ]);
+    const driverResults = drivers.map((driver) => ({
+      type: "driver",
+      id: String(driver._id),
+      driverId: String(driver._id),
+      label: driverName(driver) || `Driver ${String(driver._id).slice(-6)}`,
+      subtitle: [driver.vehicleType, driver.registration, driver.phone].filter(Boolean).join(" / "),
+      location: driverLocation(driver),
+    }));
+    const rideResults = rides.map((ride) => ({
+      type: "ride",
+      id: String(ride._id),
+      rideId: String(ride._id),
+      driverId: ride.driverId?._id ? String(ride.driverId._id) : String(ride.driverId),
+      label: ride.reference || `Ride ${String(ride._id).slice(-6)}`,
+      subtitle: [ride.status, driverName(ride.driverId || {}), ride.passengerId?.fullName].filter(Boolean).join(" / "),
+      pickup: ride.pickup || null,
+      destination: ride.destination || null,
+    }));
+    return res.status(200).json({ success: true, results: [...driverResults, ...rideResults].slice(0, 30) });
+  } catch (error) {
+    return sendError(res, error);
+  }
 };
 
 const requireAdmin = (req) => {

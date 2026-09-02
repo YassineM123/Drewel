@@ -6,9 +6,19 @@ import apiClient from "../client";
  */
 export const getRolesCatalog = async (signal) => {
   const data = await apiClient.get("/admin/roles", { signal });
+  const permissionPayload = data.permissions;
   return {
     roles: data.roles || [],
-    permissions: data.permissions || {},
+    // Older/current servers return a flat capability-name array here, while
+    // the Team & Roles page can only render an explicit per-role matrix. Do
+    // not reinterpret array indexes as permission labels.
+    permissions:
+      permissionPayload &&
+      typeof permissionPayload === "object" &&
+      !Array.isArray(permissionPayload)
+        ? permissionPayload
+        : {},
+    permissionNames: Array.isArray(permissionPayload) ? permissionPayload : [],
     current: data.current || null,
     team: data.team || [],
   };

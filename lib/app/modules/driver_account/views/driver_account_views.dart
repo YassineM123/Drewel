@@ -101,12 +101,6 @@ class DriverProfileView extends GetView<DriverAccountController> {
                         subtitle: 'Completion and activity statistics',
                         onTap: () => Get.toNamed(Routes.DRIVER_PERFORMANCE),
                       ),
-                      _MenuRow(
-                        icon: Icons.leaderboard_rounded,
-                        title: 'Rankings',
-                        subtitle: 'See how you compare to other drivers',
-                        onTap: () => Get.toNamed(Routes.DRIVER_RANKINGS),
-                      ),
                     ],
                   ),
                   _Section(

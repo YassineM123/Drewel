@@ -20,6 +20,8 @@ import '../../../../common/common_widgets.dart';
 import '../../../../common/driver_online_service.dart';
 import '../../../../common/gps_fix.dart';
 import '../../../../common/google_maps_web_auth.dart';
+import '../../../../common/notification_sound_service.dart';
+import '../../../../common/push_notification_service.dart';
 import '../../../../common/socket_services.dart';
 import '../../../../common/text_styles.dart';
 import '../../../data/apis/api_constants/api_key_constants.dart';
@@ -28,6 +30,7 @@ import '../../../data/constants/icons_constant.dart';
 import '../../../data/constants/string_constants.dart';
 import '../../../data/apis/api_constants/api_url_constants.dart';
 import '../../../data/config/app_config.dart';
+import '../../../data/services/location_search_service.dart';
 import '../../../routes/app_pages.dart';
 import '../../communication/controllers/call_state_controller.dart';
 
@@ -164,6 +167,32 @@ class DriverHomeController extends GetxController with WidgetsBindingObserver {
     _stopLocationUpdates();
     _stopPresenceHeartbeatTimer();
     _stopRealtimeLocationTracking();
+    unawaited(_notifyPresenceChanged(isOnline: false));
+  }
+
+  Future<void> _notifyPresenceChanged({required bool isOnline}) async {
+    final String id =
+        'driver_presence_${isOnline ? 'online' : 'offline'}_${DateTime.now().millisecondsSinceEpoch}';
+    final String title = isOnline ? 'You are online' : 'You are offline';
+    final String message = isOnline
+        ? 'You are visible to riders and can receive ride requests.'
+        : 'You are hidden from riders and will not receive new ride requests.';
+
+    if (Get.isRegistered<PushNotificationService>()) {
+      unawaited(Get.find<PushNotificationService>().showLocalNotification(
+        <String, dynamic>{
+          'id': id,
+          'type': isOnline ? 'DRIVER_ONLINE' : 'DRIVER_OFFLINE',
+          'title': title,
+          'message': message,
+          'deepLink': 'drewel://rides',
+        },
+      ));
+    }
+
+    if (Get.isRegistered<NotificationSoundService>()) {
+      await Get.find<NotificationSoundService>().playNotification(eventKey: id);
+    }
   }
 
   @override
@@ -530,41 +559,14 @@ class DriverHomeController extends GetxController with WidgetsBindingObserver {
 
   /// Shared GET helper for Places/Geocoding HTTP calls: a timeout keeps a
   /// slow/unreachable Google endpoint from hanging search indefinitely.
-  Future<http.Response?> _getWithTimeout(Uri uri) async {
-    try {
-      return await http.get(uri).timeout(_placesHttpTimeout);
-    } on TimeoutException {
-      debugPrint('Places request timed out: $uri');
-    } catch (error) {
-      debugPrint('Places request failed: $error');
-    }
-    return null;
-  }
-
-  /// Fetch autocomplete suggestions from Google Places HTTP API
+  /// Fetch autocomplete suggestions (Google Places + OSM fallback)
   Future<void> _fetchPlaceSuggestions(String input) async {
-    final uri = Uri.parse(
-        'https://maps.googleapis.com/maps/api/place/autocomplete/json'
-        '?input=$input'
-        '&key=${ApiKeyConstants.googleMapKey}'
-        '&language=en'
-        '&components=country:${AppConfig.marketplaceCountryCode}');
-
-    final http.Response? response = await _getWithTimeout(uri);
-    if (response == null) {
-      placeSuggestions.clear();
-    } else if (response.statusCode == 200) {
-      final data = json.decode(response.body);
-      if (data['status'] == 'OK') {
-        final List preds = data['predictions'] ?? [];
-        placeSuggestions.value =
-            preds.map((e) => Prediction.fromJson(e)).toList();
-      } else {
-        placeSuggestions.clear();
-      }
-    } else {
-      placeSuggestions.clear();
-    }
+    final List<Prediction> results =
+        await DrewelLocationSearchService.instance.searchPlaces(
+      input,
+      nearLocation: LatLng(lat.value, lon.value),
+    );
+    placeSuggestions.value = results;
     increment();
   }
 
@@ -582,8 +584,7 @@ class DriverHomeController extends GetxController with WidgetsBindingObserver {
       scaffoldKey.currentState?.openEndDrawer();
       return;
     }
-    CommonWidgets.showMyToastMessage(
-        'Driver data is loading please wait ....');
+    CommonWidgets.showMyToastMessage('Driver data is loading please wait ....');
     if (_isRetryingDriverDetails) return;
     _isRetryingDriverDetails = true;
     callingGetDriverDetails().then((_) {
@@ -728,44 +729,18 @@ class DriverHomeController extends GetxController with WidgetsBindingObserver {
       TextPosition(offset: prediction.description?.length ?? 0),
     );
 
-    if (prediction.placeId != null) {
-      final placeId = prediction.placeId!;
-      final uri = Uri.parse(
-          "https://maps.googleapis.com/maps/api/place/details/json?place_id=$placeId&key=${ApiKeyConstants.googleMapKey}");
+    final ({LatLng point, String address})? details =
+        await DrewelLocationSearchService.instance.getPlaceDetails(prediction);
 
-      final http.Response? response = await _getWithTimeout(uri);
-
-      if (response == null) {
-        // Silently keep the previous camera position; matches the existing
-        // silent-failure behavior below for a non-OK Places response.
-      } else if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-
-        if (data["status"] == "OK") {
-          final location = data["result"]["geometry"]["location"];
-          final latValue = location["lat"];
-          final lngValue = location["lng"];
-          final selectedMapLocation = LatLng(latValue, lngValue);
-
-          // Animate camera to selected location
-          if (xController != null) {
-            xController!.animateCamera(
-              CameraUpdate.newCameraPosition(
-                CameraPosition(
-                  target: selectedMapLocation,
-                  zoom: 14,
-                ),
-              ),
-            );
-          }
-        } else {
-          print("Place Details Error: ${data["status"]}");
-          // Error silently - don't show snackbar
-        }
-      } else {
-        print("HTTP Error: ${response.statusCode}");
-        // Error silently - don't show snackbar
-      }
+    if (details != null && xController != null) {
+      xController!.animateCamera(
+        CameraUpdate.newCameraPosition(
+          CameraPosition(
+            target: details.point,
+            zoom: 14,
+          ),
+        ),
+      );
     }
   }
 
@@ -904,11 +879,13 @@ class DriverHomeController extends GetxController with WidgetsBindingObserver {
           }
           _startPresenceHeartbeatTimer(presence.heartbeatIntervalMs);
           await _startAndroidPresenceService(presence);
+          unawaited(_notifyPresenceChanged(isOnline: true));
         } else {
           // Driver is now offline - stop emitting location
           _stopLocationUpdates();
           _stopPresenceHeartbeatTimer();
           await DriverOnlineService.stop();
+          unawaited(_notifyPresenceChanged(isOnline: false));
         }
       } else {
         CommonWidgets.snackBarView(

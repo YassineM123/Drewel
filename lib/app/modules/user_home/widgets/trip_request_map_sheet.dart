@@ -1,20 +1,19 @@
 import 'dart:async';
-import 'dart:convert';
-import 'dart:io' show SocketException;
 
+import 'package:flutter/foundation.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_map/flutter_map.dart' show MapController;
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:google_places_flutter/model/prediction.dart';
-import 'package:http/http.dart' as http;
 import 'package:latlong2/latlong.dart' as latlong;
 
 import '../../../../common/colors.dart';
 import '../../../../common/drewel_osm_map.dart';
 import '../../../../common/motion.dart';
-import '../../../data/apis/api_constants/api_key_constants.dart';
 import '../../../data/config/app_config.dart';
+import '../../../data/services/location_search_service.dart';
 
 class TripRouteRequest {
   const TripRouteRequest({required this.pickup, required this.destination});
@@ -25,8 +24,9 @@ class TripRouteRequest {
 
 enum _TripPointMode { pickup, destination }
 
-/// A short, passenger-owned map flow. The fresh GPS fix seeds pickup, but the
-/// passenger can move both pickup and destination before sending the request.
+/// A modern, passenger-owned map flow. The fresh GPS fix seeds pickup, but the
+/// passenger can smoothly move both pickup and destination with fingers on the map
+/// (like Uber / InDrive / Google Maps) or search by name.
 Future<TripRouteRequest?> showTripRequestMapSheet(
   BuildContext context, {
   required LatLng pickup,
@@ -35,6 +35,7 @@ Future<TripRouteRequest?> showTripRequestMapSheet(
   return showModalBottomSheet<TripRouteRequest>(
     context: context,
     isScrollControlled: true,
+    enableDrag: false,
     backgroundColor: Colors.white,
     shape: const RoundedRectangleBorder(
       borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
@@ -60,9 +61,8 @@ class _TripRequestMapSheet extends StatefulWidget {
 }
 
 class _TripRequestMapSheetState extends State<_TripRequestMapSheet> {
-  static const int _searchDebounceMs = 350;
-  static const double _mapZoom = 15;
-  static const Duration _placesHttpTimeout = Duration(seconds: 10);
+  static const int _searchDebounceMs = 300;
+  static const double _mapZoom = 15.5;
 
   final TextEditingController _searchController = TextEditingController();
   final FocusNode _searchFocusNode = FocusNode();
@@ -70,16 +70,22 @@ class _TripRequestMapSheetState extends State<_TripRequestMapSheet> {
 
   GoogleMapController? _googleMapController;
   Timer? _searchDebounce;
+  Timer? _reverseGeocodeDebounce;
   int _searchRequestId = 0;
+  int _geocodeRequestId = 0;
 
   late LatLng _selectedPickup;
   late String _pickupAddress;
   LatLng? _destination;
   String _destinationAddress = '';
   _TripPointMode _mode = _TripPointMode.destination;
+
   bool _isSearching = false;
+  bool _isMovingMap = false;
+  bool _isGeocoding = false;
   String _searchError = '';
   List<Prediction> _suggestions = <Prediction>[];
+  LatLng? _currentCameraTarget;
 
   bool get _editingPickup => _mode == _TripPointMode.pickup;
 
@@ -88,6 +94,7 @@ class _TripRequestMapSheetState extends State<_TripRequestMapSheet> {
     super.initState();
     _selectedPickup = widget.pickup;
     _pickupAddress = widget.pickupAddress.trim();
+    _currentCameraTarget = _destination ?? _selectedPickup;
     _searchFocusNode.addListener(() {
       if (mounted) setState(() {});
     });
@@ -96,6 +103,7 @@ class _TripRequestMapSheetState extends State<_TripRequestMapSheet> {
   @override
   void dispose() {
     _searchDebounce?.cancel();
+    _reverseGeocodeDebounce?.cancel();
     _googleMapController?.dispose();
     _searchController.dispose();
     _searchFocusNode.dispose();
@@ -106,7 +114,7 @@ class _TripRequestMapSheetState extends State<_TripRequestMapSheet> {
   Widget build(BuildContext context) {
     return SafeArea(
       child: SizedBox(
-        height: MediaQuery.sizeOf(context).height * .82,
+        height: MediaQuery.sizeOf(context).height * .88,
         child: Column(
           children: <Widget>[
             const SizedBox(height: 10),
@@ -119,55 +127,117 @@ class _TripRequestMapSheetState extends State<_TripRequestMapSheet> {
               ),
             ),
             Padding(
-              padding: const EdgeInsets.fromLTRB(20, 16, 20, 12),
+              padding: const EdgeInsets.fromLTRB(20, 14, 20, 10),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: <Widget>[
-                  const Text(
-                    'Request a trip',
-                    style: TextStyle(fontSize: 21, fontWeight: FontWeight.w800),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: <Widget>[
+                      const Text(
+                        'Request a trip',
+                        style: TextStyle(
+                          fontSize: 21,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                      IconButton(
+                        visualDensity: VisualDensity.compact,
+                        icon: const Icon(Icons.close_rounded, size: 22),
+                        onPressed: () => Navigator.pop(context),
+                      ),
+                    ],
                   ),
-                  const SizedBox(height: 10),
+                  const SizedBox(height: 8),
                   _buildModeSelector(),
-                  const SizedBox(height: 12),
+                  const SizedBox(height: 10),
                   _buildSearch(),
-                  const SizedBox(height: 12),
+                  const SizedBox(height: 10),
                   _RouteLine(
                     icon: Icons.radio_button_checked_rounded,
+                    iconColor: Colors.green,
                     label: 'PICKUP',
                     active: _editingPickup,
-                    value: _editingPickup
-                        ? 'Move pickup on the map or search'
+                    value: _editingPickup && _isGeocoding
+                        ? 'Pinning pickup location...'
                         : _pickupAddress.isEmpty
-                            ? 'Pickup pinned'
+                            ? 'Move map or search to choose pickup'
                             : _pickupAddress,
+                    onTap: () {
+                      if (!_editingPickup) {
+                        setState(() {
+                          _mode = _TripPointMode.pickup;
+                          _clearSearch(clearText: true);
+                        });
+                        _moveCamera(_selectedPickup);
+                      }
+                    },
                   ),
                   _RouteLine(
                     icon: Icons.location_on_rounded,
+                    iconColor: primaryColor,
                     label: 'DESTINATION',
                     active: !_editingPickup,
-                    value: _destination == null
-                        ? 'Search or tap the map to choose destination'
-                        : _destinationAddress.isEmpty
-                            ? 'Pinned destination'
-                            : _destinationAddress,
+                    value: !_editingPickup && _isGeocoding
+                        ? 'Pinning destination...'
+                        : _destination == null
+                            ? 'Move map or search to choose destination'
+                            : _destinationAddress.isEmpty
+                                ? 'Destination pinned'
+                                : _destinationAddress,
+                    onTap: () {
+                      if (_editingPickup) {
+                        setState(() {
+                          _mode = _TripPointMode.destination;
+                          _clearSearch(clearText: true);
+                        });
+                        _moveCamera(_destination ?? _selectedPickup);
+                      }
+                    },
                   ),
                 ],
               ),
             ),
-            Expanded(child: _buildMap()),
+            Expanded(
+              child: ClipRRect(
+                borderRadius:
+                    const BorderRadius.vertical(top: Radius.circular(20)),
+                child: Stack(
+                  alignment: Alignment.center,
+                  children: <Widget>[
+                    _buildMap(),
+                    _buildCenterPinOverlay(),
+                    _buildMapControls(),
+                  ],
+                ),
+              ),
+            ),
             Padding(
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 14),
               child: SizedBox(
                 width: double.infinity,
                 height: 52,
                 child: AnimatedPressable(
                   onTap: _destination == null ? null : _submit,
                   child: FilledButton(
-                    style:
-                        FilledButton.styleFrom(backgroundColor: primaryColor),
+                    style: FilledButton.styleFrom(
+                      backgroundColor: primaryColor,
+                      disabledBackgroundColor:
+                          primaryColor.withValues(alpha: 0.35),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                    ),
                     onPressed: _destination == null ? null : _submit,
-                    child: const Text('Send trip request'),
+                    child: Text(
+                      _destination == null
+                          ? 'Choose destination on map'
+                          : 'Send trip request',
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
                   ),
                 ),
               ),
@@ -179,27 +249,47 @@ class _TripRequestMapSheetState extends State<_TripRequestMapSheet> {
   }
 
   Widget _buildModeSelector() {
-    return SegmentedButton<_TripPointMode>(
-      segments: const <ButtonSegment<_TripPointMode>>[
-        ButtonSegment<_TripPointMode>(
-          value: _TripPointMode.pickup,
-          icon: Icon(Icons.my_location_rounded),
-          label: Text('Pickup'),
-        ),
-        ButtonSegment<_TripPointMode>(
-          value: _TripPointMode.destination,
-          icon: Icon(Icons.location_on_rounded),
-          label: Text('Destination'),
-        ),
-      ],
-      selected: <_TripPointMode>{_mode},
-      onSelectionChanged: (Set<_TripPointMode> value) {
-        setState(() {
-          _mode = value.first;
-          _clearSearch(clearText: true);
-        });
-        _moveCamera(_editingPickup ? _selectedPickup : _destination);
-      },
+    return Container(
+      decoration: BoxDecoration(
+        color: const Color(0xFFF3F4F6),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      padding: const EdgeInsets.all(3),
+      child: Row(
+        children: <Widget>[
+          Expanded(
+            child: _ModeTabButton(
+              title: '1. Pickup',
+              icon: Icons.my_location_rounded,
+              iconColor: Colors.green,
+              isSelected: _editingPickup,
+              onTap: () {
+                setState(() {
+                  _mode = _TripPointMode.pickup;
+                  _clearSearch(clearText: true);
+                });
+                _moveCamera(_selectedPickup);
+              },
+            ),
+          ),
+          const SizedBox(width: 4),
+          Expanded(
+            child: _ModeTabButton(
+              title: '2. Destination',
+              icon: Icons.location_on_rounded,
+              iconColor: primaryColor,
+              isSelected: !_editingPickup,
+              onTap: () {
+                setState(() {
+                  _mode = _TripPointMode.destination;
+                  _clearSearch(clearText: true);
+                });
+                _moveCamera(_destination ?? _selectedPickup);
+              },
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -212,21 +302,21 @@ class _TripRequestMapSheetState extends State<_TripRequestMapSheet> {
       children: <Widget>[
         AnimatedContainer(
           duration: const Duration(milliseconds: 180),
-          height: 48,
+          height: 46,
           decoration: BoxDecoration(
             color: Colors.white,
-            borderRadius: BorderRadius.circular(14),
+            borderRadius: BorderRadius.circular(12),
             border: Border.all(
               color: _searchFocusNode.hasFocus
                   ? primaryColor
-                  : Colors.black.withValues(alpha: 0.1),
-              width: _searchFocusNode.hasFocus ? 1.4 : 1,
+                  : Colors.black.withValues(alpha: 0.12),
+              width: _searchFocusNode.hasFocus ? 1.5 : 1,
             ),
             boxShadow: <BoxShadow>[
               BoxShadow(
-                color: Colors.black.withValues(alpha: 0.08),
-                blurRadius: 14,
-                offset: const Offset(0, 4),
+                color: Colors.black.withValues(alpha: 0.06),
+                blurRadius: 10,
+                offset: const Offset(0, 3),
               ),
             ],
           ),
@@ -236,7 +326,7 @@ class _TripRequestMapSheetState extends State<_TripRequestMapSheet> {
               Icon(
                 Icons.search_rounded,
                 color: _searchFocusNode.hasFocus ? primaryColor : text2Color,
-                size: 22,
+                size: 20,
               ),
               const SizedBox(width: 8),
               Expanded(
@@ -247,21 +337,24 @@ class _TripRequestMapSheetState extends State<_TripRequestMapSheet> {
                   onChanged: _onSearchChanged,
                   decoration: InputDecoration(
                     hintText: _editingPickup
-                        ? 'Search pickup location'
-                        : 'Search destination',
+                        ? 'Search pickup address / place'
+                        : 'Search destination address / place',
                     border: InputBorder.none,
                     enabledBorder: InputBorder.none,
                     focusedBorder: InputBorder.none,
                     isDense: true,
                     contentPadding: EdgeInsets.zero,
-                    hintStyle: const TextStyle(color: hintColor),
+                    hintStyle: const TextStyle(
+                      color: hintColor,
+                      fontSize: 14,
+                    ),
                   ),
                 ),
               ),
               if (hasText)
                 IconButton(
                   visualDensity: VisualDensity.compact,
-                  icon: const Icon(Icons.close_rounded, size: 20),
+                  icon: const Icon(Icons.close_rounded, size: 18),
                   onPressed: () {
                     setState(() => _clearSearch(clearText: true));
                     _searchFocusNode.requestFocus();
@@ -295,13 +388,15 @@ class _TripRequestMapSheetState extends State<_TripRequestMapSheet> {
     } else if (_suggestions.isEmpty) {
       content = const _SearchStatus(
         icon: Icon(Icons.search_off_rounded, size: 20),
-        message: 'No locations found',
+        message: 'No locations found. Move the map to place a pin.',
       );
     } else {
-      content = ListView.builder(
+      content = ListView.separated(
         shrinkWrap: true,
         padding: const EdgeInsets.symmetric(vertical: 4),
         itemCount: _suggestions.length,
+        separatorBuilder: (_, __) =>
+            Divider(height: 1, color: Colors.grey.withValues(alpha: 0.15)),
         itemBuilder: (BuildContext context, int index) {
           final Prediction prediction = _suggestions[index];
           final String title =
@@ -313,14 +408,23 @@ class _TripRequestMapSheetState extends State<_TripRequestMapSheet> {
               prediction.structuredFormatting?.secondaryText ?? '';
           return ListTile(
             dense: true,
-            leading: const Icon(Icons.location_on_rounded, color: primaryColor),
-            title: Text(title, maxLines: 1, overflow: TextOverflow.ellipsis),
+            leading: Icon(
+              Icons.location_on_rounded,
+              color: _editingPickup ? Colors.green : primaryColor,
+            ),
+            title: Text(
+              title,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+            ),
             subtitle: subtitle.isEmpty
                 ? null
                 : Text(
                     subtitle,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontSize: 11, color: text2Color),
                   ),
             onTap: () => _selectSuggestion(prediction),
           );
@@ -331,15 +435,15 @@ class _TripRequestMapSheetState extends State<_TripRequestMapSheet> {
     return FadeSlideIn(
       offsetY: 6,
       child: Container(
-        margin: const EdgeInsets.only(top: 8),
-        constraints: const BoxConstraints(maxHeight: 230),
+        margin: const EdgeInsets.only(top: 6),
+        constraints: const BoxConstraints(maxHeight: 220),
         clipBehavior: Clip.antiAlias,
         decoration: BoxDecoration(
           color: Colors.white,
-          borderRadius: BorderRadius.circular(14),
+          borderRadius: BorderRadius.circular(12),
           boxShadow: <BoxShadow>[
             BoxShadow(
-              color: Colors.black.withValues(alpha: 0.12),
+              color: Colors.black.withValues(alpha: 0.15),
               blurRadius: 18,
               offset: const Offset(0, 6),
             ),
@@ -360,30 +464,36 @@ class _TripRequestMapSheetState extends State<_TripRequestMapSheet> {
         center: effectiveCenter,
         zoom: _mapZoom,
         onTap: _selectPointFromMap,
+        onCenterChanged: (LatLng center) {
+          _currentCameraTarget = center;
+          _scheduleReverseGeocode(center);
+        },
         markers: <DrewelOsmMarker>[
-          DrewelOsmMarker(
-            id: 'pickup',
-            position: _selectedPickup,
-            child: const Icon(
-              Icons.radio_button_checked,
-              color: Colors.green,
-              size: 36,
-            ),
-          ),
-          if (_destination != null)
+          if (!_editingPickup)
             DrewelOsmMarker(
-              id: 'destination',
+              id: 'pickup_pinned',
+              position: _selectedPickup,
+              child: const Icon(
+                Icons.radio_button_checked,
+                color: Colors.green,
+                size: 34,
+              ),
+            ),
+          if (_editingPickup && _destination != null)
+            DrewelOsmMarker(
+              id: 'destination_pinned',
               position: _destination!,
               child: const Icon(
                 Icons.location_on,
                 color: primaryColor,
-                size: 40,
+                size: 38,
               ),
             ),
         ],
       );
     }
 
+    // Google Map with EagerGestureRecognizer for buttery-smooth finger scrolling
     return GoogleMap(
       initialCameraPosition: CameraPosition(
         target: effectiveCenter,
@@ -393,24 +503,158 @@ class _TripRequestMapSheetState extends State<_TripRequestMapSheet> {
       mapToolbarEnabled: false,
       myLocationButtonEnabled: false,
       zoomControlsEnabled: false,
+      rotateGesturesEnabled: true,
+      scrollGesturesEnabled: true,
+      zoomGesturesEnabled: true,
+      tiltGesturesEnabled: false,
+      gestureRecognizers: <Factory<OneSequenceGestureRecognizer>>{
+        Factory<OneSequenceGestureRecognizer>(
+          () => EagerGestureRecognizer(),
+        ),
+      },
       onMapCreated: (GoogleMapController controller) {
         _googleMapController = controller;
       },
+      onCameraMoveStarted: () {
+        if (!_isMovingMap) {
+          setState(() => _isMovingMap = true);
+        }
+      },
+      onCameraMove: (CameraPosition position) {
+        _currentCameraTarget = position.target;
+      },
+      onCameraIdle: () {
+        if (_isMovingMap) {
+          setState(() => _isMovingMap = false);
+        }
+        if (_currentCameraTarget != null) {
+          _scheduleReverseGeocode(_currentCameraTarget!);
+        }
+      },
       onTap: _selectPointFromMap,
       markers: <Marker>{
-        Marker(
-          markerId: const MarkerId('pickup'),
-          position: _selectedPickup,
-          icon: BitmapDescriptor.defaultMarkerWithHue(
-            BitmapDescriptor.hueGreen,
-          ),
-        ),
-        if (_destination != null)
+        // Show the other point as a pinned marker so passenger sees the full route
+        if (!_editingPickup)
           Marker(
-            markerId: const MarkerId('destination'),
+            markerId: const MarkerId('pickup_fixed'),
+            position: _selectedPickup,
+            icon: BitmapDescriptor.defaultMarkerWithHue(
+              BitmapDescriptor.hueGreen,
+            ),
+            infoWindow: InfoWindow(
+              title: 'Pickup',
+              snippet: _pickupAddress,
+            ),
+          ),
+        if (_editingPickup && _destination != null)
+          Marker(
+            markerId: const MarkerId('destination_fixed'),
             position: _destination!,
+            icon: BitmapDescriptor.defaultMarkerWithHue(
+              BitmapDescriptor.hueRose,
+            ),
+            infoWindow: InfoWindow(
+              title: 'Destination',
+              snippet: _destinationAddress,
+            ),
           ),
       },
+    );
+  }
+
+  /// Interactive center pin with animated bounce & label badge (Uber/InDrive style)
+  Widget _buildCenterPinOverlay() {
+    final Color pinColor = _editingPickup ? Colors.green : primaryColor;
+    final String label =
+        _editingPickup ? 'Move map to set Pickup' : 'Move map to set Destination';
+
+    return IgnorePointer(
+      child: Center(
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          transform: Matrix4.translationValues(
+            0,
+            _isMovingMap ? -18 : -14,
+            0,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: Colors.black87,
+                  borderRadius: BorderRadius.circular(20),
+                  boxShadow: <BoxShadow>[
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.2),
+                      blurRadius: 6,
+                    ),
+                  ],
+                ),
+                child: Text(
+                  label,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 4),
+              Icon(
+                Icons.location_on_rounded,
+                color: pinColor,
+                size: _isMovingMap ? 46 : 42,
+              ),
+              Container(
+                width: 7,
+                height: 7,
+                decoration: BoxDecoration(
+                  color: Colors.black45,
+                  shape: BoxShape.circle,
+                  boxShadow: <BoxShadow>[
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.4),
+                      blurRadius: _isMovingMap ? 8 : 4,
+                      spreadRadius: _isMovingMap ? 2 : 1,
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMapControls() {
+    return Positioned(
+      right: 14,
+      bottom: 14,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: <Widget>[
+          Material(
+            color: Colors.white,
+            elevation: 4,
+            shape: const CircleBorder(),
+            child: InkWell(
+              customBorder: const CircleBorder(),
+              onTap: _recenterOnGps,
+              child: const Padding(
+                padding: EdgeInsets.all(10),
+                child: Icon(
+                  Icons.my_location_rounded,
+                  color: primaryColor,
+                  size: 22,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -437,169 +681,106 @@ class _TripRequestMapSheetState extends State<_TripRequestMapSheet> {
     );
   }
 
-  Future<http.Response?> _getWithTimeout(
-    Uri uri, {
-    void Function(String message)? onError,
-  }) async {
-    try {
-      return await http.get(uri).timeout(_placesHttpTimeout);
-    } on TimeoutException {
-      onError?.call('Search timed out. Check your connection and try again.');
-    } on SocketException {
-      onError?.call('No internet connection. Check your network and try again.');
-    } catch (_) {
-      onError?.call('Unable to find locations. Try again.');
-    }
-    return null;
-  }
-
   Future<void> _fetchSuggestions(String query, int requestId) async {
-    final Uri uri = Uri.https(
-      'maps.googleapis.com',
-      '/maps/api/place/autocomplete/json',
-      <String, String>{
-        'input': query,
-        'key': ApiKeyConstants.googleMapKey,
-        'language': 'en',
-        'components': 'country:${AppConfig.marketplaceCountryCode}',
-      },
+    final LatLng near = _currentCameraTarget ?? _selectedPickup;
+    final List<Prediction> results =
+        await DrewelLocationSearchService.instance.searchPlaces(
+      query,
+      nearLocation: near,
     );
 
-    String? failureMessage;
-    final http.Response? response = await _getWithTimeout(
-      uri,
-      onError: (String message) => failureMessage = message,
-    );
     if (!mounted || requestId != _searchRequestId) return;
 
-    if (response == null) {
-      _setSearchFailure(failureMessage ?? 'Unable to find locations. Try again.');
-      return;
-    }
-
-    if (response.statusCode != 200) {
-      _setSearchFailure('Unable to find locations. Try again.');
-      return;
-    }
-
-    final Map<String, dynamic> data =
-        json.decode(response.body) as Map<String, dynamic>;
-    final String status = data['status']?.toString() ?? '';
-    if (status == 'OK') {
-      final List<dynamic> predictions = data['predictions'] as List<dynamic>;
-      setState(() {
-        _suggestions = predictions
-            .map((dynamic value) => Prediction.fromJson(value))
-            .toList(growable: false);
+    setState(() {
+      _isSearching = false;
+      _suggestions = results;
+      if (results.isEmpty) {
         _searchError = '';
-        _isSearching = false;
-      });
-    } else if (status == 'ZERO_RESULTS') {
-      setState(() {
-        _suggestions = <Prediction>[];
-        _searchError = '';
-        _isSearching = false;
-      });
-    } else {
-      _setSearchFailure(
-        status == 'REQUEST_DENIED'
-            ? 'Location search is temporarily unavailable.'
-            : 'Unable to find locations. Try again.',
-      );
-    }
+      }
+    });
   }
 
   Future<void> _selectSuggestion(Prediction prediction) async {
-    final String? placeId = prediction.placeId;
-    if (placeId == null || placeId.isEmpty) return;
-
     setState(() {
       _isSearching = true;
       _searchError = '';
     });
 
-    try {
-      final Uri uri = Uri.https(
-        'maps.googleapis.com',
-        '/maps/api/place/details/json',
-        <String, String>{
-          'place_id': placeId,
-          'key': ApiKeyConstants.googleMapKey,
-          'fields': 'formatted_address,geometry,name',
-          'language': 'en',
-        },
-      );
-      String? failureMessage;
-      final http.Response? response = await _getWithTimeout(
-        uri,
-        onError: (String message) => failureMessage = message,
-      );
-      if (!mounted) return;
+    final ({LatLng point, String address})? details =
+        await DrewelLocationSearchService.instance.getPlaceDetails(prediction);
 
-      if (response == null) {
-        _setSearchFailure(failureMessage ?? 'Unable to open this location.');
-        return;
-      }
+    if (!mounted) return;
 
-      if (response.statusCode != 200) {
-        _setSearchFailure('Unable to open this location.');
-        return;
-      }
-
-      final Map<String, dynamic> data =
-          json.decode(response.body) as Map<String, dynamic>;
-      if (data['status'] != 'OK') {
-        _setSearchFailure('Unable to open this location.');
-        return;
-      }
-
-      final Map<String, dynamic> result =
-          data['result'] as Map<String, dynamic>;
-      final Map<String, dynamic> geometry =
-          result['geometry'] as Map<String, dynamic>;
-      final Map<String, dynamic> location =
-          geometry['location'] as Map<String, dynamic>;
-      final LatLng point = LatLng(
-        (location['lat'] as num).toDouble(),
-        (location['lng'] as num).toDouble(),
-      );
-      final String address = (result['formatted_address'] ??
-              prediction.description ??
-              result['name'] ??
-              '')
-          .toString()
-          .trim();
-
-      _applySelectedPoint(point, address);
+    if (details != null) {
+      _applySelectedPoint(details.point, details.address);
       _searchFocusNode.unfocus();
       _searchController.clear();
       _clearSearch(clearText: false);
-      await _moveCamera(point);
-    } catch (_) {
-      if (!mounted) return;
-      _setSearchFailure('Unable to open this location.');
+      await _moveCamera(details.point);
+    } else {
+      setState(() {
+        _isSearching = false;
+        _searchError = 'Unable to select this location.';
+      });
     }
   }
 
   void _selectPointFromMap(LatLng point) {
-    _applySelectedPoint(point, _editingPickup ? 'Pinned pickup' : '');
+    _applySelectedPoint(point, '');
     _moveCamera(point);
+    _scheduleReverseGeocode(point);
+  }
+
+  void _scheduleReverseGeocode(LatLng point) {
+    _reverseGeocodeDebounce?.cancel();
+    _geocodeRequestId++;
+    final int currentId = _geocodeRequestId;
+
+    setState(() {
+      _isGeocoding = true;
+      if (_editingPickup) {
+        _selectedPickup = point;
+      } else {
+        _destination = point;
+      }
+    });
+
+    _reverseGeocodeDebounce = Timer(const Duration(milliseconds: 400), () async {
+      final String? address =
+          await DrewelLocationSearchService.instance.reverseGeocode(point);
+      if (!mounted || currentId != _geocodeRequestId) return;
+
+      setState(() {
+        _isGeocoding = false;
+        final String resolved = address?.trim().isNotEmpty == true
+            ? address!.trim()
+            : (_editingPickup ? 'Pickup pinned' : 'Destination pinned');
+        if (_editingPickup) {
+          _selectedPickup = point;
+          _pickupAddress = resolved;
+        } else {
+          _destination = point;
+          _destinationAddress = resolved;
+        }
+      });
+    });
   }
 
   void _applySelectedPoint(LatLng point, String address) {
     setState(() {
       if (_editingPickup) {
         _selectedPickup = point;
-        _pickupAddress = address.isEmpty ? 'Pinned pickup' : address;
+        _pickupAddress = address.isEmpty ? 'Pickup pinned' : address;
       } else {
         _destination = point;
-        _destinationAddress = address;
+        _destinationAddress = address.isEmpty ? 'Destination pinned' : address;
       }
     });
   }
 
   Future<void> _moveCamera(LatLng? point) async {
     if (point == null) return;
+    _currentCameraTarget = point;
     if (AppConfig.useOpenStreetMapForCurrentPlatform) {
       _osmMapController.move(
         latlong.LatLng(point.latitude, point.longitude),
@@ -614,12 +795,10 @@ class _TripRequestMapSheetState extends State<_TripRequestMapSheet> {
     );
   }
 
-  void _setSearchFailure(String message) {
-    setState(() {
-      _suggestions = <Prediction>[];
-      _searchError = message;
-      _isSearching = false;
-    });
+  void _recenterOnGps() {
+    HapticFeedback.selectionClick();
+    _moveCamera(widget.pickup);
+    _scheduleReverseGeocode(widget.pickup);
   }
 
   void _clearSearch({required bool clearText}) {
@@ -633,7 +812,7 @@ class _TripRequestMapSheetState extends State<_TripRequestMapSheet> {
 
   void _submit() {
     HapticFeedback.mediumImpact();
-    final LatLng destination = _destination!;
+    final LatLng destination = _destination ?? _currentCameraTarget ?? _selectedPickup;
     Navigator.pop(
       context,
       TripRouteRequest(
@@ -654,6 +833,61 @@ class _TripRequestMapSheetState extends State<_TripRequestMapSheet> {
   }
 }
 
+class _ModeTabButton extends StatelessWidget {
+  const _ModeTabButton({
+    required this.title,
+    required this.icon,
+    required this.iconColor,
+    required this.isSelected,
+    required this.onTap,
+  });
+
+  final String title;
+  final IconData icon;
+  final Color iconColor;
+  final bool isSelected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 160),
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        decoration: BoxDecoration(
+          color: isSelected ? Colors.white : Colors.transparent,
+          borderRadius: BorderRadius.circular(10),
+          boxShadow: isSelected
+              ? <BoxShadow>[
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.08),
+                    blurRadius: 6,
+                    offset: const Offset(0, 2),
+                  ),
+                ]
+              : null,
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: <Widget>[
+            Icon(icon, color: isSelected ? iconColor : text2Color, size: 16),
+            const SizedBox(width: 6),
+            Text(
+              title,
+              style: TextStyle(
+                color: isSelected ? Colors.black87 : text2Color,
+                fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                fontSize: 12,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _SearchStatus extends StatelessWidget {
   const _SearchStatus({required this.icon, required this.message});
 
@@ -663,7 +897,7 @@ class _SearchStatus extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
         children: <Widget>[
@@ -676,7 +910,10 @@ class _SearchStatus extends StatelessWidget {
             child: Text(
               message,
               textAlign: TextAlign.center,
-              style: TextStyle(color: Colors.black.withValues(alpha: 0.58)),
+              style: TextStyle(
+                color: Colors.black.withValues(alpha: 0.58),
+                fontSize: 12,
+              ),
             ),
           ),
         ],
@@ -688,50 +925,84 @@ class _SearchStatus extends StatelessWidget {
 class _RouteLine extends StatelessWidget {
   const _RouteLine({
     required this.icon,
+    required this.iconColor,
     required this.label,
     required this.value,
     this.active = false,
+    this.onTap,
   });
 
   final IconData icon;
+  final Color iconColor;
   final String label;
   final String value;
   final bool active;
+  final VoidCallback? onTap;
 
   @override
-  Widget build(BuildContext context) => AnimatedContainer(
-        duration: MotionDuration.normal,
-        curve: MotionCurve.standard,
-        margin: const EdgeInsets.only(bottom: 8),
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-        decoration: BoxDecoration(
-          color: active ? primaryColor.withValues(alpha: 0.07) : Colors.white,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: active
-                ? primaryColor.withValues(alpha: 0.28)
-                : Colors.transparent,
-          ),
-        ),
-        child: Row(children: <Widget>[
-          Icon(icon, color: active ? primaryColor : text2Color, size: 19),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: <Widget>[
-                Text(
-                  label,
-                  style: const TextStyle(
-                    fontSize: 10,
-                    color: text2Color,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-                Text(value, maxLines: 1, overflow: TextOverflow.ellipsis),
-              ],
+  Widget build(BuildContext context) => InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: AnimatedContainer(
+          duration: MotionDuration.normal,
+          curve: MotionCurve.standard,
+          margin: const EdgeInsets.only(bottom: 6),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+          decoration: BoxDecoration(
+            color: active ? iconColor.withValues(alpha: 0.08) : Colors.white,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: active
+                  ? iconColor.withValues(alpha: 0.35)
+                  : Colors.grey.withValues(alpha: 0.2),
             ),
           ),
-        ]),
+          child: Row(
+            children: <Widget>[
+              Icon(icon, color: active ? iconColor : text2Color, size: 18),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    Text(
+                      label,
+                      style: TextStyle(
+                        fontSize: 9,
+                        color: active ? iconColor : text2Color,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    Text(
+                      value,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: active ? FontWeight.w600 : FontWeight.normal,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              if (active)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: iconColor.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    'Active',
+                    style: TextStyle(
+                      color: iconColor,
+                      fontSize: 9,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
       );
 }

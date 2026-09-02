@@ -32,7 +32,6 @@ export * from "./domains/pointTransactions";
 export * from "./domains/alerts";
 export * from "./domains/auditLogs";
 export * from "./domains/chat";
-export * from "./domains/secureCalls";
 export * from "./domains/banners";
 export * from "./domains/settings";
 export * from "./domains/health";

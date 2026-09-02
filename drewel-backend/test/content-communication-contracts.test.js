@@ -13,7 +13,6 @@ import RideConversation from "../src/models/RideConversation.js";
 import {
   addAdminConversationNote,
   getAdminConversationMessages,
-  listSecureCalls,
 } from "../src/controllers/adminMetaController.js";
 import {
   toggleBannerStatus,
@@ -93,6 +92,52 @@ test("call logs are metadata-only with a bounded status enum and no contact secr
   }
   assert.ok(schema.indexes().some(([keys]) => keys.rideId === 1 && keys.startedAt === -1));
   assert.ok(schema.indexes().some(([keys]) => keys.status === 1 && keys.startedAt === -1));
+  assert.equal(routeLayer(adminRoute, "/secure-calls", "get"), undefined);
+});
+
+test("ride message notifications navigate with the canonical ride id", () => {
+  const conversationSource = readFileSync(
+    new URL("../src/services/conversationService.js", import.meta.url),
+    "utf8"
+  );
+  const rideSource = readFileSync(
+    new URL("../src/controllers/rideController.js", import.meta.url),
+    "utf8"
+  );
+
+  assert.match(conversationSource, /conversationId: ride\._id/);
+  assert.match(conversationSource, /deepLink: `drewel:\/\/chat\/ride\?rideId=\$\{String\(ride\._id\)\}`/);
+  assert.doesNotMatch(conversationSource, /chat\/ride\?conversationId=/);
+  assert.equal((rideSource.match(/deepLink: `drewel:\/\/chat\/ride\?rideId=/g) || []).length, 2);
+  assert.doesNotMatch(rideSource, /chat\/ride\?conversationId=/);
+});
+
+test("retired calls are excluded from active health checks while history remains schema-compatible", () => {
+  const healthModel = readFileSync(
+    new URL("../src/models/OperationalHealth.js", import.meta.url),
+    "utf8"
+  );
+  const healthJob = readFileSync(
+    new URL("../src/jobs/operationalJobs.js", import.meta.url),
+    "utf8"
+  );
+  const packageJson = JSON.parse(
+    readFileSync(new URL("../package.json", import.meta.url), "utf8")
+  );
+
+  assert.equal(packageJson.dependencies["agora-token"], undefined);
+  assert.match(healthModel, /HEALTH_SERVICE_SCHEMA_IDS = \[\.\.\.HEALTH_SERVICE_IDS, "secure_calls"\]/);
+  assert.doesNotMatch(healthJob, /AGORA_|secure_calls|Secure Calls/);
+});
+
+test("passenger details keep recentCalls as an empty compatibility field", () => {
+  const source = readFileSync(
+    new URL("../src/controllers/userController.js", import.meta.url),
+    "utf8"
+  );
+
+  assert.match(source, /recentCalls:\s*\[\]/);
+  assert.doesNotMatch(source, /[^:]\brecentCalls,/);
 });
 
 test("content audits are append-only and bounded to content entity types and actions", () => {
@@ -182,17 +227,6 @@ test("conversation notes require content and cap at 2000 characters", async () =
   assert.match(result.body.message, /2000/);
 });
 
-test("secure-call feed rejects malformed ride filters before querying", async () => {
-  const { res, result } = capture();
-  await listSecureCalls(
-    { query: { rideId: "not-an-id" }, admin: { _id: "admin" } },
-    res
-  );
-  assert.equal(result.status, 400);
-  assert.equal(result.body.code, "ADMIN_SYSTEM_ERROR");
-  assert.match(result.body.message, /rideId/);
-});
-
 test("banner toggle requires an explicit boolean before touching storage", async () => {
   const { res, result } = capture();
   await toggleBannerStatus(
@@ -218,26 +252,6 @@ test("banner delete rejects invalid ids before touching storage", async () => {
   );
   assert.equal(result.status, 400);
   assert.match(result.body.message, /Invalid banner id/);
-});
-
-test("secure-call DTO projects only metadata and never recording or contact fields", () => {
-  const source = readFileSync(
-    new URL("../src/controllers/adminMetaController.js", import.meta.url),
-    "utf8"
-  );
-  const dtoStart = source.indexOf("export const listSecureCalls");
-  assert.ok(dtoStart >= 0, "listSecureCalls must exist");
-  const dtoEnd = source.indexOf("export const getCommunicationActions", dtoStart);
-  const dtoSource = source.slice(dtoStart, dtoEnd);
-
-  assert.match(dtoSource, /recordingEnabled/);
-  assert.doesNotMatch(dtoSource, /recordingUrl/);
-  assert.doesNotMatch(dtoSource, /whatsappNumber/);
-  assert.doesNotMatch(dtoSource, /\.phone/);
-  assert.doesNotMatch(dtoSource, /\.email/);
-  for (const field of ["callId", "participants", "durationSec", "failureReason", "providerReference"]) {
-    assert.match(dtoSource, new RegExp(field), `DTO must expose ${field}`);
-  }
 });
 
 test("banner serialization rewrites image urls through the public asset helper", () => {
