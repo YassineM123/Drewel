@@ -183,6 +183,7 @@ class PassengerAccountRepository {
           : legal;
     } on CommunicationApiException catch (error) {
       if (error.statusCode == 404 ||
+          error.code == 'INVALID_LEGAL_TYPE' ||
           error.code == 'API_ROUTE_NOT_FOUND' ||
           error.message.contains('Cannot GET')) {
         return LegalContentModel.fallback(type, language: language);

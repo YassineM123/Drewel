@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:drewel/app/data/apis/api_models/passenger_account_models.dart';
 import 'package:drewel/common/drewel_app_bar.dart';
 import 'package:drewel/common/http_methods.dart';
+import 'package:drewel/common/legal_document_body.dart';
 import 'package:drewel/common/text_styles.dart';
 import 'package:flutter/material.dart';
 
@@ -47,8 +48,8 @@ class _LegalContentViewState extends State<LegalContentView> {
         return;
       }
       final dynamic decoded = jsonDecode(response.body);
-      final dynamic raw = (decoded as Map<String, dynamic>)['legal'] ??
-          decoded['data'];
+      final dynamic raw =
+          (decoded as Map<String, dynamic>)['legal'] ?? decoded['data'];
       if (raw == null) {
         if (mounted) {
           setState(() => _content = LegalContentModel.fallback(widget.type));
@@ -72,8 +73,9 @@ class _LegalContentViewState extends State<LegalContentView> {
 
   @override
   Widget build(BuildContext context) {
-    final String title =
-        widget.type == 'terms' ? 'Terms & Conditions' : 'Privacy Policy';
+    final String title = widget.type == 'terms' || widget.type == 'driver-terms'
+        ? 'Driver Terms & Conditions'
+        : 'Privacy Policy';
     return Scaffold(
       appBar: DrewelAppBar(title: title, showBackButton: true),
       backgroundColor: const Color(0xFFFAFAFA),
@@ -87,7 +89,8 @@ class _LegalContentViewState extends State<LegalContentView> {
                     const Icon(Icons.description_outlined,
                         size: 48, color: Color(0xFF9DB2BF)),
                     const SizedBox(height: 12),
-                    Text(_error, style: MyTextStyle.titleStyle16b,
+                    Text(_error,
+                        style: MyTextStyle.titleStyle16b,
                         textAlign: TextAlign.center),
                     const SizedBox(height: 16),
                     TextButton(
@@ -100,22 +103,7 @@ class _LegalContentViewState extends State<LegalContentView> {
             )
           : _content == null
               ? const Center(child: CircularProgressIndicator())
-              : ListView(
-                  padding: const EdgeInsets.all(20),
-                  children: <Widget>[
-                    Text(_content!.title, style: MyTextStyle.titleStyle20bb),
-                    if (_content!.lastUpdated?.isNotEmpty == true) ...<Widget>[
-                      const SizedBox(height: 4),
-                      Text('Last updated ${_content!.lastUpdated}',
-                          style: const TextStyle(color: Color(0xFF9DB2BF))),
-                    ],
-                    const SizedBox(height: 20),
-                    Text(
-                      _content!.body,
-                      style: const TextStyle(height: 1.5, fontSize: 15),
-                    ),
-                  ],
-                ),
+              : LegalDocumentBody(legal: _content!),
     );
   }
 }

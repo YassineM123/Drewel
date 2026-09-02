@@ -114,14 +114,10 @@ const defaultLegalBody = (type, language = "en") => {
       "Drewel limits access to personal data to authorized operations, support, security, and administration workflows. Contact support if you need help with account data or privacy questions.",
     ].join("\n\n");
   }
-  if (type === "driver-terms") {
+  if (type === "driver-terms" || type === "terms") {
     return isArabic ? driverTermsBodyAr : driverTermsBody;
   }
-  return [
-    "By using Drewel, passengers and drivers agree to use the marketplace honestly, safely, and only for lawful transport coordination.",
-    "Passengers send ride requests, and drivers send official trip offers through Drewel. Prices, ride lifecycle changes, points, restrictions, and sensitive actions are controlled by the server.",
-    "Drewel may restrict accounts, cancel unsafe activity, preserve ride and communication evidence, and require driver profile or document review when needed for marketplace safety.",
-  ].join("\n\n");
+  return driverTermsBody;
 };
 
 export const listSavedPlaces = async (req, res) => {
@@ -266,7 +262,7 @@ export const getLegalContent = async (req, res) => {
     const envKey =
       type === "privacy"
         ? "PRIVACY_CONTENT"
-        : type === "driver-terms"
+        : type === "driver-terms" || type === "terms"
           ? language.startsWith("ar")
             ? "DRIVER_TERMS_CONTENT_AR"
             : "DRIVER_TERMS_CONTENT"
@@ -281,8 +277,8 @@ export const getLegalContent = async (req, res) => {
             : type === "driver-terms"
               ? language.startsWith("ar")
                 ? "شروط وأحكام السائق"
-                : "Driver Terms and Conditions"
-              : "Terms & Conditions",
+                : "Drewel - Driver Terms and Conditions"
+              : "Drewel - Driver Terms and Conditions",
         lastUpdated: process.env.LEGAL_LAST_UPDATED || null,
         body: String(process.env[envKey] || "").trim() || defaultLegalBody(type, language),
       },

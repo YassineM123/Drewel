@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 
 import '../../../../common/colors.dart';
 import '../../../../common/drewel_app_bar.dart';
+import '../../../../common/legal_document_body.dart';
 import '../../../../common/text_styles.dart';
 import '../../../data/apis/api_models/active_ride_model.dart';
 import '../../../data/apis/api_models/passenger_account_models.dart';
@@ -661,7 +662,9 @@ class LegalView extends GetView<PassengerAccountController> {
     });
     return Scaffold(
       appBar: DrewelAppBar(
-        title: type == 'terms' ? 'Terms & Conditions' : 'Privacy',
+        title: type == 'terms' || type == 'driver-terms'
+            ? 'Driver Terms & Conditions'
+            : 'Privacy',
         showBackButton: true,
       ),
       backgroundColor: _pageColor,
@@ -687,19 +690,7 @@ class LegalView extends GetView<PassengerAccountController> {
                 'The backend is ready to serve this page once official content is configured.',
           );
         }
-        return ListView(
-          padding: const EdgeInsets.all(16),
-          children: <Widget>[
-            Text(legal.title, style: MyTextStyle.titleStyle20bb),
-            if (legal.lastUpdated?.isNotEmpty == true) ...<Widget>[
-              const SizedBox(height: 4),
-              Text('Last updated ${legal.lastUpdated}',
-                  style: const TextStyle(color: text2Color)),
-            ],
-            const SizedBox(height: 20),
-            Text(legal.body, style: const TextStyle(height: 1.5, fontSize: 15)),
-          ],
-        );
+        return LegalDocumentBody(legal: legal);
       }),
     );
   }

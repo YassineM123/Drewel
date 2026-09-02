@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 
 import '../../../../common/colors.dart';
 import '../../../../common/drewel_app_bar.dart';
+import '../../../../common/legal_document_body.dart';
 import '../../../../common/text_styles.dart';
 import '../../../data/apis/api_models/active_ride_model.dart';
 import '../../../data/apis/api_models/driver_points_models.dart';
@@ -671,11 +672,9 @@ class DriverLegalView extends GetView<DriverAccountController> {
     });
     return Scaffold(
       appBar: DrewelAppBar(
-        title: type == 'driver-terms'
+        title: type == 'driver-terms' || type == 'terms'
             ? 'Driver Terms & Conditions'
-            : type == 'terms'
-                ? 'Terms & Conditions'
-                : 'Privacy',
+            : 'Privacy',
         showBackButton: true,
       ),
       backgroundColor: _pageColor,
@@ -701,17 +700,7 @@ class DriverLegalView extends GetView<DriverAccountController> {
                 'The backend will show approved Drewel legal content once configured.',
           );
         }
-        return ListView(
-          padding: const EdgeInsets.all(16),
-          children: <Widget>[
-            Text(legal.title, style: MyTextStyle.titleStyle20bb),
-            if (legal.lastUpdated?.isNotEmpty == true)
-              Text('Last updated ${legal.lastUpdated}',
-                  style: const TextStyle(color: text2Color)),
-            const SizedBox(height: 20),
-            Text(legal.body, style: const TextStyle(height: 1.5, fontSize: 15)),
-          ],
-        );
+        return LegalDocumentBody(legal: legal);
       }),
     );
   }
