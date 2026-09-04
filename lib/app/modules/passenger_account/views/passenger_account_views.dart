@@ -662,9 +662,11 @@ class LegalView extends GetView<PassengerAccountController> {
     });
     return Scaffold(
       appBar: DrewelAppBar(
-        title: type == 'terms' || type == 'driver-terms'
+        title: type == 'driver-terms'
             ? 'Driver Terms & Conditions'
-            : 'Privacy',
+            : type == 'terms'
+                ? 'Terms & Conditions'
+                : 'Privacy',
         showBackButton: true,
       ),
       backgroundColor: _pageColor,

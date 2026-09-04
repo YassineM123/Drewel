@@ -105,6 +105,32 @@ const driverTermsBodyAr = [
   "12. القانون والموافقة\nتخضع هذه الشروط للقوانين والأنظمة المعمول بها في دولة الإمارات العربية المتحدة.\n\nبالضغط على \"أوافق على الشروط والأحكام\" أو استخدام تطبيق Drewel، يؤكد السائق أنه قرأ وفهم ووافق على هذه الشروط والأحكام.",
 ].join("\n\n");
 
+const userTermsBody = [
+  "1. Use of the Application\nBy using Drewel or requesting any service, you agree to these Terms & Conditions and confirm that you will provide accurate information and use the application lawfully.",
+  "2. User Account\nUsers are responsible for the accuracy and security of their account information. Sharing or misusing an account is prohibited.",
+  "3. Services & Pricing\nServices are available depending on location and driver availability. Prices may vary depending on the type of service, distance, and other applicable factors.",
+  "4. Payment\nThe service fee is paid directly to the driver upon completion of the service, according to the agreed price or the price displayed in the application.",
+  "5. User Responsibilities\nUsers must provide accurate information about their location, vehicle, and cargo, treat drivers respectfully, and must not transport prohibited or dangerous materials.",
+  "6. Cancellation\nUsers may cancel their request at any time without any cancellation fee.",
+  "7. Safety & Conduct\nUsers must follow safety instructions, respect the driver, and avoid any behavior that may endanger people or the vehicle.",
+  "8. Privacy\nUsers agree to the collection and use of information necessary to provide Drewel services, in accordance with the Privacy Policy and applicable UAE laws.",
+  "9. Account Suspension\nDrewel may suspend or terminate an account in cases of fraud, misuse, false information, or violation of these Terms & Conditions.",
+  "10. Governing Law & Acceptance\nThese Terms & Conditions are governed by the laws of the United Arab Emirates. By using Drewel or clicking \"I Agree to the Terms & Conditions\", the user confirms that they have read, understood, and accepted these Terms & Conditions.",
+].join("\n\n");
+
+const userTermsBodyAr = [
+  "1. استخدام التطبيق\nباستخدامك تطبيق Drewel أو طلب أي خدمة، فإنك توافق على هذه الشروط والأحكام وتؤكد أنك ستقدم معلومات صحيحة وستستخدم التطبيق بشكل قانوني.",
+  "2. حساب المستخدم\nيتحمل المستخدم مسؤولية صحة معلومات حسابه وأمانها. ويُمنع مشاركة الحساب أو إساءة استخدامه.",
+  "3. الخدمات والأسعار\nتتوفر الخدمات حسب الموقع ومدى توفر السائقين. وقد تختلف الأسعار حسب نوع الخدمة والمسافة وعوامل أخرى قابلة للتطبيق.",
+  "4. الدفع\nتُدفع قيمة الخدمة مباشرة إلى السائق عند إتمام الخدمة، وفقاً للسعر المتفق عليه أو السعر الظاهر في التطبيق.",
+  "5. مسؤوليات المستخدم\nيجب على المستخدم تقديم معلومات صحيحة عن موقعه ومركبته وحمولته، ومعاملة السائقين باحترام، وعدم نقل أي مواد ممنوعة أو خطرة.",
+  "6. الإلغاء\nيمكن للمستخدم إلغاء طلبه في أي وقت دون أي رسوم إلغاء.",
+  "7. السلامة والسلوك\nيجب على المستخدم اتباع تعليمات السلامة واحترام السائق وتجنب أي سلوك قد يعرّض الأشخاص أو المركبة للخطر.",
+  "8. الخصوصية\nيوافق المستخدم على جمع واستخدام المعلومات اللازمة لتقديم خدمات Drewel، وفقاً لسياسة الخصوصية والقوانين المعمول بها في دولة الإمارات العربية المتحدة.",
+  "9. تعليق الحساب\nيحق لـ Drewel تعليق أو إلغاء الحساب في حالات الاحتيال أو إساءة الاستخدام أو تقديم معلومات غير صحيحة أو مخالفة هذه الشروط والأحكام.",
+  "10. القانون الحاكم والقبول\nتخضع هذه الشروط والأحكام لقوانين دولة الإمارات العربية المتحدة. وباستخدام Drewel أو النقر على \"أوافق على الشروط والأحكام\"، يؤكد المستخدم أنه قرأ وفهم وقبل هذه الشروط والأحكام.",
+].join("\n\n");
+
 const defaultLegalBody = (type, language = "en") => {
   const isArabic = String(language || "").trim().toLowerCase().startsWith("ar");
   if (type === "privacy") {
@@ -114,10 +140,13 @@ const defaultLegalBody = (type, language = "en") => {
       "Drewel limits access to personal data to authorized operations, support, security, and administration workflows. Contact support if you need help with account data or privacy questions.",
     ].join("\n\n");
   }
-  if (type === "driver-terms" || type === "terms") {
+  if (type === "driver-terms") {
     return isArabic ? driverTermsBodyAr : driverTermsBody;
   }
-  return driverTermsBody;
+  if (type === "terms") {
+    return isArabic ? userTermsBodyAr : userTermsBody;
+  }
+  return userTermsBody;
 };
 
 export const listSavedPlaces = async (req, res) => {
@@ -262,11 +291,13 @@ export const getLegalContent = async (req, res) => {
     const envKey =
       type === "privacy"
         ? "PRIVACY_CONTENT"
-        : type === "driver-terms" || type === "terms"
+        : type === "driver-terms"
           ? language.startsWith("ar")
             ? "DRIVER_TERMS_CONTENT_AR"
             : "DRIVER_TERMS_CONTENT"
-          : "TERMS_CONTENT";
+          : language.startsWith("ar")
+            ? "USER_TERMS_CONTENT_AR"
+            : "USER_TERMS_CONTENT";
     return res.json({
       success: true,
       legal: {
@@ -278,7 +309,9 @@ export const getLegalContent = async (req, res) => {
               ? language.startsWith("ar")
                 ? "شروط وأحكام السائق"
                 : "Drewel - Driver Terms and Conditions"
-              : "Drewel - Driver Terms and Conditions",
+              : language.startsWith("ar")
+                ? "Drewel – الشروط والأحكام"
+                : "Drewel – User Terms & Conditions",
         lastUpdated: process.env.LEGAL_LAST_UPDATED || null,
         body: String(process.env[envKey] || "").trim() || defaultLegalBody(type, language),
       },

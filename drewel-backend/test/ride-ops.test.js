@@ -67,6 +67,53 @@ test("terminal transitions release both participant locks atomically", () => {
   assert.ok(TERMINAL_RIDE_STATUSES.includes("cancelled_by_admin"));
 });
 
+test("completed transition charges and persists commission inside its transaction", () => {
+  const source = readFileSync(
+    new URL("../src/services/rideTransitionService.js", import.meta.url),
+    "utf8"
+  );
+  const controller = readFileSync(
+    new URL("../src/controllers/rideController.js", import.meta.url),
+    "utf8"
+  );
+  assert.match(source, /nextStatus === "completed"[\s\S]*chargeRideCommissionInSession/);
+  assert.match(source, /idempotencyKey: `ride-commission:\$\{ride\._id\}:\$\{key\}`/);
+  assert.match(source, /set\.commission =/);
+  assert.doesNotMatch(controller, /commission charge failed/);
+});
+
+test("offer reservation uses runtime cost and acceptance releases its temporary lock", () => {
+  const source = readFileSync(
+    new URL("../src/services/tripOfferService.js", import.meta.url),
+    "utf8"
+  );
+  assert.match(source, /points: settings\.rideOfferPointsCost/);
+  assert.match(source, /pointsCost: settings\.rideOfferPointsCost/);
+  assert.match(source, /balanceAfterRelease\s*=\s*commissionCheck\.availablePoints \+ offer\.pointsCost/);
+  assert.match(source, /status: "accepted",\s*reservationState: "released"/);
+});
+
+test("driver-contact responses expose the authoritative cooldown immediately", () => {
+  const source = readFileSync(
+    new URL("../src/controllers/rideController.js", import.meta.url),
+    "utf8"
+  );
+  assert.match(source, /const contactCooldownDto =/);
+  assert.match(source, /contactExpiresAt: expiresAt/);
+  assert.match(source, /retryAfterSeconds:/);
+  assert.match(source, /status\(201\)\.json\([\s\S]*contactCooldownDto\(ride, now\)/);
+  assert.match(source, /code: "DRIVER_REQUEST_COOLDOWN"[\s\S]*contactCooldownDto\(blockingContact, now\)/);
+});
+
+test("authenticated admin points views receive the full stored driver phone", () => {
+  const source = readFileSync(
+    new URL("../src/controllers/adminPointsController.js", import.meta.url),
+    "utf8"
+  );
+  assert.match(source, /phone: `\$\{driver\.countryCode \|\| ""\}\$\{driver\.phone \|\| ""\}`/);
+  assert.doesNotMatch(source, /maskPhone/);
+});
+
 test("admins may open a dispute from any active ride status", async () => {
   const transitionService = readFileSync(
     new URL("../src/services/rideTransitionService.js", import.meta.url),

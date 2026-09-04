@@ -4,14 +4,10 @@ import React from 'react';
 import { format } from 'date-fns';
 import './ChatSidebar.css';
 import SafeImage from '../SafeImage';
+import { getOtherParticipant, getOtherParticipantRole, participantPhone } from './chatParticipants';
 
-const ChatSidebar = ({ conversations, selectedUser, onUserSelect, loading }) => {
-  const getOtherUser = (conversation, currentUserId) => {
-    if (conversation.sender?._id === currentUserId) {
-      return conversation.receiver;
-    }
-    return conversation.sender;
-  };
+const ChatSidebar = ({ conversations, selectedUser, onUserSelect, onViewProfile, loading }) => {
+  const [roleFilter, setRoleFilter] = React.useState('all');
 
   const getLastMessage = (conversation) => {
     if (!conversation.lastMsg) return 'No messages yet';
@@ -37,6 +33,11 @@ const ChatSidebar = ({ conversations, selectedUser, onUserSelect, loading }) => 
   }, []);
 
   const currentUserId = getCurrentUserId;
+  const visibleConversations = React.useMemo(() => (
+    (conversations || []).filter((conversation) => (
+      roleFilter === 'all' || getOtherParticipantRole(conversation, currentUserId) === roleFilter
+    ))
+  ), [conversations, currentUserId, roleFilter]);
 
   if (loading) {
     return (
@@ -52,19 +53,27 @@ const ChatSidebar = ({ conversations, selectedUser, onUserSelect, loading }) => 
   return (
     <div className="chat-sidebar-inner">
       <div className="sidebar-header">
-        <h3>Conversations</h3>
-        <span className="conversation-count">{conversations?.length ?? 0}</span>
+        <h3>Support conversations</h3>
+        <span className="conversation-count">{visibleConversations.length}</span>
+      </div>
+
+      <div className="conversation-role-filters" aria-label="Filter support conversations">
+        {[['all', 'All'], ['user', 'Users'], ['driver', 'Drivers']].map(([value, label]) => (
+          <button key={value} type="button" className={roleFilter === value ? 'active' : ''}
+            aria-pressed={roleFilter === value} onClick={() => setRoleFilter(value)}>{label}</button>
+        ))}
       </div>
 
       <div className="conversations-list">
-        {(!conversations || conversations.length === 0) ? (
+        {visibleConversations.length === 0 ? (
           <div className="no-conversations">
-            <p>No conversations yet</p>
-            <small>Start a conversation to see it here</small>
+            <p>No {roleFilter === 'all' ? '' : `${roleFilter} `}conversations</p>
+            <small>Choose another filter or start a conversation.</small>
           </div>
         ) : (
-          conversations.map((conversation) => {
-            const otherUser = getOtherUser(conversation, currentUserId);
+          visibleConversations.map((conversation) => {
+            const otherUser = getOtherParticipant(conversation, currentUserId);
+            const participantRole = getOtherParticipantRole(conversation, currentUserId);
             const isSelected = selectedUser?._id === otherUser?._id;
 
             if (!otherUser) return null;
@@ -75,7 +84,11 @@ const ChatSidebar = ({ conversations, selectedUser, onUserSelect, loading }) => 
                 className={`conversation-item ${isSelected ? 'selected' : ''}`}
                 onClick={() => onUserSelect(otherUser)}
               >
-                <div className="conversation-avatar">
+                <button type="button" className="conversation-avatar" title={`View ${participantRole} profile`}
+                  aria-label={`View ${participantRole} profile`} onClick={(event) => {
+                    event.stopPropagation();
+                    onViewProfile?.(otherUser, participantRole);
+                  }}>
                   <SafeImage
                     src={otherUser.avatarUrl || otherUser.profileImageUrl || otherUser.profilePicture}
                     alt={otherUser.firstName || otherUser.userName}
@@ -87,7 +100,7 @@ const ChatSidebar = ({ conversations, selectedUser, onUserSelect, loading }) => 
                   {conversation.unseenMsg > 0 && (
                     <span className="unread-badge">{conversation.unseenMsg}</span>
                   )}
-                </div>
+                </button>
 
                 <div className="conversation-content">
                   <div className="conversation-header">
@@ -98,13 +111,14 @@ const ChatSidebar = ({ conversations, selectedUser, onUserSelect, loading }) => 
                       {conversation.senderReference && (
                         <span className="sender-reference">{conversation.senderReference}</span>
                       )}
+                      <span className={`participant-role participant-role--${participantRole}`}>{participantRole}</span>
                     </h4>
                     <span className="conversation-time">
                       {formatLastMessageTime(conversation)}
                     </span>
                   </div>
 
-                  <p className="mini-phone">{otherUser?.countryCode}-{otherUser?.phone}</p>
+                  <p className="mini-phone">{participantPhone(otherUser)}</p>
 
                   <div className="conversation-preview">
                     <p className="last-message">{getLastMessage(conversation)}</p>

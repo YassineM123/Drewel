@@ -83,8 +83,8 @@ class PushNotificationService extends GetxService {
     ),
     AndroidNotificationChannel(
       'drewel_payments',
-      'Payments & Points',
-      description: 'Points balance, transactions, and purchase requests.',
+      'Payments & Balance',
+      description: 'Balance transactions and purchase requests.',
       importance: Importance.defaultImportance,
     ),
     AndroidNotificationChannel(

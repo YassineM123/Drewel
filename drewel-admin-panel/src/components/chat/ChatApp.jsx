@@ -1,12 +1,19 @@
 // ChatApp.jsx
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { useChat } from "../../context/ChatContext";
+import { getDriverDetail } from "../../api/domains/drivers";
+import { getUserDetail } from "../../api/domains/users";
 import ChatSidebar from "./ChatSidebar";
 import ChatMessages from "./ChatMessages";
 import GlobalChat from "./GlobalChat";
 import "./ChatApp.css";
+import { getOtherParticipant, getOtherParticipantRole, participantId, participantProfilePath } from "./chatParticipants";
 
 const ChatApp = () => {
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const handledDeepLink = useRef("");
   const {
     conversations,
     messages,
@@ -60,6 +67,43 @@ const ChatApp = () => {
     }
   }, [loadConversations]);
 
+  // Support links can select an existing conversation or start a writable one.
+  useEffect(() => {
+    const role = searchParams.get("participant") || (searchParams.get("driver") ? "driver" : searchParams.get("user") ? "user" : "");
+    const id = searchParams.get("id") || searchParams.get("driver") || searchParams.get("user") || "";
+    const deepLinkKey = `${role}:${id}`;
+    if (!id || !role || handledDeepLink.current === deepLinkKey || !currentUser?._id) return;
+
+    const conversation = conversations.find((item) => participantId(getOtherParticipant(item, currentUser._id)) === id);
+    if (conversation) {
+      const participant = getOtherParticipant(conversation, currentUser._id);
+      handledDeepLink.current = deepLinkKey;
+      setActiveTab("chats");
+      setSelectedUser(participant);
+      loadMessages(id);
+      if (isMobileView) setShowSidebar(false);
+      return;
+    }
+
+    let cancelled = false;
+    const loadParticipant = role.toLowerCase() === "driver" ? getDriverDetail : getUserDetail;
+    loadParticipant(id).then((participant) => {
+      if (cancelled) return;
+      const normalized = { ...participant, _id: participant?._id || participant?.id || id, role };
+      handledDeepLink.current = deepLinkKey;
+      setActiveTab("chats");
+      setSelectedUser(normalized);
+      loadMessages(id);
+      if (isMobileView) setShowSidebar(false);
+    }).catch(() => {
+      if (cancelled) return;
+      handledDeepLink.current = deepLinkKey;
+      setSelectedUser({ _id: id, role, fullName: role === "driver" ? "Driver" : "User" });
+      loadMessages(id);
+    });
+    return () => { cancelled = true; };
+  }, [conversations, currentUser, isMobileView, loadMessages, searchParams, setSelectedUser]);
+
   useEffect(() => {
     if (activeTab === "global" && currentUser) {
       loadGlobalMessages();
@@ -77,6 +121,17 @@ const ChatApp = () => {
       }
     }
   };
+
+  const handleViewProfile = useCallback((user = selectedUser, explicitRole) => {
+    if (!user) return;
+    let role = explicitRole || user.role;
+    if (!role && currentUser?._id) {
+      const conversation = conversations.find((item) => participantId(getOtherParticipant(item, currentUser._id)) === participantId(user));
+      role = getOtherParticipantRole(conversation, currentUser._id);
+    }
+    const path = participantProfilePath(user, role);
+    if (path) navigate(path);
+  }, [conversations, currentUser, navigate, selectedUser]);
 
   // Send message (personal chat)
   const handleSendMessage = useCallback(
@@ -148,6 +203,7 @@ const ChatApp = () => {
                 conversations={conversations}
                 selectedUser={selectedUser}
                 onUserSelect={handleUserSelect}
+                onViewProfile={handleViewProfile}
                 loading={loading}
               />
             )}
@@ -187,6 +243,7 @@ const ChatApp = () => {
                 currentUser={currentUser}
                 onSendMessage={handleSendMessage}
                 onMarkAsSeen={handleMarkAsSeen}
+                onViewProfile={() => handleViewProfile(selectedUser)}
                 loading={loading}
               />
             ) : activeTab === "global" ? (

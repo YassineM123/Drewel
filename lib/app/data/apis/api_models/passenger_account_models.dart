@@ -257,6 +257,58 @@ class LegalContentModel {
             'By clicking "I Agree to the Terms and Conditions" or by using the Drewel application, the driver confirms that they have read, understood, and agreed to these Terms and Conditions.',
       );
     }
+    if (normalised == 'terms') {
+      if (isArabic) {
+        return const LegalContentModel(
+          title: 'Drewel – الشروط والأحكام',
+          lastUpdated: null,
+          body: '1. استخدام التطبيق\n'
+              'باستخدامك تطبيق Drewel أو طلب أي خدمة، فإنك توافق على هذه الشروط والأحكام وتؤكد أنك ستقدم معلومات صحيحة وستستخدم التطبيق بشكل قانوني.\n\n'
+              '2. حساب المستخدم\n'
+              'يتحمل المستخدم مسؤولية صحة معلومات حسابه وأمانها. ويُمنع مشاركة الحساب أو إساءة استخدامه.\n\n'
+              '3. الخدمات والأسعار\n'
+              'تتوفر الخدمات حسب الموقع ومدى توفر السائقين. وقد تختلف الأسعار حسب نوع الخدمة والمسافة وعوامل أخرى قابلة للتطبيق.\n\n'
+              '4. الدفع\n'
+              'تُدفع قيمة الخدمة مباشرة إلى السائق عند إتمام الخدمة، وفقاً للسعر المتفق عليه أو السعر الظاهر في التطبيق.\n\n'
+              '5. مسؤوليات المستخدم\n'
+              'يجب على المستخدم تقديم معلومات صحيحة عن موقعه ومركبته وحمولته، ومعاملة السائقين باحترام، وعدم نقل أي مواد ممنوعة أو خطرة.\n\n'
+              '6. الإلغاء\n'
+              'يمكن للمستخدم إلغاء طلبه في أي وقت دون أي رسوم إلغاء.\n\n'
+              '7. السلامة والسلوك\n'
+              'يجب على المستخدم اتباع تعليمات السلامة واحترام السائق وتجنب أي سلوك قد يعرّض الأشخاص أو المركبة للخطر.\n\n'
+              '8. الخصوصية\n'
+              'يوافق المستخدم على جمع واستخدام المعلومات اللازمة لتقديم خدمات Drewel، وفقاً لسياسة الخصوصية والقوانين المعمول بها في دولة الإمارات العربية المتحدة.\n\n'
+              '9. تعليق الحساب\n'
+              'يحق لـ Drewel تعليق أو إلغاء الحساب في حالات الاحتيال أو إساءة الاستخدام أو تقديم معلومات غير صحيحة أو مخالفة هذه الشروط والأحكام.\n\n'
+              '10. القانون الحاكم والقبول\n'
+              'تخضع هذه الشروط والأحكام لقوانين دولة الإمارات العربية المتحدة. وباستخدام Drewel أو النقر على "أوافق على الشروط والأحكام"، يؤكد المستخدم أنه قرأ وفهم وقبل هذه الشروط والأحكام.',
+        );
+      }
+      return const LegalContentModel(
+        title: 'Drewel – User Terms & Conditions',
+        lastUpdated: null,
+        body: '1. Use of the Application\n'
+            'By using Drewel or requesting any service, you agree to these Terms & Conditions and confirm that you will provide accurate information and use the application lawfully.\n\n'
+            '2. User Account\n'
+            'Users are responsible for the accuracy and security of their account information. Sharing or misusing an account is prohibited.\n\n'
+            '3. Services & Pricing\n'
+            'Services are available depending on location and driver availability. Prices may vary depending on the type of service, distance, and other applicable factors.\n\n'
+            '4. Payment\n'
+            'The service fee is paid directly to the driver upon completion of the service, according to the agreed price or the price displayed in the application.\n\n'
+            '5. User Responsibilities\n'
+            'Users must provide accurate information about their location, vehicle, and cargo, treat drivers respectfully, and must not transport prohibited or dangerous materials.\n\n'
+            '6. Cancellation\n'
+            'Users may cancel their request at any time without any cancellation fee.\n\n'
+            '7. Safety & Conduct\n'
+            'Users must follow safety instructions, respect the driver, and avoid any behavior that may endanger people or the vehicle.\n\n'
+            '8. Privacy\n'
+            'Users agree to the collection and use of information necessary to provide Drewel services, in accordance with the Privacy Policy and applicable UAE laws.\n\n'
+            '9. Account Suspension\n'
+            'Drewel may suspend or terminate an account in cases of fraud, misuse, false information, or violation of these Terms & Conditions.\n\n'
+            '10. Governing Law & Acceptance\n'
+            'These Terms & Conditions are governed by the laws of the United Arab Emirates. By using Drewel or clicking "I Agree to the Terms & Conditions", the user confirms that they have read, understood, and accepted these Terms & Conditions.',
+      );
+    }
     return const LegalContentModel(
       title: 'Drewel - Driver Terms and Conditions',
       lastUpdated: null,

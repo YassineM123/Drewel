@@ -38,7 +38,6 @@ import {
 } from "../helpers/pointsValidation.js";
 import {
   maskPaymentReference,
-  maskPhone,
 } from "../utils/pointsSensitiveData.js";
 import { createPointsAdminAuditInSession } from "../services/pointsAdminAuditService.js";
 
@@ -91,7 +90,7 @@ const driverSummary = (driver) => ({
   fullName:
     driver.fullName ||
     [driver.firstName, driver.lastName].filter(Boolean).join(" "),
-  phone: maskPhone(`${driver.countryCode || ""}${driver.phone || ""}`),
+  phone: `${driver.countryCode || ""}${driver.phone || ""}`,
   status: driver.status,
   profileRequestStatus: driver.profileRequestStatus,
   isApproved: driver.isApproved,

@@ -73,9 +73,11 @@ class _LegalContentViewState extends State<LegalContentView> {
 
   @override
   Widget build(BuildContext context) {
-    final String title = widget.type == 'terms' || widget.type == 'driver-terms'
+    final String title = widget.type == 'driver-terms'
         ? 'Driver Terms & Conditions'
-        : 'Privacy Policy';
+        : widget.type == 'terms'
+            ? 'Terms & Conditions'
+            : 'Privacy Policy';
     return Scaffold(
       appBar: DrewelAppBar(title: title, showBackButton: true),
       backgroundColor: const Color(0xFFFAFAFA),

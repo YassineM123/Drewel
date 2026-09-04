@@ -7,7 +7,10 @@ import Ride, {
 import Driver from "../models/Driver.js";
 import User from "../models/User.js";
 import RideAudit from "../models/RideAudit.js";
+import PointsSettings from "../models/PointsSettings.js";
 import { distanceKmBetween } from "../utils/availableDrivers.js";
+import { calculateRideCommission } from "./commissionService.js";
+import { chargeRideCommissionInSession } from "./pointsWalletService.js";
 
 const TRANSITIONS = Object.freeze({
   accepted: ["driver_on_the_way", "cancelled_by_user", "cancelled_by_driver", "cancelled_by_admin"],
@@ -299,6 +302,33 @@ export const transitionRideState = async ({
         timestamp: now,
         pointsDecision: "captured_no_refund",
         adminReviewStatus: principal.role === "admin" || overrideReason ? "pending" : "not_required",
+      };
+    }
+
+    // Charge and persist commission in the same MongoDB transaction as the
+    // completed transition. If the wallet cannot be charged, neither the ride
+    // status nor participant-lock cleanup is committed.
+    if (nextStatus === "completed" && Number(ride.agreedPrice) > 0) {
+      const settings = await PointsSettings.getEffective({ session });
+      const charge = await chargeRideCommissionInSession({
+        driverId: ride.driverId,
+        rideId: ride._id,
+        ridePriceAED: Number(ride.agreedPrice),
+        settings,
+        idempotencyKey: `ride-commission:${ride._id}:${key}`,
+        session,
+      });
+      const commission =
+        charge.commission || calculateRideCommission(Number(ride.agreedPrice), settings);
+      set.commission = {
+        ridePriceAED: commission.ridePriceAED,
+        commissionRate: commission.commissionRate,
+        commissionAED: commission.commissionAED,
+        pointsPerAED: commission.pointsPerAED,
+        pointsCharged: Math.ceil(commission.pointsToDeduct),
+        driverNetAED: commission.driverNetAED,
+        chargedAt: charge.transaction?.createdAt || now,
+        transactionId: charge.transaction?._id || null,
       };
     }
 

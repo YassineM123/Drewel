@@ -672,9 +672,11 @@ class DriverLegalView extends GetView<DriverAccountController> {
     });
     return Scaffold(
       appBar: DrewelAppBar(
-        title: type == 'driver-terms' || type == 'terms'
+        title: type == 'driver-terms'
             ? 'Driver Terms & Conditions'
-            : 'Privacy',
+            : type == 'terms'
+                ? 'Terms & Conditions'
+                : 'Privacy',
         showBackButton: true,
       ),
       backgroundColor: _pageColor,

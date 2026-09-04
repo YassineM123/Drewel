@@ -38,7 +38,7 @@ Future<RideCancellationResult?> showRideCancellationDialog(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[
                 const Text(
-                  'The ride will remain in your history. Driver points are not '
+                  'The ride will remain in your history. Driver balance is not '
                   'automatically refunded after an accepted offer.',
                 ),
                 const SizedBox(height: 16),

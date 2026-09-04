@@ -40,9 +40,6 @@ import {
   notifyDriverOfNewRideRequest,
   notifyRideTransition,
 } from "../services/rideNotificationService.js";
-import { chargeRideCommissionInSession, runPointsTransaction } from "../services/pointsWalletService.js";
-import { calculateRideCommission } from "../services/commissionService.js";
-import PointsSettings from "../models/PointsSettings.js";
 import {
   CHAT_AUDIO_MAX_DURATION_SECONDS,
   chatAudioRootPath,
@@ -101,6 +98,16 @@ const rideDto = (ride, role) => ({
     ? { commission: ride.commission }
     : {}),
 });
+
+const contactCooldownDto = (ride, now = new Date()) => {
+  const expiresAt = ride?.contactEndsAt ? new Date(ride.contactEndsAt) : null;
+  return {
+    contactExpiresAt: expiresAt,
+    retryAfterSeconds: expiresAt
+      ? Math.max(0, Math.ceil((expiresAt.getTime() - now.getTime()) / 1000))
+      : 0,
+  };
+};
 
 const publicParticipantDto = (participant, role) => {
   if (!participant) return null;
@@ -299,17 +306,13 @@ export const createDriverContact = async (req, res) => {
       contactEndsAt: { $gt: now },
     }).select("_id driverId contactEndsAt");
     if (blockingContact) {
-      const retryAfterSeconds = Math.max(
-        1,
-        Math.ceil((blockingContact.contactEndsAt.getTime() - now.getTime()) / 1000)
-      );
       return res.status(429).json({
         success: false,
         code: "DRIVER_REQUEST_COOLDOWN",
         message: "Waiting for driver's response. Please try another driver after the countdown.",
-        retryAfterSeconds,
         activeDriverId: String(blockingContact.driverId),
         rideId: String(blockingContact._id),
+        ...contactCooldownDto(blockingContact, now),
       });
     }
     const pickup = hasMissionPointInput(req.body?.pickup)
@@ -345,7 +348,12 @@ export const createDriverContact = async (req, res) => {
         existing.destination = destination;
         await existing.save();
       }
-      return res.status(200).json({ success: true, ride: await publicRideDto(existing), idempotent: true });
+      return res.status(200).json({
+        success: true,
+        ride: await publicRideDto(existing),
+        idempotent: true,
+        ...contactCooldownDto(existing, now),
+      });
     }
     const ridePayload = {
       passengerId: principal.id,
@@ -381,7 +389,11 @@ export const createDriverContact = async (req, res) => {
         updatedAt: stillAvailable.updatedAt,
       });
     }
-    return res.status(201).json({ success: true, ride: await publicRideDto(ride) });
+    return res.status(201).json({
+      success: true,
+      ride: await publicRideDto(ride),
+      ...contactCooldownDto(ride, now),
+    });
   } catch (error) {
     if (error?.code === 11000) {
       const principal = await resolvePrincipal(req.user?._id);
@@ -395,6 +407,7 @@ export const createDriverContact = async (req, res) => {
           success: true,
           ride: await publicRideDto(existing),
           idempotent: true,
+          ...contactCooldownDto(existing),
         });
       }
     }
@@ -706,42 +719,6 @@ export const transitionRide = async (req, res) => {
       pickupPinVerified,
     });
     const terminal = ["completed", "cancelled_by_user", "cancelled_by_driver", "cancelled_by_admin"].includes(nextStatus);
-
-    let commissionResult = null;
-    if (nextStatus === "completed" && updated.agreedPrice) {
-      try {
-        const settings = await PointsSettings.getEffective();
-        const commission = calculateRideCommission(updated.agreedPrice, settings);
-        const chargeIdempotencyKey = `ride-commission:${updated._id}:${req.get("Idempotency-Key") || req.body?.idempotencyKey}`;
-        commissionResult = await runPointsTransaction(async (session) => {
-          return chargeRideCommissionInSession({
-            driverId: updated.driverId,
-            rideId: updated._id,
-            ridePriceAED: updated.agreedPrice,
-            settings,
-            idempotencyKey: chargeIdempotencyKey,
-            session,
-          });
-        });
-        await Ride.updateOne(
-          { _id: updated._id },
-          {
-            $set: {
-              "commission.ridePriceAED": commission.ridePriceAED,
-              "commission.commissionRate": commission.commissionRate,
-              "commission.commissionAED": commission.commissionAED,
-              "commission.pointsPerAED": commission.pointsPerAED,
-              "commission.pointsCharged": commission.pointsToDeduct,
-              "commission.driverNetAED": commission.driverNetAED,
-              "commission.chargedAt": new Date(),
-              "commission.transactionId": commissionResult.transaction?._id,
-            },
-          }
-        );
-      } catch (commissionError) {
-        console.error("[ride] commission charge failed", commissionError.message);
-      }
-    }
 
     if (terminal) await endActiveCallsForRide(updated._id, `ride_${nextStatus}`);
     const room = `ride:${updated._id}`;

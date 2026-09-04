@@ -225,7 +225,7 @@ test(
 );
 
 test(
-  "offer requires 1 available point (lock) and duplicate send reserves once",
+  "offer uses the configured 20-unit lock and duplicate send reserves once",
   { skip: !integrationEnabled },
   async () => {
     const [driver, passenger] = await Promise.all([
@@ -248,7 +248,7 @@ test(
     );
     await DriverPointsWallet.updateOne(
       { driverId: driver._id },
-      { $inc: { availableBonusPoints: 10, totalEarnedBonus: 10, version: 1 } }
+      { $inc: { availableBonusPoints: 20, totalEarnedBonus: 20, version: 1 } }
     );
     const payload = offerPayload({ driver, contact, suffix: "00000021" });
     const first = await createTripOffer(payload);
@@ -256,8 +256,8 @@ test(
     const wallet = await DriverPointsWallet.findOne({ driverId: driver._id });
     assert.equal(first.idempotent, false);
     assert.equal(retry.idempotent, true);
-    assert.equal(wallet.availableBonusPoints, 9);
-    assert.equal(wallet.reservedBonusPoints, 1);
+    assert.equal(wallet.availableBonusPoints, 0);
+    assert.equal(wallet.reservedBonusPoints, 20);
     assert.equal(
       await PointTransaction.countDocuments({
         offerId: first.offer._id,
@@ -502,7 +502,7 @@ test(
 );
 
 test(
-  "concurrent distinct offers cannot overspend a 1 point wallet",
+  "concurrent distinct offers cannot overspend one configured offer lock",
   { skip: !integrationEnabled },
   async () => {
     const [driver, passenger1, passenger2] = await Promise.all([
@@ -512,8 +512,8 @@ test(
     ]);
     await DriverPointsWallet.create({
       driverId: driver._id,
-      availableBonusPoints: 1,
-      totalEarnedBonus: 1,
+      availableBonusPoints: 20,
+      totalEarnedBonus: 20,
     });
     const [contact1, contact2] = await Promise.all([
       Ride.create({
@@ -537,7 +537,7 @@ test(
     assert.equal(settled.filter((item) => item.status === "rejected").length, 1);
     const wallet = await DriverPointsWallet.findOne({ driverId: driver._id });
     assert.equal(wallet.availableBonusPoints, 0);
-    assert.equal(wallet.reservedBonusPoints, 1);
+    assert.equal(wallet.reservedBonusPoints, 20);
     assert.equal(await TripOffer.countDocuments({ driverId: driver._id }), 1);
   }
 );

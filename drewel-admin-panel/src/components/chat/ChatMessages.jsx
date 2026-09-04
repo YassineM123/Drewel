@@ -4,6 +4,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { format } from 'date-fns';
 import './ChatMessages.css';
 import SafeImage from '../SafeImage';
+import { participantPhone } from './chatParticipants';
 
 const ChatMessages = ({
   messages = [],
@@ -12,6 +13,7 @@ const ChatMessages = ({
   currentUser,
   onSendMessage,
   onMarkAsSeen,
+  onViewProfile,
   loading,
 }) => {
   const [newMessage, setNewMessage] = useState('');
@@ -178,14 +180,15 @@ const ChatMessages = ({
       {/* Header */}
       <div className="messages-header">
         <div className="user-info">
-          <SafeImage
+          <button type="button" className="profile-avatar-button" onClick={onViewProfile}
+            aria-label="View profile" title="View profile"><SafeImage
             src={selectedUser?.avatarUrl || selectedUser?.profileImageUrl || selectedUser?.profilePicture}
             alt={selectedUser?.fullName || selectedUser?.userName}
             className="user-avatar"
             fallback="avatar"
             fallbackLabel={selectedUser?.fullName || selectedUser?.firstName}
             loading="lazy"
-          />
+          /></button>
           <div className="user-details">
             <h3 className="user-name">
               {selectedUser?.firstName && selectedUser?.lastName
@@ -194,12 +197,13 @@ const ChatMessages = ({
             </h3>
             <div className="user-sub">
               <span className="user-ref">{selectedUser?.senderReference ?? ""}</span>
-              <p className="user-phone">{selectedUser?.countryCode}-{selectedUser?.phone}</p>
+              <p className="user-phone">{participantPhone(selectedUser)}</p>
             </div>
             <span className="user-status">
               {userDetails?.online ? '🟢 Online' : '⚪ Offline'}
             </span>
           </div>
+          <button type="button" className="view-profile-button" onClick={onViewProfile}>View Profile</button>
         </div>
       </div>
 

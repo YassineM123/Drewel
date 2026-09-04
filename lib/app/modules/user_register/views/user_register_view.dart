@@ -71,65 +71,80 @@ class UserRegisterView extends GetView<UserRegisterController> {
                                   Radius.circular(metrics.sheetCornerRadius),
                             ),
                           ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                StringConstants.confirmYourInformation,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: MyTextStyle.titleStyleCustom(
-                                  metrics.titleFontSize,
-                                  FontWeight.bold,
-                                  Colors.black,
-                                  'Poppins',
+                          child: CustomScrollView(
+                            keyboardDismissBehavior:
+                                ScrollViewKeyboardDismissBehavior.onDrag,
+                            slivers: [
+                              SliverToBoxAdapter(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      StringConstants.confirmYourInformation,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: MyTextStyle.titleStyleCustom(
+                                        metrics.titleFontSize,
+                                        FontWeight.bold,
+                                        Colors.black,
+                                        'Poppins',
+                                      ),
+                                    ),
+                                    SizedBox(height: metrics.labelTopGap),
+                                    Text(
+                                      StringConstants.city,
+                                      style: MyTextStyle.titleStyleCustom(
+                                        metrics.sectionFontSize,
+                                        FontWeight.normal,
+                                        Colors.black,
+                                        'Poppins',
+                                      ),
+                                    ),
+                                    SizedBox(height: metrics.gridTopGap),
+                                    _CityGrid(metrics: metrics),
+                                    SizedBox(height: metrics.sectionGap),
+                                    Text(
+                                      StringConstants.findYourTransport,
+                                      style: MyTextStyle.titleStyleCustom(
+                                        metrics.sectionFontSize,
+                                        FontWeight.normal,
+                                        Colors.black,
+                                        'Poppins',
+                                      ),
+                                    ),
+                                    SizedBox(height: metrics.transportTopGap),
+                                    _TransportGrid(metrics: metrics),
+                                    SizedBox(height: metrics.bannerTopGap),
+                                    _BannerCarousel(metrics: metrics),
+                                    SizedBox(height: metrics.indicatorTopGap),
+                                    _BannerIndicator(metrics: metrics),
+                                  ],
                                 ),
                               ),
-                              SizedBox(height: metrics.labelTopGap),
-                              Text(
-                                StringConstants.city,
-                                style: MyTextStyle.titleStyleCustom(
-                                  metrics.sectionFontSize,
-                                  FontWeight.normal,
-                                  Colors.black,
-                                  'Poppins',
-                                ),
-                              ),
-                              SizedBox(height: metrics.gridTopGap),
-                              _CityGrid(metrics: metrics),
-                              SizedBox(height: metrics.sectionGap),
-                              Text(
-                                StringConstants.findYourTransport,
-                                style: MyTextStyle.titleStyleCustom(
-                                  metrics.sectionFontSize,
-                                  FontWeight.normal,
-                                  Colors.black,
-                                  'Poppins',
-                                ),
-                              ),
-                              SizedBox(height: metrics.transportTopGap),
-                              _TransportGrid(metrics: metrics),
-                              SizedBox(height: metrics.bannerTopGap),
-                              _BannerCarousel(metrics: metrics),
-                              SizedBox(height: metrics.indicatorTopGap),
-                              _BannerIndicator(metrics: metrics),
-                              const Spacer(),
-                              SizedBox(height: metrics.buttonTopGap),
-                              CommonWidgets.commonElevatedButton(
-                                height: metrics.buttonHeight,
-                                borderRadius: metrics.buttonRadius,
-                                onPressed: () {
-                                  controller.clickOnFindNowButton();
-                                },
-                                context: context,
-                                child: Text(
-                                  StringConstants.findNow,
-                                  style: MyTextStyle.titleStyleCustom(
-                                    metrics.buttonFontSize,
-                                    FontWeight.bold,
-                                    Colors.white,
-                                    'Poppins',
-                                  ),
+                              SliverFillRemaining(
+                                hasScrollBody: false,
+                                child: Column(
+                                  mainAxisAlignment: MainAxisAlignment.end,
+                                  children: [
+                                    SizedBox(height: metrics.buttonTopGap),
+                                    CommonWidgets.commonElevatedButton(
+                                      height: metrics.buttonHeight,
+                                      borderRadius: metrics.buttonRadius,
+                                      onPressed: () {
+                                        controller.clickOnFindNowButton();
+                                      },
+                                      context: context,
+                                      child: Text(
+                                        StringConstants.findNow,
+                                        style: MyTextStyle.titleStyleCustom(
+                                          metrics.buttonFontSize,
+                                          FontWeight.bold,
+                                          Colors.white,
+                                          'Poppins',
+                                        ),
+                                      ),
+                                    ),
+                                  ],
                                 ),
                               ),
                             ],

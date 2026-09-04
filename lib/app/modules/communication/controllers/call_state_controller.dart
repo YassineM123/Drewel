@@ -104,15 +104,14 @@ class CallStateController extends GetxService with WidgetsBindingObserver {
       }
       activeRide.value = contact;
       pendingRide.value = null;
+      _startDriverRequestCooldownUntil(contact.contactExpiresAt);
       return contact;
     } on CommunicationApiException catch (error) {
-      if (error.statusCode == 429 &&
-          error.code == 'DRIVER_REQUEST_COOLDOWN') {
+      if (error.statusCode == 429 && error.code == 'DRIVER_REQUEST_COOLDOWN') {
         final int seconds =
             _asInt(error.payload['retryAfterSeconds']).clamp(1, 45);
         _startDriverRequestCooldown(seconds);
-        userFacingError.value =
-            'Waiting for driver\'s response... ${seconds}s';
+        userFacingError.value = 'Waiting for driver\'s response... ${seconds}s';
       } else {
         userFacingError.value = error.statusCode == 409
             ? 'This driver is no longer available.'
@@ -136,6 +135,14 @@ class CallStateController extends GetxService with WidgetsBindingObserver {
       driverRequestCooldownSeconds.value = next <= 0 ? 0 : next;
       if (next <= 0) timer.cancel();
     });
+  }
+
+  void _startDriverRequestCooldownUntil(DateTime? expiresAt) {
+    if (expiresAt == null) return;
+    final int milliseconds =
+        expiresAt.toUtc().difference(DateTime.now().toUtc()).inMilliseconds;
+    if (milliseconds <= 0) return;
+    _startDriverRequestCooldown((milliseconds / 1000).ceil());
   }
 
   Future<void> openDriverChat(

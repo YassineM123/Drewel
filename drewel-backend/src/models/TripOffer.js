@@ -140,8 +140,8 @@ tripOfferSchema.pre("validate", function validateReservation() {
   if (this.reservedBonusPoints + this.reservedPurchasedPoints !== this.pointsCost) {
     throw new Error("Reserved point components must add up to pointsCost");
   }
-  if (this.status === "accepted" && (!this.rideId || this.reservationState !== "captured")) {
-    throw new Error("An accepted offer must reference its ride and have a captured reservation");
+  if (this.status === "accepted" && (!this.rideId || this.reservationState !== "released")) {
+    throw new Error("An accepted offer must reference its ride and have a released reservation");
   }
   if (
     ["declined", "expired", "cancelled", "delivery_failed"].includes(this.status) &&

@@ -186,7 +186,7 @@ export const createTripOffer = async ({
 
     const reservation = await reservePointsInSession({
       driverId,
-      points: 1,
+      points: settings.rideOfferPointsCost,
       offerId,
       rideId: contact._id,
       idempotencyKey: `offer-reserve:${driverId}:${idempotencyKey}`,
@@ -212,7 +212,7 @@ export const createTripOffer = async ({
           destination,
           vehicleType,
           note,
-          pointsCost: 1,
+          pointsCost: settings.rideOfferPointsCost,
           reservedBonusPoints: reservation.bonusPoints,
           reservedPurchasedPoints: reservation.purchasedPoints,
           status: "pending",
@@ -292,7 +292,7 @@ export const createTripOffer = async ({
             notification: {
               type: "POINTS_RESERVED",
               title: "Points reserved",
-              message: `1 point reserved. Commission: ${estimatedCommission.commissionAED} AED (${estimatedCommission.pointsToDeduct} points)`,
+              message: `${settings.rideOfferPointsCost} balance units reserved temporarily. Commission on completion: ${estimatedCommission.commissionAED} AED (${estimatedCommission.pointsToDeduct} balance units)`,
               deepLink: "drewel://driver/points",
             },
           },
@@ -501,9 +501,14 @@ export const acceptTripOffer = async ({
       offer.offeredPrice,
       session
     );
-    if (!commissionCheck.hasEnoughPoints) {
+    // The current offer's lock belongs to this driver and is released below.
+    // Include it in the acceptance check so an exact-balance wallet is not
+    // rejected merely because part of that balance is temporarily reserved.
+    const balanceAfterRelease =
+      commissionCheck.availablePoints + offer.pointsCost;
+    if (balanceAfterRelease < commissionCheck.pointsRequired) {
       throw new PointsError(
-        `Insufficient points. You need ${commissionCheck.pointsRequired} points for this ride commission but have ${commissionCheck.availablePoints}.`,
+        `Insufficient balance. You need ${commissionCheck.pointsRequired} balance units for this ride commission but have ${balanceAfterRelease}.`,
         409,
         "INSUFFICIENT_AVAILABLE_POINTS"
       );
@@ -525,7 +530,7 @@ export const acceptTripOffer = async ({
       {
         $set: {
           status: "accepted",
-          reservationState: "captured",
+          reservationState: "released",
           rideId: ride._id,
           acceptedAt: now,
           resolvedAt: now,

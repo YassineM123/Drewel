@@ -19,6 +19,13 @@
   display:flex;
   gap:12px;
   align-items:center;
+  width: 100%;
+}
+.profile-avatar-button {
+  border: 0;
+  padding: 0;
+  background: transparent;
+  cursor: pointer;
 }
 .user-avatar {
   width:48px;
@@ -28,6 +35,18 @@
   border: 1px solid #eceff5;
 }
 .user-details { display:flex; flex-direction:column; gap:4px; }
+.view-profile-button {
+  margin-left: auto;
+  border: 1px solid #dfe3ea;
+  border-radius: 8px;
+  background: #fff;
+  color: #0b57d0;
+  padding: 7px 10px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+.view-profile-button:hover { background: #eef5ff; }
 .user-name { margin:0; font-size:1rem; color:#111; }
 .user-sub { display:flex; gap:8px; align-items:center; color:#666; font-size:0.85rem; }
 .user-phone { margin:0; color:#666; font-size:0.8rem; }

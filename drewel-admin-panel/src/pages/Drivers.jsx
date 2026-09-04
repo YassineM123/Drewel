@@ -447,7 +447,7 @@ function DriverDetailDrawer({ driver, onToast, onChanged }) {
                     <Plus size={13} /> Add Balance
                   </button>
                 )}
-                <button type="button" onClick={() => navigate(`/chat?driver=${d._id}`)}
+                <button type="button" onClick={() => navigate(`/support-chat?participant=driver&id=${encodeURIComponent(d._id)}`)}
                   className="h-9 inline-flex items-center gap-2 px-3.5 rounded-[10px] border border-slate-200 bg-white text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-all">
                   <MessageSquare size={13} /> Contact Driver
                 </button>
@@ -514,6 +514,15 @@ function DriverDetailDrawer({ driver, onToast, onChanged }) {
                 </div>
               ))}
             </div>
+            <div className="rounded-[10px] border border-blue-200 bg-blue-50 p-3 text-xs leading-5 text-blue-800" role="note">
+              <strong>Reserved balance</strong> is temporarily held while this driver has a pending ride offer. It is released if the offer expires, is rejected or is cancelled, and cannot be spent meanwhile.
+            </div>
+            {access.canAddPurchasedPoints && (
+              <button type="button" onClick={() => navigate(`/points/balances/${d._id}`)}
+                className="h-9 self-start inline-flex items-center gap-2 px-3.5 rounded-[10px] bg-green-600 text-xs font-semibold text-white hover:bg-green-700 transition-all">
+                <Plus size={13} /> Add Balance
+              </button>
+            )}
           </>
         )}
       </div>

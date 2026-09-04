@@ -1,4 +1,5 @@
 import 'package:drewel/app/data/apis/api_models/get_all_driver_model.dart';
+import 'package:drewel/app/data/apis/api_models/active_ride_model.dart';
 import 'package:flutter/material.dart';
 
 import 'package:get/get.dart';
@@ -26,6 +27,9 @@ import '../../notification/widgets/notification_app_bar_button.dart';
 import '../widgets/location_search_bar.dart';
 import '../widgets/marketplace_driver_card.dart';
 import '../../active_ride/widgets/active_ride_card.dart';
+
+bool shouldShowPassengerMarketplace(ActiveRideModel? ride) =>
+    ride == null || !ride.rideStatus.isActive;
 
 class UserHomeView extends StatefulWidget {
   const UserHomeView({super.key});
@@ -111,76 +115,82 @@ class _UserHomeViewState extends State<UserHomeView> {
     // frequent map-only updates (driver marker animation, socket pings, place
     // search keystrokes) no longer force the whole screen chrome to rebuild.
     return DrewelPopScope(
-        fallbackRoute: Routes.USER_REGISTER,
-        onBack: _handleBack,
-        child: Scaffold(
-            key: controller.scaffoldKey,
-            appBar: DrewelAppBar(
-              title: '',
-              titleWidget: Semantics(
-                label: 'Drewel',
-                image: true,
-                child: ExcludeSemantics(
-                  child: CommonWidgets.appIcons(
-                    assetName: IconConstants.icLogo,
-                    height: 52,
-                    width: 150,
-                    fit: BoxFit.contain,
-                  ),
+      fallbackRoute: Routes.USER_REGISTER,
+      onBack: _handleBack,
+      child: Scaffold(
+          key: controller.scaffoldKey,
+          appBar: DrewelAppBar(
+            title: '',
+            titleWidget: Semantics(
+              label: 'Drewel',
+              image: true,
+              child: ExcludeSemantics(
+                child: CommonWidgets.appIcons(
+                  assetName: IconConstants.icLogo,
+                  height: 52,
+                  width: 150,
+                  fit: BoxFit.contain,
                 ),
               ),
-              showBackButton: true,
-              showMenuButton: true,
-              actions: const <Widget>[
-                NotificationAppBarButton(),
-                MessagesAppBarButton(),
-                SizedBox(width: 4),
+            ),
+            showBackButton: true,
+            showMenuButton: true,
+            actions: const <Widget>[
+              NotificationAppBarButton(),
+              MessagesAppBarButton(),
+              SizedBox(width: 4),
+            ],
+            onBack: _handleBack,
+            backIcon: ExcludeSemantics(
+              child: CommonWidgets.appIcons(
+                assetName: IconConstants.icBack,
+                height: 40,
+                width: 40,
+                fit: BoxFit.contain,
+              ),
+            ),
+            menuIcon: ExcludeSemantics(
+              child: CommonWidgets.appIcons(
+                assetName: IconConstants.icMenu,
+                height: 32,
+                width: 32,
+                fit: BoxFit.contain,
+              ),
+            ),
+            onMenu: () {
+              controller.locationFocusNode.unfocus();
+              controller.clearPlaceSuggestions();
+              CommonMethods.unFocsKeyBoard();
+              controller.clickOnMenu();
+            },
+          ),
+          endDrawer: Obx(
+            () => CustomDrawer(
+              userData: Map<String, String>.from(controller.userData),
+            ),
+          ),
+          resizeToAvoidBottomInset: false,
+          backgroundColor: primaryColor,
+          bottomNavigationBar: Obx(() {
+            final CallStateController communication =
+                Get.find<CallStateController>();
+            final String? status = communication.activeRide.value?.status;
+            return Column(
+              mainAxisSize: MainAxisSize.min,
+              children: <Widget>[
+                const ActiveRideCard(),
+                if (status != null && status != 'contacting')
+                  const SecureCommunicationPanel(),
               ],
-              onBack: _handleBack,
-              backIcon: ExcludeSemantics(
-                child: CommonWidgets.appIcons(
-                  assetName: IconConstants.icBack,
-                  height: 40,
-                  width: 40,
-                  fit: BoxFit.contain,
-                ),
-              ),
-              menuIcon: ExcludeSemantics(
-                child: CommonWidgets.appIcons(
-                  assetName: IconConstants.icMenu,
-                  height: 32,
-                  width: 32,
-                  fit: BoxFit.contain,
-                ),
-              ),
-              onMenu: () {
-                controller.locationFocusNode.unfocus();
-                controller.clearPlaceSuggestions();
-                CommonMethods.unFocsKeyBoard();
-                controller.clickOnMenu();
-              },
-            ),
-            endDrawer: Obx(
-              () => CustomDrawer(
-                userData: Map<String, String>.from(controller.userData),
-              ),
-            ),
-            resizeToAvoidBottomInset: false,
-            backgroundColor: primaryColor,
-            bottomNavigationBar: Obx(() {
-              final CallStateController communication =
-                  Get.find<CallStateController>();
-              final String? status = communication.activeRide.value?.status;
-              return Column(
-                mainAxisSize: MainAxisSize.min,
-                children: <Widget>[
-                  const ActiveRideCard(),
-                  if (status != null && status != 'contacting')
-                    const SecureCommunicationPanel(),
-                ],
-              );
-            }),
-            body: Column(
+            );
+          }),
+          body: Obx(() {
+            final ActiveRideModel? ride =
+                Get.find<CallStateController>().activeRide.value;
+            if (!shouldShowPassengerMarketplace(ride)) {
+              return _PassengerActiveRideFocus(ride: ride!);
+            }
+            return Column(
               mainAxisAlignment: MainAxisAlignment.end,
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
@@ -311,8 +321,9 @@ class _UserHomeViewState extends State<UserHomeView> {
                   ),
                 ),
               ],
-            )),
-      );
+            );
+          })),
+    );
   }
 
   Widget showDriverList() {
@@ -381,10 +392,10 @@ class _UserHomeViewState extends State<UserHomeView> {
                               style: MyTextStyle.titleStyle18bb,
                             ),
                             Obx(() {
-                              final int seconds = Get
-                                  .find<CallStateController>()
-                                  .driverRequestCooldownSeconds
-                                  .value;
+                              final int seconds =
+                                  Get.find<CallStateController>()
+                                      .driverRequestCooldownSeconds
+                                      .value;
                               if (seconds <= 0) return const SizedBox.shrink();
                               return Padding(
                                 padding: EdgeInsets.only(top: 8.px),
@@ -908,6 +919,85 @@ class _UserHomeViewState extends State<UserHomeView> {
           ),
         ),
       ],
+    );
+  }
+}
+
+class _PassengerActiveRideFocus extends StatelessWidget {
+  const _PassengerActiveRideFocus({required this.ride});
+
+  final ActiveRideModel ride;
+
+  @override
+  Widget build(BuildContext context) {
+    final String driverName = ride.driver?.firstName.trim() ?? '';
+    return Container(
+      width: double.infinity,
+      margin: EdgeInsets.only(top: 10.px),
+      decoration: BoxDecoration(
+        color: primary3Color,
+        borderRadius: BorderRadius.only(
+          topRight: Radius.circular(40.px),
+          topLeft: Radius.circular(40.px),
+        ),
+      ),
+      child: SafeArea(
+        top: false,
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 520),
+            child: Padding(
+              padding: EdgeInsets.all(28.px),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: <Widget>[
+                  Container(
+                    width: 76.px,
+                    height: 76.px,
+                    decoration: BoxDecoration(
+                      color: primaryColor.withValues(alpha: 0.10),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(
+                      Icons.navigation_rounded,
+                      color: primaryColor,
+                      size: 38.px,
+                    ),
+                  ),
+                  SizedBox(height: 18.px),
+                  Text(
+                    rideStatusLabel(ride.rideStatus),
+                    textAlign: TextAlign.center,
+                    style: MyTextStyle.titleStyle18bb,
+                  ),
+                  SizedBox(height: 8.px),
+                  Text(
+                    driverName.isEmpty
+                        ? 'Your assigned driver is on this ride. Nearby drivers are hidden until it ends.'
+                        : '$driverName is your assigned driver. Nearby drivers are hidden until this ride ends.',
+                    textAlign: TextAlign.center,
+                    style: MyTextStyle.titleStyle12b.copyWith(
+                      color: Colors.grey.shade700,
+                      height: 1.4,
+                    ),
+                  ),
+                  SizedBox(height: 22.px),
+                  SizedBox(
+                    width: double.infinity,
+                    height: 50.px,
+                    child: FilledButton.icon(
+                      key: const Key('open-active-ride'),
+                      onPressed: () => Get.toNamed(Routes.ACTIVE_RIDE),
+                      icon: const Icon(Icons.map_rounded),
+                      label: const Text('Track active ride'),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

@@ -772,7 +772,7 @@ class _RideChatScreenState extends State<RideChatScreen> {
               accept
                   ? 'Accepting creates your active ride and confirms the '
                       'driver’s offer.'
-                  : 'The driver’s reserved points will be released.',
+                  : 'The driver’s reserved balance will be released.',
             ),
             actions: <Widget>[
               TextButton(

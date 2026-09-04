@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { getDriverList } from "../utils/api";
+import { addDriver } from "../api/domains/drivers";
 import Drivers from "./Drivers";
 
 vi.mock("../utils/api", () => ({
@@ -73,5 +74,26 @@ describe("Drivers admin", () => {
         availability: "Online",
       }));
     });
+  });
+
+  it("creates a driver through the authenticated multipart API", async () => {
+    addDriver.mockResolvedValue({ _id: "driver-2" });
+    render(<MemoryRouter><Drivers /></MemoryRouter>);
+    await screen.findByText("Amina Ready");
+
+    await userEvent.click(screen.getByRole("button", { name: /new driver/i }));
+    await userEvent.type(screen.getByLabelText(/first name/i), "Sami");
+    await userEvent.type(screen.getByLabelText(/last name/i), "Driver");
+    await userEvent.type(screen.getByLabelText(/^phone/i), "501234567");
+    await userEvent.type(screen.getByLabelText(/email/i), "sami@example.com");
+    await userEvent.type(screen.getByLabelText(/vehicle type/i), "Pickup");
+    await userEvent.type(screen.getByLabelText(/^city/i), "Dubai");
+    await userEvent.click(screen.getByRole("button", { name: /create driver/i }));
+
+    await waitFor(() => expect(addDriver).toHaveBeenCalledTimes(1));
+    const payload = addDriver.mock.calls[0][0];
+    expect(payload).toBeInstanceOf(FormData);
+    expect(payload.get("fullName")).toBe("Sami Driver");
+    expect(payload.get("phone")).toBe("501234567");
   });
 });
