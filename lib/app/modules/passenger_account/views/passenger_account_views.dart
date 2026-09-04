@@ -166,7 +166,7 @@ class PassengerProfileView extends GetView<PassengerAccountController> {
                     ),
                     onPressed: controller.logout,
                     icon: const Icon(Icons.logout_rounded),
-                    label: const Text('Logout'),
+                    label: Text('logout'.tr),
                   ),
                 ],
               ),
@@ -245,14 +245,14 @@ class _EditProfileViewState extends State<EditProfileView> {
                 keyboardType: TextInputType.phone,
               ),
               _TextField(
-                label: 'Email',
+                label: 'email'.tr,
                 controller: email,
                 keyboardType: TextInputType.emailAddress,
               ),
               const SizedBox(height: 8),
-              const Text(
-                'Phone changes are validated by the server. OTP verification must be reused when the backend requires it.',
-                style: TextStyle(color: text2Color, fontSize: 13),
+              Text(
+                'phone_changes_notice'.tr,
+                style: const TextStyle(color: text2Color, fontSize: 13),
               ),
               const SizedBox(height: 24),
               Obx(
@@ -277,7 +277,7 @@ class _EditProfileViewState extends State<EditProfileView> {
                           height: 22,
                           child: CircularProgressIndicator(strokeWidth: 2),
                         )
-                      : const Text('Save'),
+                      : Text('save'.tr),
                 ),
               ),
             ],
@@ -319,7 +319,7 @@ class SavedPlacesView extends GetView<PassengerAccountController> {
                   onTap: () => _showPlaceSheet(context, type: 'work'),
                 ),
                 const SizedBox(height: 18),
-                Text('Favorites', style: MyTextStyle.titleStyle16bb),
+                Text('favorites'.tr, style: MyTextStyle.titleStyle16bb),
                 const SizedBox(height: 8),
                 ...places
                     .where((SavedPlaceModel place) => place.type == 'favorite')
@@ -414,7 +414,7 @@ class SavedPlacesView extends GetView<PassengerAccountController> {
                             height: 22,
                             child: CircularProgressIndicator(strokeWidth: 2),
                           )
-                        : const Text('Save place'),
+                        : Text('save_place'.tr),
                   ),
                 ),
                 if (place != null) ...<Widget>[
@@ -429,7 +429,7 @@ class SavedPlacesView extends GetView<PassengerAccountController> {
                               if (deleted) Get.back();
                             },
                       icon: const Icon(Icons.delete_outline_rounded),
-                      label: const Text('Delete place'),
+                      label: Text('delete_place'.tr),
                       style: TextButton.styleFrom(
                         foregroundColor: Colors.red,
                         minimumSize: const Size.fromHeight(48),
@@ -528,12 +528,12 @@ class RideDetailsView extends StatelessWidget {
             onPressed: () => Get.toNamed(Routes.REPORT_PROBLEM,
                 parameters: {'rideId': ride.id}),
             icon: const Icon(Icons.flag_outlined),
-            label: const Text('Report problem'),
+            label: Text('report_problem'.tr),
           ),
           OutlinedButton.icon(
             onPressed: () => Get.toNamed(Routes.MESSAGES),
             icon: const Icon(Icons.chat_bubble_outline_rounded),
-            label: const Text('View messages'),
+            label: Text('view_messages'.tr),
           ),
         ],
       ),
@@ -835,7 +835,7 @@ class _ReportProblemViewState extends State<ReportProblemView> {
                         ),
                 child: controller.saving.value
                     ? const CircularProgressIndicator()
-                    : const Text('Send report'),
+                    : Text('send_report'.tr),
               ),
             ),
           ],
@@ -1187,12 +1187,12 @@ class _RideFilters extends StatelessWidget {
             selected: <String>{controller.rideFilter.value},
             onSelectionChanged: (Set<String> value) =>
                 controller.rideFilter.value = value.first,
-            segments: const <ButtonSegment<String>>[
-              ButtonSegment<String>(value: 'all', label: Text('All')),
+            segments: <ButtonSegment<String>>[
+              ButtonSegment<String>(value: 'all', label: Text('all'.tr)),
               ButtonSegment<String>(
-                  value: 'completed', label: Text('Completed')),
+                  value: 'completed', label: Text('completed'.tr)),
               ButtonSegment<String>(
-                  value: 'cancelled', label: Text('Cancelled')),
+                  value: 'cancelled', label: Text('cancelled'.tr)),
             ],
           ),
         ),

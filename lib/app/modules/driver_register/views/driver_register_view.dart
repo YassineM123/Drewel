@@ -90,23 +90,23 @@ class DriverRegisterView extends GetView<DriverRegisterController> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
-          Text('Step 1 - Basic Request', style: MyTextStyle.titleStyle16bb),
+          Text('step_1_basic_request'.tr, style: MyTextStyle.titleStyle16bb),
           SizedBox(height: 10.px),
           CommonWidgets.commonTextFieldForLoginSignUP(
-            labelText: 'First Name / Prenom',
-            hintText: 'First Name',
+            labelText: 'first_name'.tr,
+            hintText: 'first_name'.tr,
             controller: controller.firstNameController,
             focusNode: controller.firstNameFocus,
           ),
           CommonWidgets.commonTextFieldForLoginSignUP(
-            labelText: 'Last Name / Nom',
-            hintText: 'Last Name',
+            labelText: 'last_name'.tr,
+            hintText: 'last_name'.tr,
             controller: controller.lastNameController,
             focusNode: controller.lastNameFocus,
           ),
           CommonWidgets.commonTextFieldForLoginSignUP(
-            labelText: 'WhatsApp Number',
-            hintText: 'WhatsApp Number',
+            labelText: 'whatsapp_number'.tr,
+            hintText: 'whatsapp_number'.tr,
             controller: controller.whatsappController,
             focusNode: controller.whatsappFocus,
           ),
@@ -126,7 +126,7 @@ class DriverRegisterView extends GetView<DriverRegisterController> {
                 : () => controller.submitBasicRequest(),
             showLoading: controller.showBasicLoading.value,
             child: Text(
-              'Send Request',
+              'send_request'.tr,
               style: MyTextStyle.titleStyle16bw,
             ),
           ),
@@ -156,7 +156,7 @@ class DriverRegisterView extends GetView<DriverRegisterController> {
       ),
       child: Row(
         children: <Widget>[
-          Text('Current Status:', style: MyTextStyle.titleStyle14b),
+          Text('current_status'.tr, style: MyTextStyle.titleStyle14b),
           SizedBox(width: 8.px),
           Container(
             padding: EdgeInsets.symmetric(horizontal: 10.px, vertical: 5.px),
@@ -173,7 +173,7 @@ class DriverRegisterView extends GetView<DriverRegisterController> {
           const Spacer(),
           TextButton(
             onPressed: controller.openStatusModal,
-            child: const Text('Details'),
+            child: Text('details'.tr),
           ),
         ],
       ),
@@ -216,7 +216,7 @@ class DriverRegisterView extends GetView<DriverRegisterController> {
                 ),
                 child: Text(
                   badge == ApiKeyConstants.pending
-                      ? 'Pending Approval'
+                      ? 'pending_approval'.tr
                       : badge.toUpperCase(),
                   style:
                       MyTextStyle.titleStyle12b.copyWith(color: primaryColor),
@@ -226,7 +226,7 @@ class DriverRegisterView extends GetView<DriverRegisterController> {
               CommonWidgets.commonElevatedButton(
                 context: context,
                 onPressed: controller.closeStatusModal,
-                child: Text(StringConstants.close,
+                child: Text(StringConstants.close.tr,
                     style: MyTextStyle.titleStyle16bw),
               ),
             ],

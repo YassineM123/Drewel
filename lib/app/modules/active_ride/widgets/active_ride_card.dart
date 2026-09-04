@@ -77,8 +77,8 @@ class ActiveRideCard extends GetView<ActiveRideController> {
                           ),
                           Text(
                             ride.reference?.trim().isNotEmpty == true
-                                ? 'Ride ${ride.reference}'
-                                : 'Your active ride',
+                                ? '${'ride'.tr} ${ride.reference}'
+                                : 'your_active_ride'.tr,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: Theme.of(context).textTheme.bodySmall,
@@ -87,16 +87,16 @@ class ActiveRideCard extends GetView<ActiveRideController> {
                       ),
                     ),
                     if (controller.isOffline.value)
-                      const Padding(
-                        padding: EdgeInsets.only(right: 8),
+                      Padding(
+                        padding: const EdgeInsets.only(right: 8),
                         child: Tooltip(
-                          message: 'Offline - showing last known ride status',
-                          child: Icon(Icons.cloud_off_rounded, size: 20),
+                          message: 'offline_mode'.tr,
+                          child: const Icon(Icons.cloud_off_rounded, size: 20),
                         ),
                       ),
-                    const Text(
-                      'Resume',
-                      style: TextStyle(
+                    Text(
+                      'resume'.tr,
+                      style: const TextStyle(
                         color: primaryColor,
                         fontWeight: FontWeight.w700,
                       ),
@@ -115,17 +115,17 @@ class ActiveRideCard extends GetView<ActiveRideController> {
 }
 
 String rideStatusLabel(RideStatus status) => switch (status) {
-      RideStatus.contacting => 'Contacting driver',
-      RideStatus.offerPending => 'Offer pending',
-      RideStatus.confirmed => 'Ride confirmed',
-      RideStatus.driverOnTheWay => 'Driver on the way',
-      RideStatus.driverArrived => 'Driver arrived',
-      RideStatus.pickupConfirmed => 'Pickup confirmed',
-      RideStatus.inProgress => 'Ride in progress',
-      RideStatus.completed => 'Ride completed',
-      RideStatus.cancelledByUser => 'Cancelled by passenger',
-      RideStatus.cancelledByDriver => 'Cancelled by driver',
-      RideStatus.cancelledByAdmin => 'Cancelled by support',
-      RideStatus.disputed => 'Under review',
-      RideStatus.unknown => 'Ride status unavailable',
+      RideStatus.contacting => 'contacting_driver'.tr,
+      RideStatus.offerPending => 'offer_pending'.tr,
+      RideStatus.confirmed => 'ride_confirmed'.tr,
+      RideStatus.driverOnTheWay => 'driver_on_the_way'.tr,
+      RideStatus.driverArrived => 'driver_arrived'.tr,
+      RideStatus.pickupConfirmed => 'pickup_confirmed'.tr,
+      RideStatus.inProgress => 'ride_in_progress'.tr,
+      RideStatus.completed => 'ride_completed'.tr,
+      RideStatus.cancelledByUser => 'cancelled_by_passenger'.tr,
+      RideStatus.cancelledByDriver => 'cancelled_by_driver'.tr,
+      RideStatus.cancelledByAdmin => 'cancelled_by_support'.tr,
+      RideStatus.disputed => 'under_review'.tr,
+      RideStatus.unknown => 'ride_status_unavailable'.tr,
     };

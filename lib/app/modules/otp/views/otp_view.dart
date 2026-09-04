@@ -117,14 +117,14 @@ class OtpView extends GetView<OtpController> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: <Widget>[
                               Text(
-                                StringConstants.welcomeToDREWEL,
+                                StringConstants.welcomeToDREWEL.tr,
                                 style: MyTextStyle.titleStyle24bb.copyWith(
                                   height: 1.1,
                                 ),
                               ),
                               SizedBox(height: 24.px),
                               Text(
-                                '${StringConstants.enterYourOTPCodeHere} '
+                                '${StringConstants.enterYourOTPCodeHere.tr} '
                                 '(${controller.otpLength} digits)',
                                 style: MyTextStyle.titleStyle20b.copyWith(
                                   height: 1.25,
@@ -164,8 +164,8 @@ class OtpView extends GetView<OtpController> {
                                   Expanded(
                                     child: Text(
                                       controller.canResend
-                                          ? 'Didn\'t receive a code?'
-                                          : 'Resend available in ${controller.resendSeconds.value}s',
+                                          ? 'didnt_receive_code'.tr
+                                          : 'resend_available_in'.trParams({'seconds': '${controller.resendSeconds.value}'}),
                                       style: MyTextStyle.titleStyle12b,
                                     ),
                                   ),
@@ -182,7 +182,7 @@ class OtpView extends GetView<OtpController> {
                                             ),
                                           )
                                         : Text(
-                                            'Resend',
+                                            'resend'.tr,
                                             style: MyTextStyle.titleStyle14bb
                                                 .copyWith(color: primaryColor),
                                           ),
@@ -199,9 +199,9 @@ class OtpView extends GetView<OtpController> {
                                 isLoading: controller.showLoading.value,
                                 height: 58.px,
                                 backgroundColor: primaryColor,
-                                semanticLabel: StringConstants.verifyNow,
+                                semanticLabel: StringConstants.verifyNow.tr,
                                 child: Text(
-                                  StringConstants.verifyNow,
+                                  StringConstants.verifyNow.tr,
                                   style: MyTextStyle.titleStyle20bw.copyWith(
                                     height: 1,
                                   ),

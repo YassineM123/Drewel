@@ -42,14 +42,14 @@ class UserTypeView extends GetView<UserTypeController> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          StringConstants.welcomeToDREWEL,
+                          StringConstants.welcomeToDREWEL.tr,
                           style: MyTextStyle.titleStyle20bb,
                         ),
                         SizedBox(
                           height: 10.px,
                         ),
                         Text(
-                          StringConstants.chooseRegistrationType,
+                          StringConstants.chooseRegistrationType.tr,
                           style: MyTextStyle.titleStyle16b,
                         ),
                         GestureDetector(
@@ -69,11 +69,8 @@ class UserTypeView extends GetView<UserTypeController> {
                             child: Row(
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
-                                // CommonWidgets.appIcons(assetName: IconConstants.icUser,
-                                // height: 25.px,width: 21.px),
-                                // SizedBox(width: 10.px,),
                                 Text(
-                                  StringConstants.registerAsAUser,
+                                  StringConstants.registerAsAUser.tr,
                                   style: controller.currentIndex.value == 0
                                       ? MyTextStyle.titleStyle16bb
                                       : MyTextStyle.titleStyle16b,
@@ -99,11 +96,8 @@ class UserTypeView extends GetView<UserTypeController> {
                             child: Row(
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
-                                // CommonWidgets.appIcons(assetName: IconConstants.icDriver,
-                                // height: 25.px,width: 21.px),
-                                // SizedBox(width: 10.px,),
                                 Text(
-                                  StringConstants.registerAsADriver,
+                                  StringConstants.registerAsADriver.tr,
                                   style: controller.currentIndex.value == 1
                                       ? MyTextStyle.titleStyle16bb
                                       : MyTextStyle.titleStyle16b,
@@ -118,7 +112,7 @@ class UserTypeView extends GetView<UserTypeController> {
                             },
                             context: context,
                             child: Text(
-                              StringConstants.next,
+                              StringConstants.next.tr,
                               style: MyTextStyle.titleStyle16bw,
                             ),
                             buttonMargin: EdgeInsets.symmetric(vertical: 20.px))

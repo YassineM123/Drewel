@@ -26,7 +26,7 @@ class DriverRankingsView extends GetView<DriverRankingsController> {
           icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
           onPressed: () => Get.back(),
         ),
-        title: Text('Top Drivers', style: MyTextStyle.titleStyle20bb),
+        title: Text('top_drivers'.tr, style: MyTextStyle.titleStyle20bb),
         centerTitle: true,
       ),
       body: Obx(() {
@@ -184,6 +184,7 @@ class DriverRankingsView extends GetView<DriverRankingsController> {
                     Text(
                       [item.driver.vehicleType, item.driver.vehicleModel]
                           .where((s) => s.isNotEmpty)
+                          .map((s) => s.tr)
                           .join(' · '),
                       style: MyTextStyle.titleStyle11b.copyWith(color: text2Color),
                       maxLines: 1,
@@ -217,7 +218,7 @@ class DriverRankingsView extends GetView<DriverRankingsController> {
       return TextButton(
         onPressed: controller.loadMore,
         child: Text(
-          'Load more',
+          'load_more'.tr,
           style: MyTextStyle.titleStyle13b.copyWith(color: primaryColor),
         ),
       );
@@ -250,7 +251,7 @@ class DriverRankingsView extends GetView<DriverRankingsController> {
         children: [
           Icon(Icons.error_outline, size: 48, color: primaryColor.withValues(alpha: 0.5)),
           const SizedBox(height: 16),
-          Text('Unable to load rankings', style: MyTextStyle.titleStyle16bb),
+          Text('unable_load_rankings'.tr, style: MyTextStyle.titleStyle16bb),
           const SizedBox(height: 8),
           ElevatedButton(
             onPressed: controller.loadRankings,
@@ -258,7 +259,7 @@ class DriverRankingsView extends GetView<DriverRankingsController> {
               backgroundColor: primaryColor,
               foregroundColor: primary3Color,
             ),
-            child: const Text('Retry'),
+            child: Text('retry'.tr),
           ),
         ],
       ),

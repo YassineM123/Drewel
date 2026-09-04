@@ -139,10 +139,15 @@ class CallStateController extends GetxService with WidgetsBindingObserver {
 
   void _startDriverRequestCooldownUntil(DateTime? expiresAt) {
     if (expiresAt == null) return;
+    final int seconds = cooldownSecondsUntil(expiresAt, DateTime.now());
+    if (seconds <= 0) return;
+    _startDriverRequestCooldown(seconds);
+  }
+
+  static int cooldownSecondsUntil(DateTime expiresAt, DateTime now) {
     final int milliseconds =
-        expiresAt.toUtc().difference(DateTime.now().toUtc()).inMilliseconds;
-    if (milliseconds <= 0) return;
-    _startDriverRequestCooldown((milliseconds / 1000).ceil());
+        expiresAt.toUtc().difference(now.toUtc()).inMilliseconds;
+    return milliseconds <= 0 ? 0 : (milliseconds / 1000).ceil();
   }
 
   Future<void> openDriverChat(

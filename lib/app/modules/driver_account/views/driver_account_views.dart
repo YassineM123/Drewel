@@ -179,7 +179,7 @@ class DriverProfileView extends GetView<DriverAccountController> {
                     ),
                     onPressed: controller.logout,
                     icon: const Icon(Icons.logout_rounded),
-                    label: const Text('Logout'),
+                    label: Text('logout'.tr),
                   ),
                 ],
               ),
@@ -270,13 +270,13 @@ class _DriverEditProfileViewState extends State<DriverEditProfileView> {
               keyboardType: TextInputType.phone,
             ),
             _TextField(
-              label: 'Email',
+              label: 'email'.tr,
               controller: email,
               keyboardType: TextInputType.emailAddress,
             ),
-            const Text(
-              'Verified identity and document changes are submitted for admin review when required by Drewel.',
-              style: TextStyle(color: text2Color, fontSize: 13),
+            Text(
+              'verified_identity_notice'.tr,
+              style: const TextStyle(color: text2Color, fontSize: 13),
             ),
             const SizedBox(height: 24),
             Obx(
@@ -296,7 +296,7 @@ class _DriverEditProfileViewState extends State<DriverEditProfileView> {
                         ),
                 child: controller.saving.value
                     ? const CircularProgressIndicator()
-                    : const Text('Save'),
+                    : Text('save'.tr),
               ),
             ),
           ],
@@ -337,7 +337,7 @@ class DriverVehicleView extends GetView<DriverAccountController> {
                 OutlinedButton.icon(
                   onPressed: () => Get.toNamed(Routes.DOCUMENTS),
                   icon: const Icon(Icons.file_copy_outlined),
-                  label: const Text('Manage documents'),
+                  label: Text('manage_documents'.tr),
                 ),
               ],
             ),
@@ -425,12 +425,12 @@ class DriverRideDetailsView extends StatelessWidget {
               parameters: {'rideId': ride.id, 'category': 'ride'},
             ),
             icon: const Icon(Icons.flag_outlined),
-            label: const Text('Report problem'),
+            label: Text('report_problem'.tr),
           ),
           OutlinedButton.icon(
             onPressed: () => Get.toNamed(Routes.MESSAGES),
             icon: const Icon(Icons.chat_bubble_outline_rounded),
-            label: const Text('View messages'),
+            label: Text('view_messages'.tr),
           ),
         ],
       ),
@@ -882,7 +882,7 @@ class _DriverReportProblemViewState extends State<DriverReportProblemView> {
                         ),
                 child: controller.saving.value
                     ? const CircularProgressIndicator()
-                    : const Text('Send report'),
+                    : Text('send_report'.tr),
               ),
             ),
           ],
@@ -1291,12 +1291,12 @@ class _RideFilters extends StatelessWidget {
             selected: <String>{controller.rideFilter.value},
             onSelectionChanged: (Set<String> value) =>
                 controller.rideFilter.value = value.first,
-            segments: const <ButtonSegment<String>>[
-              ButtonSegment<String>(value: 'all', label: Text('All')),
+            segments: <ButtonSegment<String>>[
+              ButtonSegment<String>(value: 'all', label: Text('all'.tr)),
               ButtonSegment<String>(
-                  value: 'completed', label: Text('Completed')),
+                  value: 'completed', label: Text('completed'.tr)),
               ButtonSegment<String>(
-                  value: 'cancelled', label: Text('Cancelled')),
+                  value: 'cancelled', label: Text('cancelled'.tr)),
             ],
           ),
         ),

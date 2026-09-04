@@ -37,7 +37,7 @@ void main() {
 
   tearDown(Get.reset);
 
-  testWidgets('shows 100 welcome points and transaction history',
+  testWidgets('shows 100 welcome balance and transaction history',
       (tester) async {
     final repository = FakePointsRepository();
     repository.transactionItems = <PointTransaction>[
@@ -93,7 +93,7 @@ void main() {
     await tester.pumpWidget(_app(const MyPointsView()));
     await tester.pump();
 
-    expect(find.bySemanticsLabel('Loading points'), findsOneWidget);
+    expect(find.bySemanticsLabel('Loading balance'), findsOneWidget);
     completer.complete(testWallet());
     await tester.pumpAndSettle();
   });
@@ -132,21 +132,21 @@ void main() {
       version: 3,
     ));
     await tester.pump();
-    expect(find.textContaining('No points available'), findsOneWidget);
+    expect(find.textContaining('No balance available'), findsOneWidget);
 
     controller
       ..wallet.value = null
       ..state.value = PointsLoadState.error;
     await tester.pump();
-    expect(find.text('Unable to load your points.'), findsOneWidget);
+    expect(find.text('Unable to load your balance.'), findsOneWidget);
 
     controller.state.value = PointsLoadState.offline;
     await tester.pump();
-    expect(find.text('Points unavailable while offline.'), findsOneWidget);
+    expect(find.text('Balance unavailable while offline.'), findsOneWidget);
 
     final semantics =
         tester.getSemantics(find.byKey(const Key('driver-points-indicator')));
-    expect(semantics.label, contains('Open My Points'));
+    expect(semantics.label, contains('Open My Balance'));
     expect(
         tester.getSize(find.byKey(const Key('driver-points-indicator'))).height,
         greaterThanOrEqualTo(48));
@@ -175,13 +175,13 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byKey(const Key('offer-reservation-dialog')), findsOneWidget);
-    expect(find.text('100 points'), findsOneWidget);
-    expect(find.text('20 points'), findsOneWidget);
-    expect(find.text('80 points'), findsOneWidget);
-    expect(find.text('Send Offer — 20 points'), findsOneWidget);
+    expect(find.text('100 balance'), findsOneWidget);
+    expect(find.text('20 balance'), findsOneWidget);
+    expect(find.text('80 balance'), findsOneWidget);
+    expect(find.text('Send Offer — 20 balance'), findsOneWidget);
   });
 
-  testWidgets('insufficient points dialog offers Buy Points', (tester) async {
+  testWidgets('insufficient balance dialog offers Add Balance', (tester) async {
     final repository = FakePointsRepository(
       wallet: testWallet(
         available: 10,
@@ -213,13 +213,13 @@ void main() {
 
     expect(find.byKey(const Key('insufficient-points-dialog')), findsOneWidget);
     expect(
-      find.text("You don't have enough points to send this offer."),
+      find.text("You don't have enough balance to send this offer."),
       findsOneWidget,
     );
-    expect(find.text('Buy Points'), findsOneWidget);
+    expect(find.text('Add Balance'), findsOneWidget);
   });
 
-  testWidgets('Buy Points creates a request and shows its reference',
+  testWidgets('Add Balance creates a request and shows its reference',
       (tester) async {
     final repository = FakePointsRepository()
       ..packItems = const <PointPack>[
@@ -239,7 +239,7 @@ void main() {
     await tester.pumpWidget(_app(const BuyPointsView()));
     await tester.pumpAndSettle();
 
-    expect(find.text('200 Available points'), findsOneWidget);
+    expect(find.text('200 Available balance'), findsOneWidget);
     expect(
       find.text('Arranged directly with the owner'),
       findsOneWidget,
@@ -252,7 +252,7 @@ void main() {
     expect(controller.wallet.value?.availablePoints, 100);
   });
 
-  testWidgets('new points UI supports Arabic RTL and accessibility',
+  testWidgets('new balance UI supports Arabic RTL and accessibility',
       (tester) async {
     final controller = DriverPointsController(
       repository: FakePointsRepository(),
@@ -264,8 +264,8 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('نقاطي'), findsOneWidget);
-    expect(find.text('النقاط المتاحة'), findsOneWidget);
+    expect(find.text('رصيدي'), findsOneWidget);
+    expect(find.text('الرصيد المتاح'), findsOneWidget);
     final directionality =
         tester.widget<Directionality>(find.byType(Directionality).first);
     expect(directionality.textDirection, TextDirection.rtl);

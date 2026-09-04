@@ -25,16 +25,16 @@ class SafetyDialog extends GetView<CallStateController> {
           maxLength: 500,
           minLines: 2,
           maxLines: 4,
-          decoration: const InputDecoration(
-            labelText: 'Reason',
-            hintText: 'Tell Drewel support what happened',
-            border: OutlineInputBorder(),
+          decoration: InputDecoration(
+            labelText: 'reason'.tr,
+            hintText: 'tell_support_what_happened'.tr,
+            border: const OutlineInputBorder(),
           ),
         ),
         actions: <Widget>[
           TextButton(
             onPressed: () => Navigator.pop(dialogContext, false),
-            child: const Text('Cancel'),
+            child: Text('cancel'.tr),
           ),
           FilledButton(
             style: destructive
@@ -57,8 +57,8 @@ class SafetyDialog extends GetView<CallStateController> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(success
-            ? '$confirmLabel submitted to Drewel.'
-            : 'Unable to submit. Please retry or contact support.'),
+            ? 'submitted_to_drewel'.trParams({'label': confirmLabel})
+            : 'unable_to_submit_retry'.tr),
       ),
     );
     if (success && Get.isDialogOpen == true) Get.back<void>();
@@ -66,17 +66,17 @@ class SafetyDialog extends GetView<CallStateController> {
 
   @override
   Widget build(BuildContext context) => AlertDialog(
-        title: const Row(
+        title: Row(
           children: <Widget>[
-            Icon(Icons.shield_rounded),
-            SizedBox(width: 8),
-            Text('Safety'),
+            const Icon(Icons.shield_rounded),
+            const SizedBox(width: 8),
+            Text('safety'.tr),
           ],
         ),
         content: Text(
           controller.activeRide.value == null
-              ? 'No active ride is available. Drewel support can still help.'
-              : 'Report a safety concern, block your assigned ride participant, or contact Drewel support.',
+              ? 'no_active_ride_safety'.tr
+              : 'safety_dialog_description'.tr,
         ),
         actions: <Widget>[
           TextButton(
@@ -84,30 +84,30 @@ class SafetyDialog extends GetView<CallStateController> {
               Get.back<void>();
               Get.toNamed(Routes.SUPPORT);
             },
-            child: const Text('Support'),
+            child: Text('support'.tr),
           ),
           if (controller.activeRide.value != null)
             TextButton(
               onPressed: () => _requestReason(
                 context,
-                title: 'Report this ride?',
-                confirmLabel: 'Report',
+                title: 'report_this_ride_question'.tr,
+                confirmLabel: 'report'.tr,
                 submit: controller.reportRide,
                 destructive: false,
               ),
-              child: const Text('Report'),
+              child: Text('report'.tr),
             ),
           if (controller.activeRide.value != null)
             FilledButton(
               style: FilledButton.styleFrom(backgroundColor: Colors.red),
               onPressed: () => _requestReason(
                 context,
-                title: 'Block this participant?',
-                confirmLabel: 'Block',
+                title: 'block_this_participant_question'.tr,
+                confirmLabel: 'block'.tr,
                 submit: controller.blockRide,
                 destructive: true,
               ),
-              child: const Text('Block'),
+              child: Text('block'.tr),
             ),
         ],
       );

@@ -75,8 +75,8 @@ const sendError = (res, error) => {
 const escapeRegex = (value) => String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 const pointsPerAED = () => {
-  const value = Number(process.env.DRIVER_POINTS_PER_AED || process.env.POINTS_PER_AED || 10);
-  return Number.isFinite(value) && value > 0 ? value : 10;
+  const value = Number(process.env.DRIVER_POINTS_PER_AED || process.env.POINTS_PER_AED || 1);
+  return Number.isFinite(value) && value > 0 ? value : 1;
 };
 
 const adminDriverFields =

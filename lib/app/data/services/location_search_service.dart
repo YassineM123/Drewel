@@ -22,7 +22,7 @@ class DrewelLocationSearchService {
   };
 
   /// Autocomplete search: tries Google Places first; falls back seamlessly to
-  /// OpenStreetMap (Photon / Nominatim) if Google is unavailable or denied.
+  /// OpenStreetMap (Nominatim / Photon) if Google is unavailable or denied.
   Future<List<Prediction>> searchPlaces(
     String query, {
     LatLng? nearLocation,
@@ -35,7 +35,7 @@ class DrewelLocationSearchService {
     if (googleKey.isNotEmpty) {
       try {
         final List<Prediction>? googleResults =
-            await _searchGooglePlaces(trimmed);
+            await _searchGooglePlaces(trimmed, nearLocation: nearLocation);
         if (googleResults != null && googleResults.isNotEmpty) {
           return googleResults;
         }
@@ -44,7 +44,18 @@ class DrewelLocationSearchService {
       }
     }
 
-    // 2. Fallback to OpenStreetMap Photon & Nominatim
+    // 2. Search OpenStreetMap Nominatim with proximity viewbox
+    try {
+      final List<Prediction> nominatimResults =
+          await _searchNominatim(trimmed, nearLocation: nearLocation);
+      if (nominatimResults.isNotEmpty) {
+        return nominatimResults;
+      }
+    } catch (e) {
+      debugPrint('Nominatim search error: $e');
+    }
+
+    // 3. Fallback to OpenStreetMap Photon
     try {
       final List<Prediction> osmResults =
           await _searchPhotonOsm(trimmed, nearLocation: nearLocation);
@@ -55,25 +66,33 @@ class DrewelLocationSearchService {
       debugPrint('Photon search error: $e');
     }
 
-    try {
-      return await _searchNominatim(trimmed);
-    } catch (e) {
-      debugPrint('Nominatim search error: $e');
-      return <Prediction>[];
-    }
+    return <Prediction>[];
   }
 
   /// Search Google Places Autocomplete
-  Future<List<Prediction>?> _searchGooglePlaces(String query) async {
+  Future<List<Prediction>?> _searchGooglePlaces(
+    String query, {
+    LatLng? nearLocation,
+  }) async {
+    final Map<String, String> queryParams = <String, String>{
+      'input': query,
+      'key': ApiKeyConstants.googleMapKey,
+      'language': 'en',
+    };
+    if (nearLocation != null) {
+      queryParams['location'] =
+          '${nearLocation.latitude},${nearLocation.longitude}';
+      queryParams['radius'] = '50000';
+    } else if (AppConfig.marketplaceCountryCode.isNotEmpty &&
+        !AppConfig.marketplaceCountryCode.contains('ae')) {
+      queryParams['components'] =
+          'country:${AppConfig.marketplaceCountryCode}';
+    }
+
     final Uri uri = Uri.https(
       'maps.googleapis.com',
       '/maps/api/place/autocomplete/json',
-      <String, String>{
-        'input': query,
-        'key': ApiKeyConstants.googleMapKey,
-        'language': 'en',
-        'components': 'country:${AppConfig.marketplaceCountryCode}',
-      },
+      queryParams,
     );
 
     final http.Response response = await http.get(uri).timeout(_httpTimeout);
@@ -111,7 +130,9 @@ class DrewelLocationSearchService {
     }
 
     final Uri uri = Uri.https('photon.komoot.io', '/api/', queryParams);
-    final http.Response response = await http.get(uri).timeout(_httpTimeout);
+    final http.Response response = await http
+        .get(uri, headers: _nominatimHeaders)
+        .timeout(const Duration(seconds: 4));
     if (response.statusCode != 200) return <Prediction>[];
 
     final Map<String, dynamic> data =
@@ -170,15 +191,24 @@ class DrewelLocationSearchService {
   }
 
   /// Search OpenStreetMap via Nominatim
-  Future<List<Prediction>> _searchNominatim(String query) async {
+  Future<List<Prediction>> _searchNominatim(
+    String query, {
+    LatLng? nearLocation,
+  }) async {
     final Map<String, String> queryParams = <String, String>{
       'q': query,
       'format': 'json',
       'addressdetails': '1',
       'limit': '10',
     };
-    if (AppConfig.marketplaceCountryCode.isNotEmpty) {
-      queryParams['countrycodes'] = AppConfig.marketplaceCountryCode;
+
+    if (nearLocation != null) {
+      const double delta = 1.0; // ~100km viewbox bias around user
+      queryParams['viewbox'] =
+          '${nearLocation.longitude - delta},${nearLocation.latitude + delta},${nearLocation.longitude + delta},${nearLocation.latitude - delta}';
+    } else if (AppConfig.marketplaceCountryCode.isNotEmpty &&
+        AppConfig.tunisiaTestMode) {
+      queryParams['countrycodes'] = 'tn';
     }
 
     final Uri uri =
@@ -200,18 +230,27 @@ class DrewelLocationSearchService {
 
       final String displayName = item['display_name']?.toString() ?? '';
       final String name = item['name']?.toString() ?? '';
+      final Map<String, dynamic>? addr =
+          item['address'] as Map<String, dynamic>?;
+      final String cleanFormatted = _cleanOsmAddress(displayName, addr);
       final String mainText = name.isNotEmpty
           ? name
-          : displayName.split(',').first.trim();
-      final String secondaryText = displayName.contains(',')
-          ? displayName.substring(displayName.indexOf(',') + 1).trim()
-          : '';
+          : (addr?['road'] ??
+                  addr?['suburb'] ??
+                  addr?['city'] ??
+                  displayName.split(',').first)
+              .toString()
+              .trim();
+      final String secondaryText = cleanFormatted
+          .replaceFirst(mainText, '')
+          .replaceFirst(RegExp(r'^[,\s]+'), '')
+          .trim();
 
       final Prediction pred = Prediction(
-        description: displayName,
+        description: cleanFormatted.isNotEmpty ? cleanFormatted : displayName,
         placeId: 'osm_${item['place_id'] ?? mainText}',
         structuredFormatting: StructuredFormatting(
-          mainText: mainText,
+          mainText: mainText.isNotEmpty ? mainText : displayName,
           secondaryText: secondaryText,
         ),
       );

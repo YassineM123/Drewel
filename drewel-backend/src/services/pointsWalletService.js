@@ -22,7 +22,7 @@ const totalReserved = (wallet) =>
 export const toWalletDto = (wallet, settings = null) => {
   const availablePoints = totalAvailable(wallet);
   const reservedPoints = totalReserved(wallet);
-  const pointsPerAED = settings?.pointsPerAED ?? 10;
+  const pointsPerAED = settings?.pointsPerAED ?? 1;
   const commissionRate = settings?.commissionRate ?? 0.10;
   const equivalentAED = availablePoints / pointsPerAED;
   return {

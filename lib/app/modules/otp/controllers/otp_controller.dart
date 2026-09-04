@@ -258,15 +258,15 @@ class OtpController extends GetxController {
           backgroundColor: Colors.white,
           surfaceTintColor: Colors.white,
           title: Text(
-            'Your account is in verification process',
+            'account_in_verification'.tr,
             style: MyTextStyle.titleStyle16bb,
             textAlign: TextAlign.center,
           ),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Text(
-                'Thanks for login with Drewel! Your documents have been sent to the admin for approval.',
+              Text(
+                'thanks_login_docs_pending'.tr,
                 textAlign: TextAlign.center,
               ),
               SizedBox(
@@ -278,7 +278,7 @@ class OtpController extends GetxController {
                   },
                   context: context,
                   child: Text(
-                    StringConstants.close,
+                    StringConstants.close.tr,
                     style: MyTextStyle.titleStyle16bw,
                   ))
             ],
@@ -301,7 +301,7 @@ class OtpController extends GetxController {
             borderRadius: BorderRadius.circular(16.px),
           ),
           title: Text(
-            'Registration Submitted',
+            'registration_submitted'.tr,
             style: MyTextStyle.titleStyle18bb,
             textAlign: TextAlign.center,
           ),
@@ -315,7 +315,7 @@ class OtpController extends GetxController {
               ),
               SizedBox(height: 16.px),
               Text(
-                'Thanks for registering with Drewel! Your documents have been sent to the admin for approval.',
+                'thanks_register_docs_pending'.tr,
                 textAlign: TextAlign.center,
                 style: MyTextStyle.titleStyle14b,
               ),
@@ -327,7 +327,7 @@ class OtpController extends GetxController {
                 },
                 context: context,
                 child: Text(
-                  StringConstants.close,
+                  StringConstants.close.tr,
                   style: MyTextStyle.titleStyle16bw,
                 ),
               ),

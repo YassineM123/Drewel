@@ -6,11 +6,12 @@ import 'package:shimmer/shimmer.dart';
 import '../../../../common/colors.dart';
 import '../../../../common/text_styles.dart';
 import '../../../data/apis/api_models/driver_profile_models.dart';
+import '../../communication/controllers/call_state_controller.dart';
 import '../controllers/driver_profile_controller.dart';
 
-const Color _pageColor = Color(0xFFF6F7F9);
-const Color _lineColor = Color(0xFFE7E8EC);
-const double _radius = 12;
+const Color _pageColor = Color(0xFFF7F8FA);
+const Color _lineColor = Color(0xFFEBECEF);
+const double _radius = 16;
 
 class DriverPublicProfileView extends GetView<DriverProfileController> {
   const DriverPublicProfileView({super.key});
@@ -28,7 +29,13 @@ class DriverPublicProfileView extends GetView<DriverProfileController> {
         }
         final profile = controller.profile.value;
         if (profile == null) return const SizedBox.shrink();
+
+        final bool hasInfo = profile.languages.isNotEmpty ||
+            profile.experienceYears != null ||
+            profile.city.isNotEmpty;
+
         return CustomScrollView(
+          physics: const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
           slivers: [
             _buildAppBar(profile),
             SliverToBoxAdapter(
@@ -40,20 +47,22 @@ class DriverPublicProfileView extends GetView<DriverProfileController> {
                     const SizedBox(height: 12),
                     _buildBadges(profile),
                   ],
-                  const SizedBox(height: 16),
-                  _buildInfoSection(profile),
+                  if (hasInfo) ...[
+                    const SizedBox(height: 14),
+                    _buildInfoSection(profile),
+                  ],
                   if (profile.vehicle.displayName.isNotEmpty) ...[
-                    const SizedBox(height: 16),
+                    const SizedBox(height: 14),
                     _buildVehicleSection(profile),
                   ],
                   if (profile.bio.isNotEmpty) ...[
-                    const SizedBox(height: 16),
+                    const SizedBox(height: 14),
                     _buildAboutSection(profile),
                   ],
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 14),
                   _buildReviewsSummary(profile),
-                  const SizedBox(height: 16),
-                  _buildRecentReviews(),
+                  const SizedBox(height: 14),
+                  _buildRecentReviews(profile),
                   const SizedBox(height: 100),
                 ],
               ),
@@ -76,12 +85,13 @@ class DriverPublicProfileView extends GetView<DriverProfileController> {
       pinned: true,
       backgroundColor: primary3Color,
       surfaceTintColor: primary3Color,
+      elevation: 0.5,
       leading: IconButton(
         icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
         onPressed: () => Get.back(),
       ),
       title: Text(
-        profile.fullName.isNotEmpty ? profile.fullName : 'Driver Profile',
+        profile.fullName.isNotEmpty ? profile.fullName : 'driver_profile'.tr,
         style: MyTextStyle.titleStyle16bb,
       ),
       centerTitle: true,
@@ -91,7 +101,7 @@ class DriverPublicProfileView extends GetView<DriverProfileController> {
                 controller.isFavorite.value
                     ? Icons.favorite_rounded
                     : Icons.favorite_border_rounded,
-                color: controller.isFavorite.value ? primaryColor : Colors.grey,
+                color: controller.isFavorite.value ? primaryColor : text2Color,
                 size: 22,
               ),
               onPressed: controller.toggleFavorite,
@@ -101,12 +111,14 @@ class DriverPublicProfileView extends GetView<DriverProfileController> {
   }
 
   Widget _buildProfileHeader(PublicDriverProfile profile) {
+    final int completedTrips = profile.reviewsSummary.completedTrips;
+
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
       decoration: const BoxDecoration(
         color: primary3Color,
-        border: Border(bottom: BorderSide(color: _lineColor, width: 0.5)),
+        border: Border(bottom: BorderSide(color: _lineColor, width: 0.8)),
       ),
       child: Column(
         children: [
@@ -118,15 +130,19 @@ class DriverPublicProfileView extends GetView<DriverProfileController> {
                 radius: 48,
               ),
               if (profile.isOnline)
-                Container(
-                  width: 18,
-                  height: 18,
-                  decoration: BoxDecoration(
-                    color: profile.availabilityStatus.toLowerCase() == 'busy'
-                        ? amberColor
-                        : greenColor,
-                    shape: BoxShape.circle,
-                    border: Border.all(color: primary3Color, width: 3),
+                Positioned(
+                  right: 2,
+                  bottom: 2,
+                  child: Container(
+                    width: 18,
+                    height: 18,
+                    decoration: BoxDecoration(
+                      color: profile.availabilityStatus.toLowerCase() == 'busy'
+                          ? amberColor
+                          : greenColor,
+                      shape: BoxShape.circle,
+                      border: Border.all(color: primary3Color, width: 3),
+                    ),
                   ),
                 ),
             ],
@@ -154,38 +170,55 @@ class DriverPublicProfileView extends GetView<DriverProfileController> {
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              if (profile.rating != null) ...[
+              if (profile.rating != null && profile.rating! > 0) ...[
                 const Icon(Icons.star_rounded, size: 18, color: amberColor),
-                const SizedBox(width: 2),
+                const SizedBox(width: 3),
                 Text(
                   profile.rating!.toStringAsFixed(2),
-                  style: MyTextStyle.titleStyle14bb.copyWith(color: amberColor),
+                  style: MyTextStyle.titleStyle14bb.copyWith(color: textColor),
                 ),
-                const SizedBox(width: 4),
-                Text(
-                  '· ${profile.reviewsSummary.completedTrips} trips',
-                  style: MyTextStyle.titleStyle13b.copyWith(color: text2Color),
-                ),
-              ] else ...[
-                Text(
-                  '${profile.reviewsSummary.completedTrips} trips',
-                  style: MyTextStyle.titleStyle13b.copyWith(color: text2Color),
+                const SizedBox(width: 6),
+                const Text('·', style: TextStyle(color: text2Color, fontSize: 16)),
+                const SizedBox(width: 6),
+              ],
+              Text(
+                '$completedTrips ${'trips'.tr}',
+                style: MyTextStyle.titleStyle13b.copyWith(color: text2Color),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              _AvailabilityBadge(status: profile.availabilityStatus),
+              if (profile.ranking?.position != null) ...[
+                const SizedBox(width: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: primaryColor.withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: primaryColor.withValues(alpha: 0.25)),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.emoji_events_rounded, size: 14, color: primaryColor),
+                      const SizedBox(width: 4),
+                      Text(
+                        '#${profile.ranking!.position} ${'in_rankings'.tr}',
+                        style: MyTextStyle.titleStyle12b.copyWith(
+                          color: primaryColor,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ],
             ],
           ),
-          const SizedBox(height: 8),
-          _AvailabilityBadge(status: profile.availabilityStatus),
-          if (profile.ranking?.position != null) ...[
-            const SizedBox(height: 8),
-            Text(
-              '#${profile.ranking!.position} in rankings',
-              style: MyTextStyle.titleStyle12b.copyWith(
-                color: primaryColor,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ],
         ],
       ),
     );
@@ -196,12 +229,12 @@ class DriverPublicProfileView extends GetView<DriverProfileController> {
       padding: const EdgeInsets.symmetric(horizontal: 16),
       child: Wrap(
         spacing: 8,
-        runSpacing: 6,
+        runSpacing: 8,
         children: profile.badges.map((badge) {
           return Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
             decoration: BoxDecoration(
-              color: primaryColor.withValues(alpha: 0.08),
+              color: primaryColor.withValues(alpha: 0.06),
               borderRadius: BorderRadius.circular(20),
               border: Border.all(color: primaryColor.withValues(alpha: 0.2)),
             ),
@@ -209,7 +242,7 @@ class DriverPublicProfileView extends GetView<DriverProfileController> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 Icon(_badgeIcon(badge), size: 14, color: primaryColor),
-                const SizedBox(width: 4),
+                const SizedBox(width: 5),
                 Text(
                   badge,
                   style: MyTextStyle.titleStyle12b.copyWith(
@@ -226,16 +259,49 @@ class DriverPublicProfileView extends GetView<DriverProfileController> {
   }
 
   IconData _badgeIcon(String badge) {
-    if (badge.contains('Verified')) return Icons.verified_rounded;
-    if (badge.contains('Top Rated')) return Icons.star_rounded;
-    if (badge.contains('Elite')) return Icons.diamond_rounded;
-    if (badge.contains('Experienced')) return Icons.workspace_premium_rounded;
-    if (badge.contains('Airport')) return Icons.flight_rounded;
-    if (badge.contains('Rising')) return Icons.trending_up_rounded;
-    return Icons.badge_rounded;
+    final lower = badge.toLowerCase();
+    if (lower.contains('verified')) return Icons.verified_user_rounded;
+    if (lower.contains('top') || lower.contains('rated')) return Icons.star_rounded;
+    if (lower.contains('elite')) return Icons.diamond_rounded;
+    if (lower.contains('experience')) return Icons.workspace_premium_rounded;
+    if (lower.contains('airport')) return Icons.flight_rounded;
+    if (lower.contains('rising')) return Icons.trending_up_rounded;
+    return Icons.shield_rounded;
   }
 
   Widget _buildInfoSection(PublicDriverProfile profile) {
+    final List<Widget> items = [];
+
+    if (profile.languages.isNotEmpty) {
+      items.add(
+        _InfoItem(
+          icon: Icons.language_rounded,
+          label: 'languages'.tr,
+          value: profile.languages.join(' · '),
+        ),
+      );
+    }
+    if (profile.experienceYears != null && profile.experienceYears! > 0) {
+      items.add(
+        _InfoItem(
+          icon: Icons.work_history_rounded,
+          label: 'experience'.tr,
+          value: '${profile.experienceYears} ${'years'.tr}',
+        ),
+      );
+    }
+    if (profile.city.isNotEmpty) {
+      items.add(
+        _InfoItem(
+          icon: Icons.location_on_outlined,
+          label: 'city'.tr,
+          value: profile.city,
+        ),
+      );
+    }
+
+    if (items.isEmpty) return const SizedBox.shrink();
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
       child: Container(
@@ -244,25 +310,18 @@ class DriverPublicProfileView extends GetView<DriverProfileController> {
           color: primary3Color,
           borderRadius: BorderRadius.circular(_radius),
           border: Border.all(color: _lineColor),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.02),
+              blurRadius: 6,
+              offset: const Offset(0, 2),
+            ),
+          ],
         ),
         child: Row(
-          children: [
-            if (profile.languages.isNotEmpty) ...[
-              _InfoItem(
-                icon: Icons.language_rounded,
-                label: 'Languages',
-                value: profile.languages.join(' · '),
-              ),
-              const SizedBox(width: 16),
-            ],
-            if (profile.experienceYears != null) ...[
-              _InfoItem(
-                icon: Icons.work_history_rounded,
-                label: 'Experience',
-                value: '${profile.experienceYears} Years',
-              ),
-            ],
-          ],
+          children: items
+              .map((item) => Expanded(child: item))
+              .toList(),
         ),
       ),
     );
@@ -272,32 +331,59 @@ class DriverPublicProfileView extends GetView<DriverProfileController> {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
       child: Container(
+        width: double.infinity,
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
           color: primary3Color,
           borderRadius: BorderRadius.circular(_radius),
           border: Border.all(color: _lineColor),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.02),
+              blurRadius: 6,
+              offset: const Offset(0, 2),
+            ),
+          ],
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
               children: [
-                const Icon(Icons.directions_car_rounded, size: 18, color: primaryColor),
-                const SizedBox(width: 8),
-                Text('Vehicle', style: MyTextStyle.titleStyle14bb),
+                Container(
+                  padding: const EdgeInsets.all(7),
+                  decoration: BoxDecoration(
+                    color: primaryColor.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Icon(Icons.directions_car_rounded, size: 18, color: primaryColor),
+                ),
+                const SizedBox(width: 10),
+                Text('vehicle'.tr, style: MyTextStyle.titleStyle14bb),
               ],
             ),
-            const SizedBox(height: 10),
+            const SizedBox(height: 12),
             Text(
               profile.vehicle.displayName,
               style: MyTextStyle.titleStyle16bb,
             ),
             if (profile.vehicle.registration.isNotEmpty) ...[
-              const SizedBox(height: 4),
-              Text(
-                profile.vehicle.registration,
-                style: MyTextStyle.titleStyle13b.copyWith(color: text2Color),
+              const SizedBox(height: 6),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: _pageColor,
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(color: _lineColor),
+                ),
+                child: Text(
+                  profile.vehicle.registration,
+                  style: MyTextStyle.titleStyle12b.copyWith(
+                    color: text2Color,
+                    letterSpacing: 1.0,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
               ),
             ],
           ],
@@ -316,18 +402,32 @@ class DriverPublicProfileView extends GetView<DriverProfileController> {
           color: primary3Color,
           borderRadius: BorderRadius.circular(_radius),
           border: Border.all(color: _lineColor),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.02),
+              blurRadius: 6,
+              offset: const Offset(0, 2),
+            ),
+          ],
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
               children: [
-                const Icon(Icons.info_outline_rounded, size: 18, color: primaryColor),
-                const SizedBox(width: 8),
-                Text('About', style: MyTextStyle.titleStyle14bb),
+                Container(
+                  padding: const EdgeInsets.all(7),
+                  decoration: BoxDecoration(
+                    color: primaryColor.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Icon(Icons.info_outline_rounded, size: 18, color: primaryColor),
+                ),
+                const SizedBox(width: 10),
+                Text('about'.tr, style: MyTextStyle.titleStyle14bb),
               ],
             ),
-            const SizedBox(height: 10),
+            const SizedBox(height: 12),
             Text(
               profile.bio,
               style: MyTextStyle.titleStyle13b.copyWith(
@@ -353,18 +453,32 @@ class DriverPublicProfileView extends GetView<DriverProfileController> {
           color: primary3Color,
           borderRadius: BorderRadius.circular(_radius),
           border: Border.all(color: _lineColor),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.02),
+              blurRadius: 6,
+              offset: const Offset(0, 2),
+            ),
+          ],
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
               children: [
-                const Icon(Icons.rate_review_rounded, size: 18, color: primaryColor),
-                const SizedBox(width: 8),
-                Text('Reviews', style: MyTextStyle.titleStyle14bb),
+                Container(
+                  padding: const EdgeInsets.all(7),
+                  decoration: BoxDecoration(
+                    color: primaryColor.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Icon(Icons.rate_review_rounded, size: 18, color: primaryColor),
+                ),
+                const SizedBox(width: 10),
+                Text('reviews'.tr, style: MyTextStyle.titleStyle14bb),
                 const Spacer(),
                 Text(
-                  '${summary.totalReviews} reviews',
+                  '${summary.totalReviews} ${'reviews'.tr}',
                   style: MyTextStyle.titleStyle12b.copyWith(color: text2Color),
                 ),
               ],
@@ -376,14 +490,14 @@ class DriverPublicProfileView extends GetView<DriverProfileController> {
                   summary.averageRating.toStringAsFixed(2),
                   style: MyTextStyle.titleStyle30bb.copyWith(color: textColor),
                 ),
-                const SizedBox(width: 8),
+                const SizedBox(width: 10),
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     _buildStars(summary.averageRating),
-                    const SizedBox(height: 2),
+                    const SizedBox(height: 3),
                     Text(
-                      '${summary.completedTrips} completed rides',
+                      '${summary.completedTrips} ${'trips'.tr}',
                       style: MyTextStyle.titleStyle12b.copyWith(color: text2Color),
                     ),
                   ],
@@ -418,11 +532,11 @@ class DriverPublicProfileView extends GetView<DriverProfileController> {
       children: [5, 4, 3, 2, 1].map((stars) {
         final percentage = distribution[stars.toString()] ?? 0;
         return Padding(
-          padding: const EdgeInsets.symmetric(vertical: 2),
+          padding: const EdgeInsets.symmetric(vertical: 2.5),
           child: Row(
             children: [
               SizedBox(
-                width: 20,
+                width: 16,
                 child: Text(
                   '$stars',
                   style: MyTextStyle.titleStyle12b.copyWith(color: text2Color),
@@ -431,10 +545,10 @@ class DriverPublicProfileView extends GetView<DriverProfileController> {
               ),
               const SizedBox(width: 4),
               const Icon(Icons.star_rounded, size: 12, color: amberColor),
-              const SizedBox(width: 6),
+              const SizedBox(width: 8),
               Expanded(
                 child: ClipRRect(
-                  borderRadius: BorderRadius.circular(2),
+                  borderRadius: BorderRadius.circular(3),
                   child: LinearProgressIndicator(
                     value: percentage / 100,
                     backgroundColor: _lineColor,
@@ -445,9 +559,9 @@ class DriverPublicProfileView extends GetView<DriverProfileController> {
                   ),
                 ),
               ),
-              const SizedBox(width: 6),
+              const SizedBox(width: 8),
               SizedBox(
-                width: 32,
+                width: 36,
                 child: Text(
                   '$percentage%',
                   style: MyTextStyle.titleStyle11b.copyWith(color: text2Color),
@@ -461,11 +575,36 @@ class DriverPublicProfileView extends GetView<DriverProfileController> {
     );
   }
 
-  Widget _buildRecentReviews() {
+  Widget _buildRecentReviews(PublicDriverProfile profile) {
     return Obx(() {
       if (controller.reviews.isEmpty && !controller.reviewsLoading.value) {
+        if (profile.reviewsSummary.totalReviews == 0) {
+          return Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
+              decoration: BoxDecoration(
+                color: primary3Color,
+                borderRadius: BorderRadius.circular(_radius),
+                border: Border.all(color: _lineColor),
+              ),
+              child: Column(
+                children: [
+                  Icon(Icons.star_outline_rounded, size: 36, color: primaryColor.withValues(alpha: 0.3)),
+                  const SizedBox(height: 8),
+                  Text(
+                    'no_reviews_yet'.tr,
+                    style: MyTextStyle.titleStyle13b.copyWith(color: text2Color),
+                  ),
+                ],
+              ),
+            ),
+          );
+        }
         return const SizedBox.shrink();
       }
+
       return Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16),
         child: Column(
@@ -473,28 +612,28 @@ class DriverPublicProfileView extends GetView<DriverProfileController> {
           children: [
             Row(
               children: [
-                Text('Recent Reviews', style: MyTextStyle.titleStyle14bb),
+                Text('recent_reviews'.tr, style: MyTextStyle.titleStyle14bb),
                 const Spacer(),
                 _SortChip(
-                  label: 'Recent',
+                  label: 'recent'.tr,
                   selected: controller.reviewsSort.value == 'recent',
                   onTap: () => controller.changeSort('recent'),
                 ),
                 const SizedBox(width: 6),
                 _SortChip(
-                  label: 'Highest',
+                  label: 'highest'.tr,
                   selected: controller.reviewsSort.value == 'highest',
                   onTap: () => controller.changeSort('highest'),
                 ),
                 const SizedBox(width: 6),
                 _SortChip(
-                  label: 'Lowest',
+                  label: 'lowest'.tr,
                   selected: controller.reviewsSort.value == 'lowest',
                   onTap: () => controller.changeSort('lowest'),
                 ),
               ],
             ),
-            const SizedBox(height: 10),
+            const SizedBox(height: 12),
             ...controller.reviews.map((review) => _ReviewCard(review: review)),
             if (controller.reviewsLoading.value)
               const Padding(
@@ -512,11 +651,13 @@ class DriverPublicProfileView extends GetView<DriverProfileController> {
               ),
             if (!controller.reviewsLoading.value &&
                 controller.reviewsPage.value < controller.reviewsTotalPages.value)
-              TextButton(
-                onPressed: controller.loadMoreReviews,
-                child: Text(
-                  'Load more reviews',
-                  style: MyTextStyle.titleStyle13b.copyWith(color: primaryColor),
+              Center(
+                child: TextButton(
+                  onPressed: controller.loadMoreReviews,
+                  child: Text(
+                    'load_more_reviews'.tr,
+                    style: MyTextStyle.titleStyle13b.copyWith(color: primaryColor),
+                  ),
                 ),
               ),
           ],
@@ -525,7 +666,24 @@ class DriverPublicProfileView extends GetView<DriverProfileController> {
     });
   }
 
+  Future<void> _handleContactDriver(BuildContext context, PublicDriverProfile profile) async {
+    if (!Get.isRegistered<CallStateController>()) {
+      CommunicationBinding().dependencies();
+    }
+    final CallStateController communication = Get.find<CallStateController>();
+    final String driverId = profile.id.isNotEmpty ? profile.id : controller.driverId;
+    if (driverId.isEmpty) return;
+
+    await communication.openDriverChat(driverId);
+  }
+
   Widget _buildBottomCTA(PublicDriverProfile profile) {
+    if (!Get.isRegistered<CallStateController>()) {
+      CommunicationBinding().dependencies();
+    }
+    final CallStateController communication = Get.find<CallStateController>();
+    final String driverId = profile.id.isNotEmpty ? profile.id : controller.driverId;
+
     return Container(
       padding: EdgeInsets.fromLTRB(
         16,
@@ -533,31 +691,64 @@ class DriverPublicProfileView extends GetView<DriverProfileController> {
         16,
         MediaQuery.of(Get.context!).padding.bottom + 12,
       ),
-      decoration: const BoxDecoration(
+      decoration: BoxDecoration(
         color: primary3Color,
-        border: Border(top: BorderSide(color: _lineColor, width: 0.5)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.05),
+            blurRadius: 10,
+            offset: const Offset(0, -3),
+          ),
+        ],
+        border: const Border(top: BorderSide(color: _lineColor, width: 0.5)),
       ),
-      child: SizedBox(
-        height: 52,
-        child: ElevatedButton(
-          onPressed: () {
-            // Navigate to request ride flow
-            Get.back();
-          },
-          style: ElevatedButton.styleFrom(
-            backgroundColor: primaryColor,
-            foregroundColor: primary3Color,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
+      child: Obx(() {
+        final bool isContacting =
+            communication.contactingDriverId.value == driverId ||
+            (communication.isBusy.value && communication.contactingDriverId.value.isNotEmpty);
+        final bool isCoolingDown = communication.isDriverRequestCoolingDown;
+        final int cooldownSec = communication.driverRequestCooldownSeconds.value;
+
+        return SizedBox(
+          height: 52,
+          child: ElevatedButton(
+            onPressed: isContacting
+                ? null
+                : () => _handleContactDriver(Get.context!, profile),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: primaryColor,
+              disabledBackgroundColor: primaryColor.withValues(alpha: 0.6),
+              foregroundColor: primary3Color,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+              elevation: 0,
             ),
-            elevation: 0,
+            child: isContacting
+                ? const SizedBox(
+                    width: 22,
+                    height: 22,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2.5,
+                      color: primary3Color,
+                    ),
+                  )
+                : Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Icon(Icons.chat_bubble_outline_rounded, size: 20, color: primary3Color),
+                      const SizedBox(width: 8),
+                      Text(
+                        isCoolingDown
+                            ? '${'request_ride'.tr} (${cooldownSec}s)'
+                            : 'request_ride'.tr,
+                        style: MyTextStyle.titleStyle16bw,
+                      ),
+                    ],
+                  ),
           ),
-          child: Text(
-            'Request Ride',
-            style: MyTextStyle.titleStyle16bw,
-          ),
-        ),
-      ),
+        );
+      }),
     );
   }
 
@@ -633,7 +824,7 @@ class DriverPublicProfileView extends GetView<DriverProfileController> {
             Icon(Icons.error_outline_rounded, size: 48, color: primaryColor.withValues(alpha: 0.5)),
             const SizedBox(height: 16),
             Text(
-              'Unable to load profile',
+              'unable_load_profile'.tr,
               style: MyTextStyle.titleStyle16bb,
             ),
             const SizedBox(height: 8),
@@ -648,8 +839,11 @@ class DriverPublicProfileView extends GetView<DriverProfileController> {
               style: ElevatedButton.styleFrom(
                 backgroundColor: primaryColor,
                 foregroundColor: primary3Color,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
               ),
-              child: const Text('Retry'),
+              child: Text('retry'.tr),
             ),
           ],
         ),
@@ -671,8 +865,15 @@ class _ProfileAvatar extends StatelessWidget {
       height: radius * 2,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
-        color: primaryColor.withValues(alpha: 0.1),
-        border: Border.all(color: primaryColor.withValues(alpha: 0.2), width: 2),
+        color: primaryColor.withValues(alpha: 0.08),
+        border: Border.all(color: primaryColor.withValues(alpha: 0.25), width: 2.5),
+        boxShadow: [
+          BoxShadow(
+            color: primaryColor.withValues(alpha: 0.08),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
       ),
       child: ClipOval(
         child: imageUrl.isNotEmpty
@@ -680,17 +881,17 @@ class _ProfileAvatar extends StatelessWidget {
                 imageUrl: imageUrl,
                 fit: BoxFit.cover,
                 placeholder: (_, __) => Container(
-                  color: Colors.grey.shade200,
-                  child: Icon(Icons.person_rounded, size: radius, color: Colors.grey),
+                  color: Colors.grey.shade100,
+                  child: Icon(Icons.person_rounded, size: radius, color: Colors.grey.shade400),
                 ),
                 errorWidget: (_, __, ___) => Container(
-                  color: Colors.grey.shade200,
-                  child: Icon(Icons.person_rounded, size: radius, color: Colors.grey),
+                  color: Colors.grey.shade100,
+                  child: Icon(Icons.person_rounded, size: radius, color: Colors.grey.shade400),
                 ),
               )
             : Container(
-                color: Colors.grey.shade200,
-                child: Icon(Icons.person_rounded, size: radius, color: Colors.grey),
+                color: Colors.grey.shade100,
+                child: Icon(Icons.person_rounded, size: radius, color: Colors.grey.shade400),
               ),
       ),
     );
@@ -709,15 +910,15 @@ class _AvailabilityBadge extends StatelessWidget {
     switch (status.toLowerCase()) {
       case 'online':
         color = greenColor;
-        label = 'Online';
+        label = 'online'.tr;
         break;
       case 'busy':
         color = amberColor;
-        label = 'Busy';
+        label = 'busy'.tr;
         break;
       default:
         color = Colors.grey;
-        label = 'Offline';
+        label = 'offline'.tr;
     }
 
     return Container(
@@ -727,13 +928,27 @@ class _AvailabilityBadge extends StatelessWidget {
         borderRadius: BorderRadius.circular(20),
         border: Border.all(color: color.withValues(alpha: 0.3)),
       ),
-      child: Text(
-        label.toUpperCase(),
-        style: MyTextStyle.titleStyle12b.copyWith(
-          color: color,
-          fontWeight: FontWeight.w700,
-          letterSpacing: 0.5,
-        ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 7,
+            height: 7,
+            decoration: BoxDecoration(
+              color: color,
+              shape: BoxShape.circle,
+            ),
+          ),
+          const SizedBox(width: 6),
+          Text(
+            label.toUpperCase(),
+            style: MyTextStyle.titleStyle12b.copyWith(
+              color: color,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 0.5,
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -752,24 +967,31 @@ class _InfoItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Expanded(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(icon, size: 14, color: primaryColor),
-              const SizedBox(width: 4),
-              Text(
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Icon(icon, size: 15, color: primaryColor),
+            const SizedBox(width: 5),
+            Flexible(
+              child: Text(
                 label,
                 style: MyTextStyle.titleStyle11b.copyWith(color: text2Color),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
               ),
-            ],
-          ),
-          const SizedBox(height: 4),
-          Text(value, style: MyTextStyle.titleStyle14bb),
-        ],
-      ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 6),
+        Text(
+          value,
+          style: MyTextStyle.titleStyle13bb.copyWith(color: textColor),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
+      ],
     );
   }
 }
@@ -824,6 +1046,13 @@ class _ReviewCard extends StatelessWidget {
         color: primary3Color,
         borderRadius: BorderRadius.circular(_radius),
         border: Border.all(color: _lineColor),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.02),
+            blurRadius: 4,
+            offset: const Offset(0, 1),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -845,7 +1074,7 @@ class _ReviewCard extends StatelessWidget {
                 child: Text(
                   review.reviewer.firstName.isNotEmpty
                       ? '${review.reviewer.firstName}.'
-                      : 'Passenger',
+                      : 'passenger'.tr,
                   style: MyTextStyle.titleStyle13bb,
                 ),
               ),
@@ -886,10 +1115,10 @@ class _ReviewCard extends StatelessWidget {
   String _formatDate(DateTime date) {
     final now = DateTime.now();
     final diff = now.difference(date);
-    if (diff.inDays == 0) return 'Today';
-    if (diff.inDays == 1) return 'Yesterday';
-    if (diff.inDays < 7) return '${diff.inDays} days ago';
-    if (diff.inDays < 30) return '${(diff.inDays / 7).floor()} weeks ago';
-    return '${(diff.inDays / 30).floor()} months ago';
+    if (diff.inDays == 0) return 'today'.tr;
+    if (diff.inDays == 1) return 'yesterday'.tr;
+    if (diff.inDays < 7) return '${diff.inDays}d';
+    if (diff.inDays < 30) return '${(diff.inDays / 7).floor()}w';
+    return '${(diff.inDays / 30).floor()}m';
   }
 }

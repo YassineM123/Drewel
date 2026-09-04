@@ -91,7 +91,7 @@ class _UploadingBody extends StatelessWidget {
           ),
           const SizedBox(width: 10),
           Text(
-            'Uploading...',
+            'uploading'.tr,
             style: TextStyle(color: foreground, fontSize: 15),
           ),
         ],
@@ -111,7 +111,7 @@ class _FailedBody extends StatelessWidget {
           const SizedBox(width: 8),
           Flexible(
             child: Text(
-              'Voice message failed to send',
+              'voice_message_failed_to_send'.tr,
               style: TextStyle(color: textColor.withValues(alpha: 0.8), fontSize: 15),
             ),
           ),
@@ -124,9 +124,9 @@ class _FailedBody extends StatelessWidget {
                 color: primaryColor.withValues(alpha: 0.12),
                 borderRadius: BorderRadius.circular(12),
               ),
-              child: const Text(
-                'Retry',
-                style: TextStyle(
+              child: Text(
+                'retry'.tr,
+                style: const TextStyle(
                   color: primaryColor,
                   fontSize: 13,
                   fontWeight: FontWeight.w700,

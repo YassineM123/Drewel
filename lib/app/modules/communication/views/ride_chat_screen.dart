@@ -449,8 +449,8 @@ class _RideChatScreenState extends State<RideChatScreen> {
     } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-            content: Text('Recording could not start. Please try again.')),
+        SnackBar(
+            content: Text('recording_start_failed'.tr)),
       );
       return;
     }
@@ -696,7 +696,7 @@ class _RideChatScreenState extends State<RideChatScreen> {
                   actions: <Widget>[
                     TextButton(
                       onPressed: _retryFailedMessage,
-                      child: const Text('Retry'),
+                      child: Text('retry'.tr),
                     ),
                   ],
                 ),
@@ -777,11 +777,11 @@ class _RideChatScreenState extends State<RideChatScreen> {
             actions: <Widget>[
               TextButton(
                 onPressed: () => Navigator.pop(dialogContext, false),
-                child: const Text('Back'),
+                child: Text('back'.tr),
               ),
               FilledButton(
                 onPressed: () => Navigator.pop(dialogContext, true),
-                child: Text(accept ? 'Confirm drive' : 'Decline offer'),
+                child: Text(accept ? 'confirm_drive'.tr : 'decline_offer'.tr),
               ),
             ],
           ),
@@ -842,7 +842,7 @@ class _RideChatScreenState extends State<RideChatScreen> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
-              Text('Trip details',
+              Text('trip_details'.tr,
                   style: Theme.of(sheetContext).textTheme.titleLarge?.copyWith(
                         fontWeight: FontWeight.w800,
                       )),
@@ -1090,11 +1090,11 @@ class _RideChatScreenState extends State<RideChatScreen> {
     final String? action = await showDialog<String>(
       context: context,
       builder: (BuildContext dialogContext) => AlertDialog(
-        title: const Row(
+        title: Row(
           children: <Widget>[
-            Icon(Icons.shield_rounded),
-            SizedBox(width: 8),
-            Text('Safety'),
+            const Icon(Icons.shield_rounded),
+            const SizedBox(width: 8),
+            Text('safety'.tr),
           ],
         ),
         content: const Text(
@@ -1107,16 +1107,16 @@ class _RideChatScreenState extends State<RideChatScreen> {
               Navigator.pop(dialogContext);
               Get.toNamed(Routes.SUPPORT);
             },
-            child: const Text('Support'),
+            child: Text('support'.tr),
           ),
           TextButton(
             onPressed: () => Navigator.pop(dialogContext, 'report'),
-            child: const Text('Report'),
+            child: Text('report'.tr),
           ),
           FilledButton(
             style: FilledButton.styleFrom(backgroundColor: Colors.red),
             onPressed: () => Navigator.pop(dialogContext, 'block'),
-            child: const Text('Block'),
+            child: Text('block'.tr),
           ),
         ],
       ),
@@ -1166,7 +1166,7 @@ class _RideChatScreenState extends State<RideChatScreen> {
         actions: <Widget>[
           TextButton(
             onPressed: () => Navigator.pop(dialogContext, false),
-            child: const Text('Cancel'),
+            child: Text('cancel'.tr),
           ),
           FilledButton(
             style: destructive
@@ -1312,9 +1312,9 @@ class _CounterpartProfileSheet extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(width: 6),
-                  const Text(
-                    'rating',
-                    style: TextStyle(color: text2Color, fontSize: 14),
+                  Text(
+                    'rating'.tr,
+                    style: const TextStyle(color: text2Color, fontSize: 14),
                   ),
                 ],
               ),
@@ -1389,9 +1389,9 @@ class _CounterpartProfileSheet extends StatelessWidget {
                     borderRadius: BorderRadius.circular(14),
                   ),
                 ),
-                child: const Text(
-                  'Close',
-                  style: TextStyle(fontWeight: FontWeight.w700),
+                child: Text(
+                  'close'.tr,
+                  style: const TextStyle(fontWeight: FontWeight.w700),
                 ),
               ),
             ),
@@ -1421,7 +1421,7 @@ class _CounterpartSubtitle extends StatelessWidget {
           const SizedBox(width: 5),
           Flexible(
             child: Text(
-              'Online',
+              'online'.tr,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: Theme.of(context).textTheme.titleSmall?.copyWith(
@@ -1562,7 +1562,7 @@ class _TripRequestDetailsDialogState extends State<_TripRequestDetailsDialog> {
           backgroundColor: Color(0x1FBE1B2C),
           child: Icon(Icons.add_road_rounded, color: primaryColor),
         ),
-        title: const Text('Send trip request'),
+        title: Text('send_trip_request'.tr),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
         scrollable: true,
         content: Column(
@@ -1573,20 +1573,20 @@ class _TripRequestDetailsDialogState extends State<_TripRequestDetailsDialog> {
               autofocus: true,
               keyboardType:
                   const TextInputType.numberWithOptions(decimal: true),
-              decoration: const InputDecoration(labelText: 'Proposed price'),
+              decoration: InputDecoration(labelText: 'proposed_fare'.tr),
             ),
             TextField(
               controller: _currency,
               textCapitalization: TextCapitalization.characters,
               maxLength: 3,
-              decoration: const InputDecoration(labelText: 'Currency'),
+              decoration: InputDecoration(labelText: 'currency'.tr),
             ),
             TextField(
               controller: _note,
               maxLength: 240,
               maxLines: 2,
-              decoration: const InputDecoration(
-                labelText: 'Note for the driver (optional)',
+              decoration: InputDecoration(
+                labelText: 'note_for_driver_optional'.tr,
                 counterText: '',
               ),
             ),
@@ -1595,9 +1595,9 @@ class _TripRequestDetailsDialogState extends State<_TripRequestDetailsDialog> {
         actions: <Widget>[
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
+            child: Text('cancel'.tr),
           ),
-          FilledButton(onPressed: _submit, child: const Text('Send')),
+          FilledButton(onPressed: _submit, child: Text('send'.tr)),
         ],
       );
 }
@@ -1913,16 +1913,16 @@ class _MessageList extends StatelessWidget {
         onRefresh: () async => onRefresh(),
         child: ListView(
           physics: const AlwaysScrollableScrollPhysics(),
-          children: const <Widget>[
-            SizedBox(height: 160),
-            Icon(Icons.chat_bubble_outline_rounded,
+          children: <Widget>[
+            const SizedBox(height: 160),
+            const Icon(Icons.chat_bubble_outline_rounded,
                 size: 48, color: Color(0xFFC9C9C9)),
-            SizedBox(height: 12),
+            const SizedBox(height: 12),
             Center(
               child: Text(
-                'No messages yet. Say hello to your ride participant.',
+                'no_messages_yet_say_hello'.tr,
                 textAlign: TextAlign.center,
-                style: TextStyle(color: text2Color),
+                style: const TextStyle(color: text2Color),
               ),
             ),
           ],
@@ -2098,9 +2098,9 @@ class _VoiceRow extends StatelessWidget {
                       padding: const EdgeInsets.symmetric(horizontal: 6),
                     ),
                     onPressed: onDiscard,
-                    child: const Text(
-                      'Discard',
-                      style: TextStyle(color: text2Color, fontSize: 12),
+                    child: Text(
+                      'discard'.tr,
+                      style: const TextStyle(color: text2Color, fontSize: 12),
                     ),
                   ),
               ],
@@ -2192,21 +2192,21 @@ class _TripRequestCard extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: <Widget>[
-          const Padding(
-            padding: EdgeInsets.fromLTRB(18, 14, 18, 12),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(18, 14, 18, 12),
             child: Row(
               children: <Widget>[
                 Expanded(
                   child: Text(
-                    'Trip Update',
-                    style: TextStyle(
+                    'trip_update'.tr,
+                    style: const TextStyle(
                       color: primaryColor,
                       fontSize: 18,
                       fontWeight: FontWeight.w600,
                     ),
                   ),
                 ),
-                Icon(Icons.local_taxi_rounded,
+                const Icon(Icons.local_taxi_rounded,
                     color: Color(0xFF5E3D40), size: 24),
               ],
             ),
@@ -2248,7 +2248,7 @@ class _TripRequestCard extends StatelessWidget {
                       ),
                     ),
                     onPressed: onDetails,
-                    child: const Text('Details'),
+                    child: Text('details'.tr),
                   ),
                 ),
                 if (canConfirm) ...<Widget>[
@@ -2264,7 +2264,7 @@ class _TripRequestCard extends StatelessWidget {
                         ),
                       ),
                       onPressed: onConfirm,
-                      child: const Text('Confirm'),
+                      child: Text('confirm'.tr),
                     ),
                   ),
                 ],
@@ -2529,7 +2529,7 @@ class _IncomingOfferCard extends StatelessWidget {
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    'Trip proposal',
+                    'trip_proposal'.tr,
                     style: Theme.of(context)
                         .textTheme
                         .titleMedium
@@ -2573,7 +2573,7 @@ class _IncomingOfferCard extends StatelessWidget {
                         side: const BorderSide(color: Color(0xFFD9D1D3)),
                       ),
                       onPressed: loading ? null : onDetails,
-                      child: const Text('Details'),
+                      child: Text('details'.tr),
                     ),
                   ),
                   const SizedBox(width: 10),
@@ -2593,14 +2593,14 @@ class _IncomingOfferCard extends StatelessWidget {
                                 color: Colors.white,
                               ),
                             )
-                          : const Text('Confirm drive'),
+                          : Text('confirm_drive'.tr),
                     ),
                   ),
                 ],
               ),
               TextButton(
                 onPressed: loading ? null : onDecline,
-                child: const Text('Decline this offer'),
+                child: Text('decline_offer'.tr),
               ),
             ] else
               FilledButton.icon(
@@ -2611,7 +2611,7 @@ class _IncomingOfferCard extends StatelessWidget {
                 ),
                 onPressed: onDetails,
                 icon: const Icon(Icons.check_circle_rounded),
-                label: const Text('Ride confirmed'),
+                label: Text('ride_confirmed'.tr),
               ),
           ],
         ),
@@ -2672,14 +2672,14 @@ class _ReadOnlyConversationNotice extends StatelessWidget {
           color: const Color(0xFFF6F1F2),
           borderRadius: BorderRadius.circular(14),
         ),
-        child: const Row(
+        child: Row(
           children: <Widget>[
-            Icon(Icons.lock_outline_rounded, color: primaryColor, size: 18),
-            SizedBox(width: 8),
+            const Icon(Icons.lock_outline_rounded, color: primaryColor, size: 18),
+            const SizedBox(width: 8),
             Expanded(
               child: Text(
-                'This conversation is saved securely. Messaging is closed for this ride.',
-                style: TextStyle(color: text2Color, fontSize: 12),
+                'messaging_closed_for_ride'.tr,
+                style: const TextStyle(color: text2Color, fontSize: 12),
               ),
             ),
           ],

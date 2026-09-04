@@ -114,6 +114,7 @@ class DriverOnlineService {
     if (permission != NotificationPermission.granted) {
       await FlutterForegroundTask.requestNotificationPermission();
     }
+    await _requestBatteryOptimizationExemption();
 
     if (await FlutterForegroundTask.isRunningService) {
       final ServiceRequestResult result =
@@ -136,6 +137,17 @@ class DriverOnlineService {
       callback: startCallback,
     );
     return result is ServiceRequestSuccess;
+  }
+
+  static Future<void> _requestBatteryOptimizationExemption() async {
+    if (!isAndroidPlatform) return;
+    try {
+      if (!await FlutterForegroundTask.isIgnoringBatteryOptimizations) {
+        await FlutterForegroundTask.requestIgnoreBatteryOptimization();
+      }
+    } catch (error) {
+      debugPrint('Battery optimization exemption skipped: $error');
+    }
   }
 
   /// Used on resume for immediate recovery instead of waiting for the next
@@ -177,7 +189,6 @@ class DriverOnlineService {
       await FlutterForegroundTask.removeData(key: _sessionTaskKey);
     }
   }
-
 }
 
 bool get isAndroidPlatform =>

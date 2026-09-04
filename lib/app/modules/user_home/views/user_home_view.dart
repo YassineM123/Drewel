@@ -388,7 +388,7 @@ class _UserHomeViewState extends State<UserHomeView> {
                               ),
                             ),
                             Text(
-                              StringConstants.chooseTheDriver,
+                              StringConstants.chooseTheDriver.tr,
                               style: MyTextStyle.titleStyle18bb,
                             ),
                             Obx(() {
@@ -470,7 +470,7 @@ class _UserHomeViewState extends State<UserHomeView> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
-                  'Distance',
+                  'distance'.tr,
                   style: MyTextStyle.titleStyle12b.copyWith(
                     color: Colors.grey[600],
                     fontSize: 10.5.px,
@@ -882,7 +882,7 @@ class _UserHomeViewState extends State<UserHomeView> {
           TextButton.icon(
             onPressed: controller.retryDriverDiscovery,
             icon: const Icon(Icons.refresh),
-            label: const Text('Retry'),
+            label: Text('retry'.tr),
           ),
         const SizedBox(height: 8),
         Align(
@@ -973,8 +973,8 @@ class _PassengerActiveRideFocus extends StatelessWidget {
                   SizedBox(height: 8.px),
                   Text(
                     driverName.isEmpty
-                        ? 'Your assigned driver is on this ride. Nearby drivers are hidden until it ends.'
-                        : '$driverName is your assigned driver. Nearby drivers are hidden until this ride ends.',
+                        ? 'assigned_driver_active_ride'.tr
+                        : 'assigned_driver_active_ride_with_name'.trParams({'name': driverName}),
                     textAlign: TextAlign.center,
                     style: MyTextStyle.titleStyle12b.copyWith(
                       color: Colors.grey.shade700,
@@ -989,7 +989,7 @@ class _PassengerActiveRideFocus extends StatelessWidget {
                       key: const Key('open-active-ride'),
                       onPressed: () => Get.toNamed(Routes.ACTIVE_RIDE),
                       icon: const Icon(Icons.map_rounded),
-                      label: const Text('Track active ride'),
+                      label: Text('track_active_ride'.tr),
                     ),
                   ),
                 ],

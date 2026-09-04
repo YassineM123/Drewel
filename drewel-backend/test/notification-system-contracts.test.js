@@ -54,7 +54,8 @@ test("pushPriorityForType assigns critical priority to urgent operational events
   assert.equal(pushPriorityForType("RIDE_CANCELLED"), NOTIFICATION_PRIORITIES.HIGH);
   assert.equal(pushPriorityForType("POINTS_LOW_BALANCE"), NOTIFICATION_PRIORITIES.HIGH);
   assert.equal(pushPriorityForType("DOCUMENT_APPROVED"), NOTIFICATION_PRIORITIES.HIGH);
-  assert.equal(pushPriorityForType("RIDE_MESSAGE"), NOTIFICATION_PRIORITIES.NORMAL);
+  assert.equal(pushPriorityForType("RIDE_MESSAGE"), NOTIFICATION_PRIORITIES.CRITICAL);
+  assert.equal(pushPriorityForType("CHAT"), NOTIFICATION_PRIORITIES.CRITICAL);
 });
 
 test("deepLinkFor constructs valid drewel:// URIs for all actionable event types", () => {

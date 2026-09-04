@@ -136,7 +136,7 @@ class _SearchField extends StatelessWidget {
       onChanged: onChanged,
       textInputAction: TextInputAction.search,
       decoration: InputDecoration(
-        hintText: 'Search by rider, vehicle or reference',
+        hintText: 'search_messages_hint'.tr,
         prefixIcon: const Icon(Icons.search_rounded, color: text2Color),
         filled: true,
         fillColor: const Color(0xFFF1F1F1),
@@ -362,31 +362,31 @@ class _EmptyState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const Center(
+    return Center(
       child: Padding(
-        padding: EdgeInsets.all(32),
+        padding: const EdgeInsets.all(32),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: <Widget>[
-            Icon(
+            const Icon(
               Icons.chat_bubble_outline_rounded,
               size: 56,
               color: Color(0xFFC9C9C9),
             ),
-            SizedBox(height: 16),
+            const SizedBox(height: 16),
             Text(
-              'No conversations yet',
-              style: TextStyle(
+              'no_conversations_yet'.tr,
+              style: const TextStyle(
                 fontSize: 17,
                 fontWeight: FontWeight.w700,
                 color: textColor,
               ),
             ),
-            SizedBox(height: 6),
+            const SizedBox(height: 6),
             Text(
-              'Messages with your ride participants appear here.',
+              'messages_with_participants_appear_here'.tr,
               textAlign: TextAlign.center,
-              style: TextStyle(color: text2Color),
+              style: const TextStyle(color: text2Color),
             ),
           ],
         ),
@@ -424,7 +424,7 @@ class _ErrorState extends StatelessWidget {
               ),
               onPressed: onRetry,
               icon: const Icon(Icons.refresh_rounded),
-              label: const Text('Retry'),
+              label: Text('retry'.tr),
             ),
           ],
         ),

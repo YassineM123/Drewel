@@ -61,12 +61,12 @@ class LoginView extends GetView<LoginController> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          StringConstants.welcomeToDREWEL,
+                          StringConstants.welcomeToDREWEL.tr,
                           style: MyTextStyle.titleStyle20bb,
                         ),
                         SizedBox(height: 10.px),
                         Text(
-                          StringConstants.loginWithYourWhatsAppNumber,
+                          StringConstants.loginWithYourWhatsAppNumber.tr,
                           style: MyTextStyle.titleStyle16b,
                         ),
                         AbsorbPointer(
@@ -78,7 +78,7 @@ class LoginView extends GetView<LoginController> {
                                 controller: controller.mobileController,
                                 focusNode: controller.focusNodeMobile,
                                 isCard: controller.isMobile.value,
-                                hintText: StringConstants.whatsappNumber,
+                                hintText: StringConstants.whatsappNumber.tr,
                                 keyboardType: TextInputType.phone,
                                 inputFormatters: [
                                   FilteringTextInputFormatter.digitsOnly,
@@ -116,7 +116,7 @@ class LoginView extends GetView<LoginController> {
                                     ),
                                     SizedBox(width: 10.px),
                                     Text(
-                                      StringConstants.next,
+                                      StringConstants.next.tr,
                                       style: MyTextStyle.titleStyle16bw,
                                     ),
                                   ],

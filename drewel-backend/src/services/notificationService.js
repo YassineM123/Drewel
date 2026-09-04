@@ -103,6 +103,8 @@ export const pushPriorityForType = (type) => {
     t === "RIDE_REQUEST" ||
     t === "NEW_RIDE" ||
     t === "DRIVER_ARRIVED" ||
+    t === "RIDE_MESSAGE" ||
+    t === "CHAT" ||
     t.startsWith("CALL_") ||
     t === "CALL"
   ) {
@@ -128,8 +130,6 @@ export const pushPriorityForType = (type) => {
     return NOTIFICATION_PRIORITIES.HIGH;
   }
   if (
-    t === "RIDE_MESSAGE" ||
-    t === "CHAT" ||
     t.startsWith("POINTS") ||
     t.startsWith("TRIP_OFFER")
   ) {

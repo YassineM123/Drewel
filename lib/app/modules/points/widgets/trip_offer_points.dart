@@ -210,7 +210,7 @@ class TripOfferStatusCard extends StatelessWidget {
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
-                        'Trip Offer',
+                        'trip_offer'.tr,
                         style:
                             Theme.of(context).textTheme.titleMedium?.copyWith(
                                   color: textColor,
@@ -227,9 +227,9 @@ class TripOfferStatusCard extends StatelessWidget {
                         color: const Color(0xFFFFE7A8),
                         borderRadius: BorderRadius.circular(4),
                       ),
-                      child: const Text(
-                        'ACCEPTED',
-                        style: TextStyle(
+                      child: Text(
+                        'accepted'.tr,
+                        style: const TextStyle(
                           color: Color(0xFF6E4A00),
                           fontSize: 12,
                           fontWeight: FontWeight.w800,
@@ -245,10 +245,10 @@ class TripOfferStatusCard extends StatelessWidget {
                 ),
                 Row(
                   children: <Widget>[
-                    const Expanded(
+                    Expanded(
                       child: Text(
-                        'Proposed Fare',
-                        style: TextStyle(
+                        'proposed_fare'.tr,
+                        style: const TextStyle(
                           color: Color(0xFF4B3F42),
                           fontSize: 14,
                         ),
@@ -304,7 +304,7 @@ class TripOfferStatusCard extends StatelessWidget {
                               side: const BorderSide(color: Color(0xFFD9D1D3)),
                             ),
                             onPressed: onDecline,
-                            child: const Text('Decline'),
+                            child: Text('decline'.tr),
                           ),
                         ),
                       ),
@@ -324,7 +324,7 @@ class TripOfferStatusCard extends StatelessWidget {
                               minimumSize: const Size.fromHeight(44),
                             ),
                             onPressed: onAccept,
-                            child: const Text('Accept'),
+                            child: Text('accept'.tr),
                           ),
                         ),
                       ),

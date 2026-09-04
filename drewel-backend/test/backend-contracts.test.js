@@ -12,6 +12,7 @@ import { sanitizeAuthSubject } from "../src/utils/authResponse.js";
 import driverRoutes from "../src/routes/driverRoutes.js";
 import userRoutes from "../src/routes/userRoutes.js";
 import accountRoutes from "../src/routes/accountRoutes.js";
+import { getLegalContent } from "../src/controllers/accountController.js";
 import {
   configureMongoSrvDns,
   parseMongoDnsServers,
@@ -341,6 +342,57 @@ test("driver terms are supported by the public legal endpoint", () => {
   assert.match(source, /شروط وأحكام السائق/);
   assert.match(source, /12\. Governing Law and Acceptance/);
   assert.match(source, /12\. القانون والموافقة/);
+});
+
+test("user terms expose the approved title and complete ten-clause default", async () => {
+  const expectedBody = [
+    "1. Use of the Application\nBy using Drewel or requesting any service, you agree to these Terms & Conditions and confirm that you will provide accurate information and use the application lawfully.",
+    "2. User Account\nUsers are responsible for the accuracy and security of their account information. Sharing or misusing an account is prohibited.",
+    "3. Services & Pricing\nServices are available depending on location and driver availability. Prices may vary depending on the type of service, distance, and other applicable factors.",
+    "4. Payment\nThe service fee is paid directly to the driver upon completion of the service, according to the agreed price or the price displayed in the application.",
+    "5. User Responsibilities\nUsers must provide accurate information about their location, vehicle, and cargo, treat drivers respectfully, and must not transport prohibited or dangerous materials.",
+    "6. Cancellation\nUsers may cancel their request at any time without any cancellation fee.",
+    "7. Safety & Conduct\nUsers must follow safety instructions, respect the driver, and avoid any behavior that may endanger people or the vehicle.",
+    "8. Privacy\nUsers agree to the collection and use of information necessary to provide Drewel services, in accordance with the Privacy Policy and applicable UAE laws.",
+    "9. Account Suspension\nDrewel may suspend or terminate an account in cases of fraud, misuse, false information, or violation of these Terms & Conditions.",
+    "10. Governing Law & Acceptance\nThese Terms & Conditions are governed by the laws of the United Arab Emirates. By using Drewel or clicking \"I Agree to the Terms & Conditions\", the user confirms that they have read, understood, and accepted these Terms & Conditions.",
+  ].join("\n\n");
+  const previousUserTerms = process.env.USER_TERMS_CONTENT;
+  delete process.env.USER_TERMS_CONTENT;
+  let payload;
+
+  try {
+    await getLegalContent(
+      { params: { type: "terms" }, query: { language: "en" } },
+      {
+        json: (value) => {
+          payload = value;
+        },
+      }
+    );
+  } finally {
+    if (previousUserTerms === undefined) {
+      delete process.env.USER_TERMS_CONTENT;
+    } else {
+      process.env.USER_TERMS_CONTENT = previousUserTerms;
+    }
+  }
+
+  assert.equal(payload.success, true);
+  assert.equal(payload.legal.type, "terms");
+  assert.equal(payload.legal.title, "Drewel – User Terms & Conditions");
+  assert.equal(payload.legal.body, expectedBody);
+});
+
+test("legal environment sample documents user, driver, and privacy content keys", () => {
+  const source = readFileSync(new URL("../.env.example", import.meta.url), "utf8");
+
+  assert.match(source, /^PRIVACY_CONTENT=/m);
+  assert.match(source, /^USER_TERMS_CONTENT=/m);
+  assert.match(source, /^USER_TERMS_CONTENT_AR=/m);
+  assert.match(source, /^DRIVER_TERMS_CONTENT=/m);
+  assert.match(source, /^DRIVER_TERMS_CONTENT_AR=/m);
+  assert.doesNotMatch(source, /^TERMS_CONTENT=/m);
 });
 
 test("MongoDB SRV DNS override is opt-in and parses multiple resolvers", () => {

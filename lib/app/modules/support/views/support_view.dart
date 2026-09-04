@@ -95,13 +95,13 @@ class SupportView extends GetView<SupportController> {
           ),
           SizedBox(height: 10.px),
           Text(
-            'No support conversations yet',
+            'no_support_conversations_yet'.tr,
             textAlign: TextAlign.center,
             style: MyTextStyle.titleStyle14bb,
           ),
           SizedBox(height: 4.px),
           Text(
-            'Start a new chat when you need help from Drewel Support.',
+            'start_new_chat_support_help'.tr,
             textAlign: TextAlign.center,
             style: MyTextStyle.titleStyle12b.copyWith(color: text2Color),
           ),

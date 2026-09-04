@@ -37,19 +37,19 @@ class ActiveRideView extends GetView<ActiveRideController> {
                   itemBuilder: (BuildContext context) =>
                       <PopupMenuEntry<String>>[
                     if (status.canNormallyCancel)
-                      const PopupMenuItem<String>(
+                      PopupMenuItem<String>(
                         value: 'cancel',
                         child: ListTile(
-                          leading: Icon(Icons.cancel_outlined),
-                          title: Text('Cancel ride'),
+                          leading: const Icon(Icons.cancel_outlined),
+                          title: Text('cancel_ride'.tr),
                           contentPadding: EdgeInsets.zero,
                         ),
                       ),
-                    const PopupMenuItem<String>(
+                    PopupMenuItem<String>(
                       value: 'report',
                       child: ListTile(
-                        leading: Icon(Icons.report_problem_outlined),
-                        title: Text('Report a problem'),
+                        leading: const Icon(Icons.report_problem_outlined),
+                        title: Text('report_problem'.tr),
                         contentPadding: EdgeInsets.zero,
                       ),
                     ),
@@ -75,14 +75,14 @@ class ActiveRideView extends GetView<ActiveRideController> {
               if (controller.isOffline.value)
                 MaterialBanner(
                   leading: const Icon(Icons.cloud_off_rounded),
-                  content: const Text(
+                  content: Text(
                     'Offline - showing the last known ride. Actions will be '
-                    'available when the connection returns.',
+                    'available when the connection returns.'.tr,
                   ),
                   actions: <Widget>[
                     TextButton(
                       onPressed: () => controller.recover(showLoader: false),
-                      child: const Text('Retry'),
+                      child: Text('retry'.tr),
                     ),
                   ],
                 ),
@@ -155,20 +155,20 @@ class ActiveRideView extends GetView<ActiveRideController> {
     final String? submitted = await showDialog<String>(
       context: context,
       builder: (BuildContext dialogContext) => AlertDialog(
-        title: const Text('Report a problem'),
+        title: Text('report_problem'.tr),
         content: TextField(
           controller: reason,
           maxLength: 500,
           maxLines: 4,
-          decoration: const InputDecoration(
-            hintText: 'Describe what happened',
-            border: OutlineInputBorder(),
+          decoration: InputDecoration(
+            hintText: 'describe_happened'.tr,
+            border: const OutlineInputBorder(),
           ),
         ),
         actions: <Widget>[
           TextButton(
             onPressed: () => Navigator.pop(dialogContext),
-            child: const Text('Back'),
+            child: Text('back'.tr),
           ),
           FilledButton(
             onPressed: () {
@@ -176,7 +176,7 @@ class ActiveRideView extends GetView<ActiveRideController> {
                 Navigator.pop(dialogContext, reason.text.trim());
               }
             },
-            child: const Text('Submit'),
+            child: Text('submit'.tr),
           ),
         ],
       ),
@@ -764,13 +764,13 @@ class _RideReviewSheetState extends State<_RideReviewSheet> {
                               color: Colors.white,
                             ),
                           )
-                        : const Text('Submit review'),
+                        : Text('submit_review'.tr),
                   ),
                 ),
               ),
               TextButton(
                 onPressed: () => Navigator.of(context).pop(false),
-                child: const Text('Skip'),
+                child: Text('skip'.tr),
               ),
               Obx(
                 () => controller.errorMessage.value.isEmpty
@@ -831,7 +831,7 @@ class _PickupPinDialogState extends State<_PickupPinDialog> {
 
   @override
   Widget build(BuildContext context) => AlertDialog(
-        title: const Text('Verify pickup'),
+        title: Text('verify_pickup'.tr),
         content: TextField(
           controller: _pinController,
           autofocus: true,
@@ -840,19 +840,19 @@ class _PickupPinDialogState extends State<_PickupPinDialog> {
           obscureText: true,
           onChanged: (_) => setState(() {}),
           onSubmitted: (_) => _submit(),
-          decoration: const InputDecoration(
-            labelText: 'Four-digit pickup PIN',
-            border: OutlineInputBorder(),
+          decoration: InputDecoration(
+            labelText: 'pickup_pin'.tr,
+            border: const OutlineInputBorder(),
           ),
         ),
         actions: <Widget>[
           TextButton(
             onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Back'),
+            child: Text('back'.tr),
           ),
           FilledButton(
             onPressed: _valid ? _submit : null,
-            child: const Text('Verify'),
+            child: Text('verify'.tr),
           ),
         ],
       );
@@ -881,7 +881,7 @@ class _NoActiveRide extends StatelessWidget {
               OutlinedButton.icon(
                 onPressed: onRetry,
                 icon: const Icon(Icons.refresh_rounded),
-                label: const Text('Refresh'),
+                label: Text('refresh'.tr),
               ),
             ],
           ),

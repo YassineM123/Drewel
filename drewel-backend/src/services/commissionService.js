@@ -27,7 +27,7 @@ export const calculateRideCommission = (ridePriceAED, settings) => {
   }
 
   const commissionRate = settings?.commissionRate ?? 0.10;
-  const pointsPerAED = settings?.pointsPerAED ?? 10;
+  const pointsPerAED = settings?.pointsPerAED ?? 1;
 
   if (!Number.isFinite(commissionRate) || commissionRate < 0 || commissionRate > 1) {
     throw new Error("commissionRate must be between 0 and 1");

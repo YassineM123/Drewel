@@ -80,7 +80,7 @@ class UserRegisterView extends GetView<UserRegisterController> {
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     Text(
-                                      StringConstants.confirmYourInformation,
+                                      StringConstants.confirmYourInformation.tr,
                                       maxLines: 1,
                                       overflow: TextOverflow.ellipsis,
                                       style: MyTextStyle.titleStyleCustom(
@@ -92,7 +92,7 @@ class UserRegisterView extends GetView<UserRegisterController> {
                                     ),
                                     SizedBox(height: metrics.labelTopGap),
                                     Text(
-                                      StringConstants.city,
+                                      StringConstants.city.tr,
                                       style: MyTextStyle.titleStyleCustom(
                                         metrics.sectionFontSize,
                                         FontWeight.normal,
@@ -104,7 +104,7 @@ class UserRegisterView extends GetView<UserRegisterController> {
                                     _CityGrid(metrics: metrics),
                                     SizedBox(height: metrics.sectionGap),
                                     Text(
-                                      StringConstants.findYourTransport,
+                                      StringConstants.findYourTransport.tr,
                                       style: MyTextStyle.titleStyleCustom(
                                         metrics.sectionFontSize,
                                         FontWeight.normal,
@@ -135,7 +135,7 @@ class UserRegisterView extends GetView<UserRegisterController> {
                                       },
                                       context: context,
                                       child: Text(
-                                        StringConstants.findNow,
+                                        StringConstants.findNow.tr,
                                         style: MyTextStyle.titleStyleCustom(
                                           metrics.buttonFontSize,
                                           FontWeight.bold,
@@ -344,7 +344,7 @@ class _CityGrid extends GetView<UserRegisterController> {
                   child: FittedBox(
                     fit: BoxFit.scaleDown,
                     child: Text(
-                      controller.cityList[index],
+                      controller.cityList[index].tr,
                       style: MyTextStyle.titleStyleCustom(
                         metrics.cityFontSize,
                         controller.cityIndex.value == index
@@ -430,7 +430,7 @@ class _TransportGrid extends GetView<UserRegisterController> {
                       child: FittedBox(
                         fit: BoxFit.scaleDown,
                         child: Text(
-                          controller.transportList[index]['name'] ?? '',
+                          (controller.transportList[index]['name'] ?? '').tr,
                           style: MyTextStyle.titleStyleCustom(
                             metrics.transportFontSize,
                             selected ? FontWeight.bold : FontWeight.normal,

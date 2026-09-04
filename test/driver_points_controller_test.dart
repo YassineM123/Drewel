@@ -263,8 +263,8 @@ void main() {
     expect(find.text('ACCEPTED'), findsOneWidget);
     expect(find.text('Proposed Fare'), findsOneWidget);
     expect(find.text('Price confirmed'), findsOneWidget);
-    expect(find.text('Offer declined: 20 points released'), findsOneWidget);
-    expect(find.text('Offer expired: 20 points released'), findsOneWidget);
-    expect(find.text('Technical failure: points restored'), findsOneWidget);
+    expect(find.text('Offer declined: 20 balance released'), findsOneWidget);
+    expect(find.text('Offer expired: 20 balance released'), findsOneWidget);
+    expect(find.text('Technical failure: balance restored'), findsOneWidget);
   });
 }

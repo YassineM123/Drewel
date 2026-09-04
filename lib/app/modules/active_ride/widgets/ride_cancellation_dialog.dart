@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:get/get.dart';
 
 class RideCancellationResult {
   const RideCancellationResult({required this.reason, required this.note});
@@ -29,7 +30,7 @@ Future<RideCancellationResult?> showRideCancellationDialog(
     barrierDismissible: false,
     builder: (BuildContext dialogContext) => StatefulBuilder(
       builder: (BuildContext context, StateSetter setState) => AlertDialog(
-        title: const Text('Cancel this ride?'),
+        title: Text('cancel_ride_q'.tr),
         content: Form(
           key: formKey,
           child: SingleChildScrollView(
@@ -37,39 +38,39 @@ Future<RideCancellationResult?> showRideCancellationDialog(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[
-                const Text(
+                Text(
                   'The ride will remain in your history. Driver balance is not '
-                  'automatically refunded after an accepted offer.',
+                  'automatically refunded after an accepted offer.'.tr,
                 ),
                 const SizedBox(height: 16),
                 DropdownButtonFormField<String>(
                   initialValue: selectedReason,
                   isExpanded: true,
-                  decoration: const InputDecoration(
-                    labelText: 'Reason',
-                    border: OutlineInputBorder(),
+                  decoration: InputDecoration(
+                    labelText: 'reason'.tr,
+                    border: const OutlineInputBorder(),
                   ),
                   items: reasons
                       .map(
                         (String reason) => DropdownMenuItem<String>(
                           value: reason,
-                          child: Text(reason),
+                          child: Text(reason.tr),
                         ),
                       )
                       .toList(growable: false),
                   onChanged: (String? value) =>
                       setState(() => selectedReason = value),
                   validator: (String? value) =>
-                      value == null ? 'Select a cancellation reason.' : null,
+                      value == null ? 'select_cancellation_reason'.tr : null,
                 ),
                 const SizedBox(height: 12),
                 TextFormField(
                   controller: note,
                   maxLength: 500,
                   maxLines: 3,
-                  decoration: const InputDecoration(
-                    labelText: 'Additional note (optional)',
-                    border: OutlineInputBorder(),
+                  decoration: InputDecoration(
+                    labelText: 'additional_note'.tr,
+                    border: const OutlineInputBorder(),
                   ),
                 ),
               ],
@@ -79,7 +80,7 @@ Future<RideCancellationResult?> showRideCancellationDialog(
         actions: <Widget>[
           TextButton(
             onPressed: () => Navigator.pop(dialogContext),
-            child: const Text('Keep ride'),
+            child: Text('keep_ride'.tr),
           ),
           FilledButton(
             onPressed: () {
@@ -92,7 +93,7 @@ Future<RideCancellationResult?> showRideCancellationDialog(
                 ),
               );
             },
-            child: const Text('Cancel ride'),
+            child: Text('cancel_ride'.tr),
           ),
         ],
       ),

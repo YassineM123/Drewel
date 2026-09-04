@@ -142,7 +142,7 @@ class _LegalHeader extends StatelessWidget {
             ),
             const SizedBox(height: 10),
             const Text(
-              'Please review these terms carefully before using Drewel driver services.',
+              'Please review this document carefully before using Drewel services.',
               style: TextStyle(
                 color: text2Color,
                 fontSize: 14,

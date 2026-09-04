@@ -303,7 +303,8 @@ class PushNotificationService extends GetxService {
             channel.name,
             channelDescription: channel.description,
             importance: channel.importance,
-            priority: channel.importance == Importance.max
+            priority: channel.importance == Importance.max ||
+                    channel.importance == Importance.high
                 ? Priority.high
                 : Priority.defaultPriority,
             playSound: true,

@@ -81,14 +81,14 @@ class DriverCompleteProfileView extends GetView<DriverRegisterController> {
                                     Expanded(
                                       child: Text(
                                         controller.isProfilePending
-                                            ? 'Request 2 is waiting for approval'
-                                            : 'Waiting for Request 1 approval',
+                                            ? 'request_2_waiting_approval'.tr
+                                            : 'waiting_request_1_approval'.tr,
                                         style: MyTextStyle.titleStyle14b,
                                       ),
                                     ),
                                     TextButton(
                                       onPressed: controller.openStatusModal,
-                                      child: const Text('View Status'),
+                                      child: Text('view_status'.tr),
                                     ),
                                   ],
                                 ),
@@ -130,53 +130,53 @@ class DriverCompleteProfileView extends GetView<DriverRegisterController> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
-          Text('Step 3 - Complete Profile', style: MyTextStyle.titleStyle16bb),
+          Text('step_3_complete_profile'.tr, style: MyTextStyle.titleStyle16bb),
           SizedBox(height: 8.px),
-          Text('Personal Info', style: MyTextStyle.titleStyle14bb),
+          Text('personal_info'.tr, style: MyTextStyle.titleStyle14bb),
           CommonWidgets.commonTextFieldForLoginSignUP(
-            labelText: 'First Name',
-            hintText: 'First Name',
+            labelText: 'first_name'.tr,
+            hintText: 'first_name'.tr,
             controller: controller.firstNameController,
           ),
           CommonWidgets.commonTextFieldForLoginSignUP(
-            labelText: 'Last Name',
-            hintText: 'Last Name',
+            labelText: 'last_name'.tr,
+            hintText: 'last_name'.tr,
             controller: controller.lastNameController,
           ),
           CommonWidgets.commonTextFieldForLoginSignUP(
-            labelText: 'Address',
-            hintText: 'Address',
+            labelText: 'address'.tr,
+            hintText: 'address'.tr,
             controller: controller.addressController,
             focusNode: controller.addressFocus,
           ),
           SizedBox(height: 8.px),
-          Text('Work / Contract Info', style: MyTextStyle.titleStyle14bb),
+          Text('work_contract_info'.tr, style: MyTextStyle.titleStyle14bb),
           CommonWidgets.commonTextFieldForLoginSignUP(
-            labelText: 'Contract Number',
-            hintText: 'Contract Number',
+            labelText: 'contract_number'.tr,
+            hintText: 'contract_number'.tr,
             controller: controller.contractNumberController,
             focusNode: controller.contractFocus,
           ),
           CommonWidgets.commonTextFieldForLoginSignUP(
-            labelText: 'License Company',
-            hintText: 'License Company',
+            labelText: 'license_company'.tr,
+            hintText: 'license_company'.tr,
             controller: controller.licenseCompanyController,
             focusNode: controller.licenseCompanyFocus,
           ),
           CommonWidgets.commonTextFieldForLoginSignUP(
-            labelText: 'City (Optional)',
-            hintText: 'City',
+            labelText: 'city_optional'.tr,
+            hintText: 'city'.tr,
             controller: controller.cityController,
             focusNode: controller.cityFocus,
           ),
           CommonWidgets.commonTextFieldForLoginSignUP(
-            labelText: 'Vehicle Type (Optional)',
-            hintText: 'Vehicle Type',
+            labelText: 'vehicle_type_optional'.tr,
+            hintText: 'vehicle_type'.tr,
             controller: controller.typeController,
             focusNode: controller.typeFocus,
           ),
           SizedBox(height: 8.px),
-          Text('Documents', style: MyTextStyle.titleStyle14bb),
+          Text('documents'.tr, style: MyTextStyle.titleStyle14bb),
           SizedBox(height: 8.px),
           ListView.builder(
             shrinkWrap: true,
@@ -200,27 +200,27 @@ class DriverCompleteProfileView extends GetView<DriverRegisterController> {
                   children: <Widget>[
                     Expanded(
                       child: Text(
-                        config['label'] ?? '',
+                        (config['label'] ?? '').tr,
                         style: MyTextStyle.titleStyle14b,
                       ),
                     ),
                     if (file != null)
                       Text(
-                        'Selected',
+                        'selected'.tr,
                         style: MyTextStyle.titleStyle12b.copyWith(
                           color: Colors.green.shade700,
                         ),
                       )
                     else if (hasExisting)
                       Text(
-                        'Uploaded',
+                        'uploaded'.tr,
                         style: MyTextStyle.titleStyle12b.copyWith(
                           color: Colors.green.shade700,
                         ),
                       )
                     else
                       Text(
-                        'Required',
+                        'required'.tr,
                         style: MyTextStyle.titleStyle12b.copyWith(
                           color: Colors.red.shade700,
                         ),
@@ -228,7 +228,7 @@ class DriverCompleteProfileView extends GetView<DriverRegisterController> {
                     SizedBox(width: 10.px),
                     TextButton(
                       onPressed: () => controller.pickDocument(index),
-                      child: const Text('Upload'),
+                      child: Text('upload'.tr),
                     ),
                     if (file != null)
                       SizedBox(
@@ -254,7 +254,7 @@ class DriverCompleteProfileView extends GetView<DriverRegisterController> {
                 : () => controller.submitCompleteProfile(),
             showLoading: controller.showSubmitLoading.value,
             child: Text(
-              'Submit Documents',
+              'submit_documents'.tr,
               style: MyTextStyle.titleStyle16bw,
             ),
           ),
@@ -314,7 +314,7 @@ class DriverCompleteProfileView extends GetView<DriverRegisterController> {
               CommonWidgets.commonElevatedButton(
                 context: context,
                 onPressed: controller.closeStatusModal,
-                child: Text(StringConstants.close,
+                child: Text(StringConstants.close.tr,
                     style: MyTextStyle.titleStyle16bw),
               ),
             ],

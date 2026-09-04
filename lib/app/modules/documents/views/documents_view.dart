@@ -77,7 +77,7 @@ class DocumentsView extends GetView<DocumentsController> {
                               textColor: Colors.red.shade900,
                               action: TextButton(
                                 onPressed: controller.callingGetDriverDetails,
-                                child: const Text('Retry'),
+                                child: Text('retry'.tr),
                               ),
                             ),
                             SizedBox(height: 12.px),
@@ -121,8 +121,8 @@ class DocumentsView extends GetView<DocumentsController> {
                             focusNode: controller.focusNodeCity,
                             controller: controller.cityController,
                             isCard: controller.isCity.value,
-                            hintText: StringConstants.selectCity,
-                            labelText: StringConstants.selectCity,
+                            hintText: StringConstants.selectCity.tr,
+                            labelText: StringConstants.selectCity.tr,
                             suffixIcon: Icon(
                               Icons.keyboard_arrow_down,
                               size: 20.px,
@@ -137,8 +137,8 @@ class DocumentsView extends GetView<DocumentsController> {
                             focusNode: controller.focusNodeType,
                             controller: controller.typeController,
                             isCard: controller.isType.value,
-                            hintText: StringConstants.selectvehicleType,
-                            labelText: StringConstants.selectvehicleType,
+                            hintText: StringConstants.selectvehicleType.tr,
+                            labelText: StringConstants.selectvehicleType.tr,
                             suffixIcon: Icon(
                               Icons.keyboard_arrow_down,
                               size: 20.px,
@@ -151,7 +151,7 @@ class DocumentsView extends GetView<DocumentsController> {
                                 : null,
                           ),
                           SizedBox(height: 10.px),
-                          Text('Upload Documents',
+                          Text('upload_documents'.tr,
                               style: MyTextStyle.titleStyle16bb),
                           SizedBox(height: 10.px),
                           ListView.builder(
@@ -195,7 +195,7 @@ class DocumentsView extends GetView<DocumentsController> {
                                               ),
                                               SizedBox(width: 3.px),
                                               Text(
-                                                'Required *',
+                                                'required_star'.tr,
                                                 style: MyTextStyle.titleStyle12b
                                                     .copyWith(
                                                   color: Colors.orange,
@@ -251,7 +251,7 @@ class DocumentsView extends GetView<DocumentsController> {
                                             icon: const Icon(
                                               Icons.drive_folder_upload_rounded,
                                             ),
-                                            label: const Text('Replace'),
+                                            label: Text('replace'.tr),
                                           ),
                                           if (controller.selectedFile[index] !=
                                               null)
@@ -263,7 +263,7 @@ class DocumentsView extends GetView<DocumentsController> {
                                               icon: const Icon(
                                                 Icons.remove_circle_outline,
                                               ),
-                                              label: const Text('Remove'),
+                                              label: Text('remove'.tr),
                                             ),
                                         ],
                                       ),
@@ -302,9 +302,9 @@ class DocumentsView extends GetView<DocumentsController> {
                       backgroundColor: controller.canSubmit
                           ? primaryColor
                           : Colors.grey.shade500,
-                      semanticLabel: StringConstants.update,
+                      semanticLabel: StringConstants.update.tr,
                       child: Text(
-                        StringConstants.update,
+                        StringConstants.update.tr,
                         style: MyTextStyle.titleStyle16bw,
                       ),
                     ),
@@ -518,7 +518,7 @@ class _DocumentPreviewState extends State<_DocumentPreview> {
           ),
           SizedBox(height: 5.px),
           Text(
-            StringConstants.uploadHere,
+            StringConstants.uploadHere.tr,
             style: MyTextStyle.titleStyle14b.copyWith(
               color: widget.isBackImage ? Colors.orange : Colors.black54,
             ),

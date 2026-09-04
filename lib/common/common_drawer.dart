@@ -162,14 +162,14 @@ class CustomDrawer extends StatelessWidget {
         await _clearRuntimeSession();
         await prefs.clear();
         CommonWidgets.snackBarView(
-            title: 'Account deleted successfully', success: true);
+            title: 'account_deleted_success'.tr, success: true);
         Get.offNamedUntil(Routes.USER_TYPE, (routes) => false);
       } else {
-        CommonWidgets.snackBarView(title: 'Failed to delete account');
+        CommonWidgets.snackBarView(title: 'account_delete_failed'.tr);
       }
     } catch (e) {
       Get.back(); // Close loading if open
-      CommonWidgets.snackBarView(title: 'Something went wrong');
+      CommonWidgets.snackBarView(title: 'something_went_wrong'.tr);
       print('Delete account error: $e');
     }
   }
@@ -183,18 +183,11 @@ class CustomDrawer extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // const DrawerHeader(
-              //   decoration: BoxDecoration(color: Colors.blue),
-              //   child: Text(
-              //     'Right Drawer Header',
-              //     style: TextStyle(color: Colors.white, fontSize: 24),
-              //   ),
-              // ),
               SizedBox(
                 height: 48,
                 width: 48,
                 child: IconButton(
-                  tooltip: 'Close menu',
+                  tooltip: 'close_menu'.tr,
                   onPressed: () => Navigator.of(context).pop(),
                   icon: const Icon(Icons.close_rounded),
                 ),
@@ -243,7 +236,7 @@ class CustomDrawer extends StatelessWidget {
                     color: primaryColor,
                   ),
                   title: Text(
-                    'Profile',
+                    'profile'.tr,
                     style: MyTextStyle.titleStyle16b,
                   ),
                   onTap: () {
@@ -264,7 +257,7 @@ class CustomDrawer extends StatelessWidget {
                     color: primaryColor,
                   ),
                   title: Text(
-                    'Driver Profile',
+                    'driver_profile'.tr,
                     style: MyTextStyle.titleStyle16b,
                   ),
                   onTap: () {
@@ -283,7 +276,7 @@ class CustomDrawer extends StatelessWidget {
                     height: 20.px,
                     width: 20.px),
                 title: Text(
-                  StringConstants.support,
+                  StringConstants.support.tr,
                   style: MyTextStyle.titleStyle16b,
                 ),
                 onTap: () {
@@ -325,7 +318,7 @@ class CustomDrawer extends StatelessWidget {
                     color: primaryColor,
                   ),
                   title: Text(
-                    StringConstants.documents,
+                    StringConstants.documents.tr,
                     style: MyTextStyle.titleStyle16b,
                   ),
                   onTap: () {
@@ -350,7 +343,7 @@ class CustomDrawer extends StatelessWidget {
                         width: 5.px,
                       ),
                       Text(
-                        StringConstants.deleteAccount,
+                        StringConstants.deleteAccount.tr,
                         style: MyTextStyle.titleStyle16bb,
                       ),
                     ],
@@ -380,7 +373,7 @@ class CustomDrawer extends StatelessWidget {
                         width: 5.px,
                       ),
                       Text(
-                        StringConstants.logout,
+                        StringConstants.logout.tr,
                         style: MyTextStyle.titleStyle16bw,
                       ),
                     ],

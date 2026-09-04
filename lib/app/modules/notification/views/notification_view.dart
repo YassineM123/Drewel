@@ -72,7 +72,7 @@ class NotificationView extends GetView<CallStateController> {
                         children: <Widget>[
                           Expanded(
                             child: Text(
-                              'All activity',
+                              'all_activity'.tr,
                               style: MyTextStyle.titleStyle18bb,
                             ),
                           ),
@@ -81,8 +81,8 @@ class NotificationView extends GetView<CallStateController> {
                                 controller.notificationUnread.value;
                             return Text(
                               unread > 0
-                                  ? '$unread unread'
-                                  : 'You are all caught up',
+                                  ? '$unread ${'unread'.tr}'
+                                  : 'all_caught_up'.tr,
                               style: TextStyle(
                                 fontSize: 12.px,
                                 color: unread > 0 ? primaryColor : text2Color,
@@ -441,18 +441,18 @@ class _EmptyNotifications extends StatelessWidget {
             ),
             SizedBox(height: 16),
             Text(
-              'No notifications',
-              style: TextStyle(
+              'no_notifications'.tr,
+              style: const TextStyle(
                 fontSize: 17,
                 fontWeight: FontWeight.w700,
                 color: textColor,
               ),
             ),
-            SizedBox(height: 6),
+            const SizedBox(height: 6),
             Text(
-              'Updates about your rides and messages appear here.',
+              'updates_about_rides_appear_here'.tr,
               textAlign: TextAlign.center,
-              style: TextStyle(color: text2Color),
+              style: const TextStyle(color: text2Color),
             ),
           ],
         ),

@@ -45,7 +45,7 @@ export const DEFAULT_COMMISSION_RATE = positiveNumberFromEnv(
 );
 export const DEFAULT_POINTS_PER_AED = positiveNumberFromEnv(
   "POINTS_PER_AED",
-  10
+  1
 );
 export const GLOBAL_POINTS_SETTINGS_KEY = "global";
 
