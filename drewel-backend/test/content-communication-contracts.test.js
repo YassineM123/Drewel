@@ -108,7 +108,9 @@ test("ride message notifications navigate with the canonical ride id", () => {
   assert.match(conversationSource, /conversationId: ride\._id/);
   assert.match(conversationSource, /deepLink: `drewel:\/\/chat\/ride\?rideId=\$\{String\(ride\._id\)\}`/);
   assert.doesNotMatch(conversationSource, /chat\/ride\?conversationId=/);
-  assert.equal((rideSource.match(/deepLink: `drewel:\/\/chat\/ride\?rideId=/g) || []).length, 2);
+  assert.match(rideSource, /const deliverRideMessageSideEffects = /);
+  assert.equal((rideSource.match(/deepLink: `drewel:\/\/chat\/ride\?rideId=/g) || []).length, 1);
+  assert.match(rideSource, /deliverRideMessageSideEffects\(\{ ride, message, participantRole, voice: true \}\)/);
   assert.doesNotMatch(rideSource, /chat\/ride\?conversationId=/);
 });
 

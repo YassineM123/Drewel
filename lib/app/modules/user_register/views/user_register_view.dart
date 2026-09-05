@@ -190,8 +190,6 @@ class _RegisterLayoutMetrics {
     required this.transportFontSize,
     required this.transportIconHeight,
     required this.transportIconWidth,
-    required this.waterTankerIconHeight,
-    required this.waterTankerIconWidth,
     required this.bannerHeight,
     required this.bannerRadius,
     required this.indicatorHeight,
@@ -230,8 +228,6 @@ class _RegisterLayoutMetrics {
   final double transportFontSize;
   final double transportIconHeight;
   final double transportIconWidth;
-  final double waterTankerIconHeight;
-  final double waterTankerIconWidth;
   final double bannerHeight;
   final double bannerRadius;
   final double indicatorHeight;
@@ -286,8 +282,6 @@ class _RegisterLayoutMetrics {
       transportFontSize: lerp(11, 12),
       transportIconHeight: lerp(28, 34),
       transportIconWidth: lerp(44, 52),
-      waterTankerIconHeight: lerp(37, 45),
-      waterTankerIconWidth: lerp(61, 72),
       bannerHeight: lerp(86, 105),
       bannerRadius: lerp(8, 12),
       indicatorHeight: lerp(7, 8),
@@ -415,12 +409,9 @@ class _TransportGrid extends GetView<UserRegisterController> {
                       child: CommonWidgets.appIcons(
                         assetName:
                             controller.transportList[index]['image'] ?? '',
-                        height: index == 7
-                            ? metrics.waterTankerIconHeight
-                            : metrics.transportIconHeight,
-                        width: index == 7
-                            ? metrics.waterTankerIconWidth
-                            : metrics.transportIconWidth,
+                        height: metrics.transportIconHeight,
+                        width: metrics.transportIconWidth,
+                        fit: BoxFit.contain,
                         color: index == 0 ? Colors.black : null,
                       ),
                     ),

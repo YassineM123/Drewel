@@ -547,6 +547,7 @@ const initialDriverForm = {
   firstName: "",
   lastName: "",
   phone: "",
+  email: "",
   countryCode: "+971",
   vehicleType: "",
   vehicleModel: "",
@@ -611,25 +612,42 @@ function AddDriverDrawer({ onClose, onCreated, onToast }) {
           <Field label="Last name" value={form.lastName} onChange={set("lastName")} required />
           <Field label="Country code" value={form.countryCode} onChange={set("countryCode")} required />
           <Field label="Phone" value={form.phone} onChange={set("phone")} required inputMode="tel" />
-          <Field label="Vehicle type" value={form.vehicleType} onChange={set("vehicleType")} required />
-          <Field label="Vehicle model" value={form.vehicleModel} onChange={set("vehicleModel")} />
-          <Field label="Plate number" value={form.registration} onChange={set("registration")} />
+          <SelectField
+            label="Vehicle type"
+            value={form.vehicleType}
+            onChange={set("vehicleType")}
+            required
+            options={[
+              { label: "Select vehicle type...", value: "" },
+              { label: "Small Pickup", value: "Small Pickup" },
+              { label: "Large Pickup", value: "Large Pickup" },
+              { label: "Moving", value: "Moving" },
+              { label: "Gaz Delivery", value: "Gaz Delivery" },
+              { label: "Recovery", value: "Recovery" },
+              { label: "Truck", value: "Truck" },
+              { label: "Construction", value: "Construction" },
+              { label: "Water Tanker", value: "Water Tanker" },
+            ]}
+          />
           <Field label="City" value={form.city} onChange={set("city")} required />
-          <Field label="Address" value={form.address} onChange={set("address")} />
-          <Field label="Contract number" value={form.contractNumber} onChange={set("contractNumber")} />
-          <Field label="License company" value={form.licenseCompany} onChange={set("licenseCompany")} />
+          <Field label="Email (optional)" value={form.email} onChange={set("email")} type="email" />
+          <Field label="Vehicle model (optional)" value={form.vehicleModel} onChange={set("vehicleModel")} />
+          <Field label="Plate number (optional)" value={form.registration} onChange={set("registration")} />
+          <Field label="Address (optional)" value={form.address} onChange={set("address")} />
+          <Field label="Contract number (optional)" value={form.contractNumber} onChange={set("contractNumber")} />
+          <Field label="License company (optional)" value={form.licenseCompany} onChange={set("licenseCompany")} />
         </div>
         <div className="grid grid-cols-2 gap-3">
           {[
-            ["profileImage", "Profile image"],
-            ["licenseCompany", "Company licence"],
-            ["carLicenseFront", "Vehicle registration front"],
-            ["carLicenseBack", "Vehicle registration back"],
-            ["drivingLicenseFront", "Driving licence front"],
-            ["drivingLicenseBack", "Driving licence back"],
-            ["idProofFront", "ID front"],
-            ["idProofBack", "ID back"],
-            ["passportCopy", "Passport copy"],
+            ["profileImage", "Profile image (optional)"],
+            ["licenseCompany", "Company licence (optional)"],
+            ["carLicenseFront", "Vehicle registration front (optional)"],
+            ["carLicenseBack", "Vehicle registration back (optional)"],
+            ["drivingLicenseFront", "Driving licence front (optional)"],
+            ["drivingLicenseBack", "Driving licence back (optional)"],
+            ["idProofFront", "ID front (optional)"],
+            ["idProofBack", "ID back (optional)"],
+            ["passportCopy", "Passport copy (optional)"],
           ].map(([key, label]) => (
             <label key={key} className="flex flex-col gap-1.5 text-xs font-medium text-slate-700">
               {label}
@@ -660,9 +678,27 @@ function AddDriverDrawer({ onClose, onCreated, onToast }) {
 function Field({ label, ...props }) {
   return (
     <label className="flex flex-col gap-1.5 text-xs font-medium text-slate-700">
-      {label}{props.required && <span className="sr-only"> required</span>}
+      <span>{label}{props.required && <span className="text-red-500 ml-0.5">*</span>}</span>
       <input {...props}
         className="h-10 bg-white border border-slate-200 rounded-[10px] px-3 text-sm text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-red-700/20 focus:border-red-400 transition-all" />
+    </label>
+  );
+}
+
+function SelectField({ label, options = [], ...props }) {
+  return (
+    <label className="flex flex-col gap-1.5 text-xs font-medium text-slate-700">
+      {label}{props.required && <span className="sr-only"> required</span>}
+      <select
+        {...props}
+        className="h-10 bg-white border border-slate-200 rounded-[10px] px-3 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-red-700/20 focus:border-red-400 transition-all cursor-pointer"
+      >
+        {options.map((opt) => (
+          <option key={opt.value} value={opt.value}>
+            {opt.label}
+          </option>
+        ))}
+      </select>
     </label>
   );
 }

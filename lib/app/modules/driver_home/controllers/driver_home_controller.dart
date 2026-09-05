@@ -537,36 +537,72 @@ class DriverHomeController extends GetxController with WidgetsBindingObserver {
     }
   }
 
+  final RxBool isPlacesLoading = false.obs;
+  final RxString placesSearchError = ''.obs;
+  int _placeSearchRequestId = 0;
+
   void increment() => count.value++;
 
   /// Handle text changes in the location field with debounce
   void onLocationTextChanged(String value) {
     _placesDebounce?.cancel();
-    if (value.trim().isEmpty) {
+    final String query = value.trim();
+    if (query.isEmpty) {
+      _placeSearchRequestId++;
       placeSuggestions.clear();
+      isPlacesLoading.value = false;
+      placesSearchError.value = '';
       increment();
       return;
     }
-    _placesDebounce = Timer(const Duration(milliseconds: 400), () {
-      _fetchPlaceSuggestions(value.trim());
+    isPlacesLoading.value = true;
+    placesSearchError.value = '';
+    _placesDebounce = Timer(const Duration(milliseconds: 350), () {
+      _fetchPlaceSuggestions(query);
     });
   }
 
   /// Fetch autocomplete suggestions (Google Places + OSM fallback)
   Future<void> _fetchPlaceSuggestions(String input) async {
-    final List<Prediction> results =
-        await DrewelLocationSearchService.instance.searchPlaces(
-      input,
-      nearLocation: LatLng(lat.value, lon.value),
-    );
-    placeSuggestions.value = results;
+    final int currentRequestId = ++_placeSearchRequestId;
+    try {
+      final List<Prediction> results =
+          await DrewelLocationSearchService.instance.searchPlaces(
+        input,
+        nearLocation: LatLng(lat.value, lon.value),
+      );
+      if (currentRequestId != _placeSearchRequestId) return;
+      placeSuggestions.value = results;
+      placesSearchError.value = '';
+    } catch (e) {
+      if (currentRequestId != _placeSearchRequestId) return;
+      placesSearchError.value = 'Failed to load locations';
+    } finally {
+      if (currentRequestId == _placeSearchRequestId) {
+        isPlacesLoading.value = false;
+        increment();
+      }
+    }
+  }
+
+  /// Clear suggestions explicitly (used when opening drawer, tapping outside, etc.)
+  void clearPlaceSuggestions() {
+    _placesDebounce?.cancel();
+    _placeSearchRequestId++;
+    placeSuggestions.clear();
+    isPlacesLoading.value = false;
+    placesSearchError.value = '';
     increment();
   }
 
-  /// Clear suggestions explicitly (used when opening drawer, etc.)
-  void clearPlaceSuggestions() {
+  /// Clear the typed text together with any in-flight search state.
+  void clearLocationSearch() {
     _placesDebounce?.cancel();
+    _placeSearchRequestId++;
     placeSuggestions.clear();
+    isPlacesLoading.value = false;
+    placesSearchError.value = '';
+    locationController.clear();
     increment();
   }
 
@@ -717,23 +753,30 @@ class DriverHomeController extends GetxController with WidgetsBindingObserver {
   }
 
   Future<void> clickOnLocation(Prediction prediction) async {
-    locationController.text = prediction.description ?? "";
+    final String desc = prediction.description ?? "";
+    locationController.text = desc;
     locationController.selection = TextSelection.fromPosition(
-      TextPosition(offset: prediction.description?.length ?? 0),
+      TextPosition(offset: desc.length),
     );
 
     final ({LatLng point, String address})? details =
         await DrewelLocationSearchService.instance.getPlaceDetails(prediction);
 
-    if (details != null && xController != null) {
-      xController!.animateCamera(
-        CameraUpdate.newCameraPosition(
-          CameraPosition(
-            target: details.point,
-            zoom: 14,
+    if (details != null) {
+      mapPosition = details.point;
+      lat.value = details.point.latitude;
+      lon.value = details.point.longitude;
+      if (xController != null) {
+        xController!.animateCamera(
+          CameraUpdate.newCameraPosition(
+            CameraPosition(
+              target: details.point,
+              zoom: 14,
+            ),
           ),
-        ),
-      );
+        );
+      }
+      increment();
     }
   }
 

@@ -63,6 +63,7 @@ class _RideChatScreenState extends State<RideChatScreen> {
   String? _failedClientMessageId;
   Timer? _refreshTimer;
   bool _refreshing = false;
+  final Set<String> _pendingTextClientIds = <String>{};
 
   // Voice notes.
   VoiceRecorderService? _recorder;
@@ -153,6 +154,7 @@ class _RideChatScreenState extends State<RideChatScreen> {
             existing.id == message.id ||
             (echoClientId.isNotEmpty &&
                 (existing.clientMessageId ?? '') == echoClientId))) {
+      _reconcileConfirmedText(message);
       _reconcileConfirmedVoice(echoClientId);
       return;
     }
@@ -275,6 +277,12 @@ class _RideChatScreenState extends State<RideChatScreen> {
           confirmedFailedPath = _failedVoice!.path;
           _failedVoice = null;
         }
+        _pendingTextClientIds.removeWhere(serverClientIds.contains);
+        if (_failedClientMessageId != null &&
+            serverClientIds.contains(_failedClientMessageId)) {
+          _failedMessageText = null;
+          _failedClientMessageId = null;
+        }
         _incomingOffers
           ..clear()
           ..addAll(incoming);
@@ -330,10 +338,26 @@ class _RideChatScreenState extends State<RideChatScreen> {
     if (text.isEmpty || rideId == null || _sending) return;
     final String idempotencyKey =
         clientMessageId ?? RideMessageRepository.newClientMessageId();
+    final RideMessageModel optimistic = RideMessageModel(
+      id: 'local-text-$idempotencyKey',
+      rideId: rideId,
+      text: text,
+      senderId: _selfId,
+      status: RideMessageStatus.sent,
+      clientMessageId: idempotencyKey,
+      createdAt: DateTime.now(),
+    );
     setState(() {
       _sending = true;
       _error = null;
+      if (!_messages.any((RideMessageModel message) =>
+          (message.clientMessageId ?? '') == idempotencyKey)) {
+        _messages.add(optimistic);
+      }
+      _pendingTextClientIds.add(idempotencyKey);
+      if (clientMessageId == null) _textController.clear();
     });
+    _scrollToBottom(animate: true);
     try {
       final RideMessageModel sent = await _communication.messageRepository.send(
         rideId,
@@ -342,29 +366,85 @@ class _RideChatScreenState extends State<RideChatScreen> {
       );
       if (!mounted) return;
       setState(() {
-        _messages.add(sent);
-        _textController.clear();
+        _upsertConfirmedMessage(sent);
         _failedMessageText = null;
         _failedClientMessageId = null;
       });
       _scrollToBottom(animate: true);
     } on CommunicationApiException catch (error) {
       if (!mounted) return;
+      final bool alreadyConfirmed = _messages.any((RideMessageModel message) =>
+          message.id.isNotEmpty &&
+          !message.id.startsWith('local-text-') &&
+          (message.clientMessageId ?? '') == idempotencyKey);
       setState(() {
-        _error = error.message;
-        _failedMessageText = text;
-        _failedClientMessageId = idempotencyKey;
+        if (alreadyConfirmed) {
+          _pendingTextClientIds.remove(idempotencyKey);
+          _failedMessageText = null;
+          _failedClientMessageId = null;
+        } else {
+          _removeOptimisticText(idempotencyKey);
+          _error = error.message;
+          _failedMessageText = text;
+          _failedClientMessageId = idempotencyKey;
+        }
       });
     } catch (_) {
       if (!mounted) return;
+      final bool alreadyConfirmed = _messages.any((RideMessageModel message) =>
+          message.id.isNotEmpty &&
+          !message.id.startsWith('local-text-') &&
+          (message.clientMessageId ?? '') == idempotencyKey);
       setState(() {
-        _error = 'Message not sent. Please retry.';
-        _failedMessageText = text;
-        _failedClientMessageId = idempotencyKey;
+        if (alreadyConfirmed) {
+          _pendingTextClientIds.remove(idempotencyKey);
+          _failedMessageText = null;
+          _failedClientMessageId = null;
+        } else {
+          _removeOptimisticText(idempotencyKey);
+          _error = 'Message not sent. Please retry.';
+          _failedMessageText = text;
+          _failedClientMessageId = idempotencyKey;
+        }
       });
     } finally {
       if (mounted) setState(() => _sending = false);
     }
+  }
+
+  void _reconcileConfirmedText(RideMessageModel message) {
+    final String clientMessageId = message.clientMessageId ?? '';
+    if (clientMessageId.isEmpty ||
+        !_pendingTextClientIds.contains(clientMessageId)) {
+      return;
+    }
+    if (!mounted) return;
+    setState(() => _upsertConfirmedMessage(message));
+  }
+
+  void _upsertConfirmedMessage(RideMessageModel message) {
+    final String clientMessageId = message.clientMessageId ?? '';
+    final int existingIndex = _messages.indexWhere(
+      (RideMessageModel existing) =>
+          existing.id == message.id ||
+          (clientMessageId.isNotEmpty &&
+              (existing.clientMessageId ?? '') == clientMessageId),
+    );
+    if (existingIndex >= 0) {
+      _messages[existingIndex] = message;
+    } else {
+      _messages.add(message);
+    }
+    _pendingTextClientIds.remove(clientMessageId);
+    _seenMessageIds.add(message.id);
+  }
+
+  void _removeOptimisticText(String clientMessageId) {
+    _pendingTextClientIds.remove(clientMessageId);
+    _messages.removeWhere((RideMessageModel message) =>
+        message.id == 'local-text-$clientMessageId' ||
+        (message.id.startsWith('local-text-') &&
+            (message.clientMessageId ?? '') == clientMessageId));
   }
 
   void _retryFailedMessage() {
@@ -2186,7 +2266,7 @@ class _TripRequestCard extends StatelessWidget {
         .toString()
         .trim()
         .toUpperCase();
-    final String? note = (message.metadata?['note'] ?? '').toString().trim();
+    final String note = (message.metadata?['note'] ?? '').toString().trim();
     final Widget card = Container(
       constraints: BoxConstraints(
         maxWidth: (MediaQuery.sizeOf(context).width * 0.78)
@@ -2273,7 +2353,7 @@ class _TripRequestCard extends StatelessWidget {
                     ),
                   ),
                 ],
-                if (note != null && note.isNotEmpty) ...<Widget>[
+                if (note.isNotEmpty) ...<Widget>[
                   const SizedBox(height: 10),
                   Text(
                     note,

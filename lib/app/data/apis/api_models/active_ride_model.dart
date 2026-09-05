@@ -329,7 +329,15 @@ class ActiveRideModel {
   /// observes the terminal-status/expiry grace-period cutoff.
   bool canCommunicateAs(String role) {
     if (!hasBackendRideId) return false;
-    return true;
+    final String normalizedRole = role.trim().toLowerCase();
+    if (rideStatus == RideStatus.completed) {
+      if (normalizedRole == 'driver') return contactAllowed;
+      final DateTime? expiresAt = contactExpiresAt;
+      return contactAllowed &&
+          expiresAt != null &&
+          expiresAt.isAfter(DateTime.now().toUtc());
+    }
+    return contactAllowed && !rideStatus.isTerminal;
   }
 
   RideParticipantModel? counterpartFor(String role) =>

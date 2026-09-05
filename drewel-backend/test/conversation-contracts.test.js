@@ -8,6 +8,7 @@ import {
   conversationStatusForRide,
   toConversationDto,
 } from "../src/services/conversationService.js";
+import { isRideContactAllowed } from "../src/services/rideCommunicationPolicy.js";
 import conversationRoutes from "../src/routes/conversationRoutes.js";
 import { messageRateLimit } from "../src/middlewares/marketplaceRateLimit.js";
 
@@ -50,6 +51,30 @@ test("ride lifecycle statuses map to a bounded conversation status set", () => {
     assert.equal(conversationStatusForRide({ status }), "cancelled");
   }
   assert.equal(conversationStatusForRide({}), "active");
+});
+
+test("ride contact policy enforces role and completed-ride expiry", () => {
+  const now = new Date("2026-09-05T12:00:00.000Z");
+  assert.equal(
+    isRideContactAllowed({ status: "driver_on_the_way" }, "passenger", now),
+    true
+  );
+  assert.equal(
+    isRideContactAllowed({ status: "completed", contactEndsAt: "2000-01-01T00:00:00.000Z" }, "driver", now),
+    true
+  );
+  assert.equal(
+    isRideContactAllowed({ status: "completed", contactEndsAt: "2000-01-01T00:00:00.000Z" }, "passenger", now),
+    false
+  );
+  assert.equal(
+    isRideContactAllowed({ status: "completed", contactEndsAt: "2026-09-05T12:05:00.000Z" }, "passenger", now),
+    true
+  );
+  assert.equal(
+    isRideContactAllowed({ status: "driver_on_the_way", communicationBlockedAt: now }, "driver", now),
+    false
+  );
 });
 
 test("conversation model enforces one ride and participant inbox indexes", () => {

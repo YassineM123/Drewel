@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:drewel/app/data/apis/api_models/get_add_driver_details_model.dart';
+import 'package:drewel/app/data/constants/app_translations.dart';
 import 'package:drewel/app/modules/documents/controllers/documents_controller.dart';
 import 'package:drewel/app/modules/documents/views/documents_view.dart';
 import 'package:flutter/material.dart';
@@ -85,7 +86,12 @@ void main() {
     await tester.binding.setSurfaceSize(size);
     Get.put<DocumentsController>(controller ?? _DocumentsTestController());
     await tester.pumpWidget(
-      const GetMaterialApp(home: DocumentsView()),
+      GetMaterialApp(
+        translations: AppTranslations(),
+        locale: const Locale('en'),
+        fallbackLocale: const Locale('en'),
+        home: const DocumentsView(),
+      ),
     );
     if (settle) {
       await tester.pumpAndSettle();

@@ -144,39 +144,57 @@ class DriverCompleteProfileView extends GetView<DriverRegisterController> {
             controller: controller.lastNameController,
           ),
           CommonWidgets.commonTextFieldForLoginSignUP(
-            labelText: 'address'.tr,
+            labelText: StringConstants.selectvehicleType.tr,
+            hintText: 'vehicle_type'.tr,
+            controller: controller.typeController,
+            focusNode: controller.typeFocus,
+            readOnly: true,
+            suffixIcon: Icon(
+              Icons.keyboard_arrow_down,
+              size: 20.px,
+              color: Colors.black54,
+            ),
+            onTap: controller.isProfileLocked
+                ? null
+                : () => controller.openVehicleTypeBottomSheet(context),
+          ),
+          CommonWidgets.commonTextFieldForLoginSignUP(
+            labelText: 'city'.tr,
+            hintText: 'city'.tr,
+            controller: controller.cityController,
+            focusNode: controller.cityFocus,
+            readOnly: true,
+            suffixIcon: Icon(
+              Icons.keyboard_arrow_down,
+              size: 20.px,
+              color: Colors.black54,
+            ),
+            onTap: controller.isProfileLocked
+                ? null
+                : () => controller.openCityBottomSheet(context),
+          ),
+          SizedBox(height: 12.px),
+          Text('work_contract_info'.tr, style: MyTextStyle.titleStyle14bb),
+          CommonWidgets.commonTextFieldForLoginSignUP(
+            labelText: '${'address'.tr} (optional)',
             hintText: 'address'.tr,
             controller: controller.addressController,
             focusNode: controller.addressFocus,
           ),
-          SizedBox(height: 8.px),
-          Text('work_contract_info'.tr, style: MyTextStyle.titleStyle14bb),
           CommonWidgets.commonTextFieldForLoginSignUP(
-            labelText: 'contract_number'.tr,
+            labelText: '${'contract_number'.tr} (optional)',
             hintText: 'contract_number'.tr,
             controller: controller.contractNumberController,
             focusNode: controller.contractFocus,
           ),
           CommonWidgets.commonTextFieldForLoginSignUP(
-            labelText: 'license_company'.tr,
+            labelText: '${'license_company'.tr} (optional)',
             hintText: 'license_company'.tr,
             controller: controller.licenseCompanyController,
             focusNode: controller.licenseCompanyFocus,
           ),
-          CommonWidgets.commonTextFieldForLoginSignUP(
-            labelText: 'city_optional'.tr,
-            hintText: 'city'.tr,
-            controller: controller.cityController,
-            focusNode: controller.cityFocus,
-          ),
-          CommonWidgets.commonTextFieldForLoginSignUP(
-            labelText: 'vehicle_type_optional'.tr,
-            hintText: 'vehicle_type'.tr,
-            controller: controller.typeController,
-            focusNode: controller.typeFocus,
-          ),
-          SizedBox(height: 8.px),
-          Text('documents'.tr, style: MyTextStyle.titleStyle14bb),
+          SizedBox(height: 12.px),
+          Text('${'documents'.tr} (optional)', style: MyTextStyle.titleStyle14bb),
           SizedBox(height: 8.px),
           ListView.builder(
             shrinkWrap: true,

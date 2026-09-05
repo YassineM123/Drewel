@@ -237,6 +237,80 @@ const rideMessageEventPayload = (message) => ({
     : {}),
 });
 
+const logRideMessageSideEffectError = (stage, error) => {
+  console.error("[ride-message]", `${stage} failed`, {
+    message: error?.message || String(error),
+  });
+};
+
+const deliverRideMessageSideEffects = ({
+  ride,
+  message,
+  participantRole,
+  voice = false,
+}) => {
+  io.to(String(ride.passengerId)).to(String(ride.driverId)).emit(
+    "ride:message",
+    rideMessageEventPayload(message)
+  );
+
+  setImmediate(async () => {
+    try {
+      const { conversation, recipientId, notification } =
+        await touchConversationWithMessage({
+          ride,
+          message,
+          participantRole,
+        });
+      await emitConversationUpdated(conversation);
+      const senderName =
+        participantRole === "passenger"
+          ? (conversation?.passengerName || "Passenger")
+          : (conversation?.driverName || "Driver");
+      const senderDisplay = String(senderName).split(/\s+/)[0] || "Drewel";
+      const pushTitle = voice
+        ? `${senderDisplay} sent you a message`
+        : senderDisplay;
+      const pushBody = voice
+        ? "Voice message"
+        : String(message.text || "Sent you a message").slice(0, 140);
+
+      if (String(recipientId) === String(notification?.userId)) {
+        emitNotificationNew(notification);
+        await sendPushToUser({
+          userId: recipientId,
+          title: pushTitle,
+          body: pushBody,
+          data: notification
+            ? {
+                id: String(notification._id),
+                type: "RIDE_MESSAGE",
+                rideId: String(ride._id),
+                conversationId: String(ride._id),
+                messageId: String(notification.messageId || message._id),
+                deepLink: `drewel://chat/ride?rideId=${String(ride._id)}`,
+                senderName: senderDisplay,
+                ...(voice ? { isVoice: "true" } : {}),
+              }
+            : {},
+          type: "RIDE_MESSAGE",
+        });
+      } else {
+        io.to(String(recipientId)).emit("notification:new", {
+          id: notification?._id ? String(notification._id) : "",
+          type: "RIDE_MESSAGE",
+          message: notification?.message || "",
+          read: Boolean(notification?.read),
+          data: notification?.data || { rideId: String(ride._id) },
+          createdAt: notification?.createdAt || new Date(),
+        });
+      }
+    } catch (error) {
+      logRideMessageSideEffectError("delivery side effects", error);
+    }
+  });
+};
+
 const normalizeReviewInput = (body = {}) => {
   const rating = Number(body.rating);
   if (!Number.isInteger(rating) || rating < 1 || rating > 5) {
@@ -956,52 +1030,12 @@ export const sendRideMessage = async (req, res) => {
     if (created && messageType === "trip_request") {
       await cancelSupersededTripRequests({ rideId: ride._id, latestMessage: message });
     }
-    const messageEvent = rideMessageEventPayload(message);
-    io.to(String(ride.passengerId)).to(String(ride.driverId)).emit("ride:message", messageEvent);
-    const { conversation, recipientId, notification } = await touchConversationWithMessage({
-      ride,
-      message,
-      participantRole,
+    deliverRideMessageSideEffects({ ride, message, participantRole });
+    return res.status(created ? 201 : 200).json({
+      success: true,
+      message: toRideMessageDto(message),
+      idempotent: !created,
     });
-    await emitConversationUpdated(conversation);
-    const senderName =
-      participantRole === "passenger"
-        ? (conversation?.passengerName || "Passenger")
-        : (conversation?.driverName || "Driver");
-    const senderDisplay = String(senderName).split(/\s+/)[0] || "Drewel";
-    const pushTitle = senderDisplay;
-    const pushBody = String(message.text || "Sent you a message").slice(0, 140);
-
-    if (String(recipientId) === String(notification?.userId)) {
-      emitNotificationNew(notification);
-      await sendPushToUser({
-        userId: recipientId,
-        title: pushTitle,
-        body: pushBody,
-        data: notification
-          ? {
-              id: String(notification._id),
-              type: "RIDE_MESSAGE",
-              rideId: String(ride._id),
-              conversationId: String(ride._id),
-              messageId: String(notification.messageId || message._id),
-              deepLink: `drewel://chat/ride?rideId=${String(ride._id)}`,
-              senderName: senderDisplay,
-            }
-          : {},
-        type: "RIDE_MESSAGE",
-      });
-    } else {
-      io.to(String(recipientId)).emit("notification:new", {
-        id: notification?._id ? String(notification._id) : "",
-        type: "RIDE_MESSAGE",
-        message: notification?.message || "",
-        read: Boolean(notification?.read),
-        data: notification?.data || { rideId: String(ride._id) },
-        createdAt: notification?.createdAt || new Date(),
-      });
-    }
-    return res.status(created ? 201 : 200).json({ success: true, message, idempotent: !created });
   } catch (error) { return sendError(res, error); }
 };
 
@@ -1102,51 +1136,7 @@ export const sendRideVoiceMessage = async (req, res) => {
     }
     uploadedFile = null; // Ownership transferred to the message row / cleanup.
 
-    io.to(String(ride.passengerId)).to(String(ride.driverId)).emit("ride:message", rideMessageEventPayload(message));
-    const { conversation, recipientId, notification } = await touchConversationWithMessage({
-      ride,
-      message,
-      participantRole,
-    });
-    await emitConversationUpdated(conversation);
-    const senderName =
-      participantRole === "passenger"
-        ? (conversation?.passengerName || "Passenger")
-        : (conversation?.driverName || "Driver");
-    const senderDisplay = String(senderName).split(/\s+/)[0] || "Drewel";
-    const pushTitle = `${senderDisplay} sent you a message`;
-    const pushBody = "🎤 Voice message";
-
-    if (String(recipientId) === String(notification?.userId)) {
-      emitNotificationNew(notification);
-      await sendPushToUser({
-        userId: recipientId,
-        title: pushTitle,
-        body: pushBody,
-        data: notification
-          ? {
-              id: String(notification._id),
-              type: "RIDE_MESSAGE",
-              rideId: String(ride._id),
-              conversationId: String(ride._id),
-              messageId: String(notification.messageId || message._id),
-              deepLink: `drewel://chat/ride?rideId=${String(ride._id)}`,
-              senderName: senderDisplay,
-              isVoice: "true",
-            }
-          : {},
-        type: "RIDE_MESSAGE",
-      });
-    } else {
-      io.to(String(recipientId)).emit("notification:new", {
-        id: notification?._id ? String(notification._id) : "",
-        type: "RIDE_MESSAGE",
-        message: notification?.message || "",
-        read: Boolean(notification?.read),
-        data: notification?.data || { rideId: String(ride._id) },
-        createdAt: notification?.createdAt || new Date(),
-      });
-    }
+    deliverRideMessageSideEffects({ ride, message, participantRole, voice: true });
 
     return res.status(created ? 201 : 200).json({
       success: true,

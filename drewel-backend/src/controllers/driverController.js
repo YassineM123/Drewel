@@ -210,30 +210,13 @@ const setDriverFiles = (driver, req, files = {}) => {
 };
 
 const ensureProfilePayload = (driver, files, body) => {
-  const requiredStrings = ["address", "contract_number", "license_company"];
-  for (const key of requiredStrings) {
-    if (!String(body?.[key] ?? "").trim()) {
-      return `${key} is required`;
-    }
-  }
+  const vehicleType = String(
+    body?.vehicle_type || body?.vehicleType || driver?.vehicleType || ""
+  ).trim();
+  const city = String(body?.city || driver?.city || "").trim();
 
-  const hasLicenseCar = Boolean(files.license_car?.[0] || driver.licenseCarUrl);
-  const hasLicenseDriver = Boolean(
-    files.license_driver?.[0] || driver.licenseDriverUrl
-  );
-  const hasProfileImage = Boolean(
-    files.profile_image?.[0] || driver.profileImageUrl
-  );
-  const hasIdDocument = Boolean(files.id_document?.[0] || driver.idDocumentUrl);
-  const hasPassportCopy = Boolean(
-    files.passport_copy?.[0] || driver.passportCopyUrl
-  );
-
-  if (!hasLicenseCar) return "license_car is required";
-  if (!hasLicenseDriver) return "license_driver is required";
-  if (!hasProfileImage) return "profile_image is required";
-  if (!hasIdDocument) return "id_document is required";
-  if (!hasPassportCopy) return "passport_copy is required";
+  if (!vehicleType) return "vehicle_type is required";
+  if (!city) return "city is required";
 
   return "";
 };
@@ -854,18 +837,20 @@ export const addDriverDetails = async (req, res) => {
       firstName: String(body.firstName || split.firstName || "").trim(),
       lastName: String(body.lastName || split.lastName || "").trim(),
       fullName: String(body.fullName || "").trim(),
-      address: body.address ?? "",
-      city: body.city ?? "",
-      vehicleType: body.vehicleType ?? "",
-      whatsappNumber: body.whatsappNumber ?? "",
-      lat: body.lat ?? 0,
-      long: body.long ?? 0,
+      address: typeof body.address === "string" ? body.address.trim() : "",
+      city: String(body.city ?? "").trim(),
+      vehicleType: String(body.vehicleType ?? "").trim(),
+      vehicleModel: String(body.vehicleModel ?? "").trim(),
+      registration: String(body.registration ?? "").trim(),
+      whatsappNumber: body.whatsappNumber ? String(body.whatsappNumber).trim() : phone,
+      lat: Number(body.lat) || 0,
+      long: Number(body.long) || 0,
       phone,
       countryCode: body.countryCode || "+1",
       email,
       password: hashedPassword,
-      contractNumber: body.contractNumber ?? "",
-      licenseCompany: body.licenseCompany ?? "",
+      contractNumber: typeof body.contractNumber === "string" ? body.contractNumber.trim() : "",
+      licenseCompany: typeof body.licenseCompany === "string" ? body.licenseCompany.trim() : "",
       basicRequestSubmittedAt: new Date(),
       approvedAt: new Date(),
       completedAt: new Date(),

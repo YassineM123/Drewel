@@ -15,8 +15,9 @@ const driverLogsSchema = new mongoose.Schema(
     phone: {
       type: String,
       required: true,
-      unique: true,
-      match: /^[6-9]\d{9}$/,
+      trim: true,
+      set: (value) => String(value ?? "").replace(/\D/g, ""),
+      match: /^\d{6,14}$/,
     },
     whatsappNumber: {
       type: String,
@@ -105,9 +106,14 @@ const driverLogsSchema = new mongoose.Schema(
     },
     email: {
       type: String,
+      trim: true,
+      lowercase: true,
       default: "",
-      match: /^[^\s@]+@[^\s@]+\.[^\s@]+$/,
-    }
+      validate: {
+        validator: (val) => !val || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(val),
+        message: "Invalid email format",
+      },
+    },
   },
   { timestamps: true }
 );

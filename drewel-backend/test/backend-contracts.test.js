@@ -23,10 +23,11 @@ import {
   parseDriverDiscoveryQuery,
   toAvailableDriverDto,
 } from "../src/utils/availableDrivers.js";
+import Driver from "../src/models/Driver.js";
+import Driverlogs from "../src/models/Driverlogs.js";
 
 const routeLayer = (router, path, method) =>
   router.stack.find((layer) => layer.route?.path === path && layer.route.methods?.[method]);
-
 test("available-driver filter only returns online approved unrestricted drivers", () => {
   const filter = buildAvailableDriverFilter({
     city: "  Abu+Dhabi  ",
@@ -488,4 +489,32 @@ test("trip requests are cancelled after supersede or driver offer", () => {
   assert.match(offerService, /RideMessage\.updateMany/);
   assert.match(offerService, /messageType:\s*"trip_request"/);
   assert.match(offerService, /cancellationReason:\s*"offer_sent"/);
+});
+
+test("driver schema permits empty string email and validates valid/invalid emails", () => {
+  const emptyEmailDriver = new Driver({ phone: "501234567", email: "" });
+  const emptyEmailErr = emptyEmailDriver.validateSync(["email", "phone"]);
+  assert.equal(emptyEmailErr, undefined);
+
+  const defaultEmailDriver = new Driver({ phone: "501234567" });
+  const defaultEmailErr = defaultEmailDriver.validateSync(["email", "phone"]);
+  assert.equal(defaultEmailErr, undefined);
+
+  const validEmailDriver = new Driver({ phone: "501234567", email: "driver@example.com" });
+  const validEmailErr = validEmailDriver.validateSync(["email", "phone"]);
+  assert.equal(validEmailErr, undefined);
+
+  const invalidEmailDriver = new Driver({ phone: "501234567", email: "not-an-email" });
+  const invalidEmailErr = invalidEmailDriver.validateSync(["email"]);
+  assert.ok(invalidEmailErr?.errors?.email);
+});
+
+test("driverlogs schema permits international phone numbers and empty email", () => {
+  const driverLogs = new Driverlogs({
+    driverId: "69ca8d07657eef3a66dd6a12",
+    phone: "501234567",
+    email: "",
+  });
+  const err = driverLogs.validateSync(["phone", "email"]);
+  assert.equal(err, undefined);
 });

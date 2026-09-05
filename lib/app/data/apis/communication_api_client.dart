@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:http/http.dart' as http;
@@ -29,6 +30,8 @@ class CommunicationApiClient {
       : _client = client ?? ApiInterceptorClient();
 
   final http.Client _client;
+  static const Duration _requestTimeout = Duration(seconds: 20);
+  static const Duration _multipartTimeout = Duration(seconds: 75);
 
   Future<Map<String, dynamic>> get(String url) => _send('GET', url);
 
@@ -82,11 +85,18 @@ class CommunicationApiClient {
         'The recording could not be read. Please record it again.',
       );
     }
-    final http.StreamedResponse streamedResponse =
-        await _client.send(request).timeout(const Duration(seconds: 60));
-    final http.Response response =
-        await http.Response.fromStream(streamedResponse);
-    return _decodeResponse(response);
+    try {
+      final http.StreamedResponse streamedResponse =
+          await _client.send(request).timeout(_multipartTimeout);
+      final http.Response response =
+          await http.Response.fromStream(streamedResponse);
+      return _decodeResponse(response);
+    } on TimeoutException {
+      throw const CommunicationApiException(
+        'The voice message upload timed out. Please retry.',
+        code: 'REQUEST_TIMEOUT',
+      );
+    }
   }
 
   Future<Map<String, dynamic>> _send(
@@ -109,20 +119,28 @@ class CommunicationApiClient {
       'Content-Type': 'application/json',
       ...?extraHeaders,
     };
-    final http.Response response = switch (method) {
-      'GET' => await _client.get(uri, headers: headers),
-      'PATCH' => await _client.patch(
-          uri,
-          headers: headers,
-          body: jsonEncode(body ?? const <String, dynamic>{}),
-        ),
-      _ => await _client.post(
-          uri,
-          headers: headers,
-          body: jsonEncode(body ?? const <String, dynamic>{}),
-        ),
-    };
-    return _decodeResponse(response);
+    try {
+      final http.Response response = await switch (method) {
+        'GET' => _client.get(uri, headers: headers),
+        'PATCH' => _client.patch(
+            uri,
+            headers: headers,
+            body: jsonEncode(body ?? const <String, dynamic>{}),
+          ),
+        _ => _client.post(
+            uri,
+            headers: headers,
+            body: jsonEncode(body ?? const <String, dynamic>{}),
+          ),
+      }
+          .timeout(_requestTimeout);
+      return _decodeResponse(response);
+    } on TimeoutException {
+      throw const CommunicationApiException(
+        'The server did not respond in time. Please retry.',
+        code: 'REQUEST_TIMEOUT',
+      );
+    }
   }
 
   Map<String, dynamic> _decodeResponse(http.Response response) {

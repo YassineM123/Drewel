@@ -2,6 +2,7 @@ import 'package:get/get.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../app/data/apis/api_constants/api_key_constants.dart';
+import '../app/modules/driver_register/controllers/driver_register_controller.dart';
 import '../app/routes/app_pages.dart';
 import 'common_widgets.dart';
 
@@ -28,6 +29,7 @@ class AuthSessionManager {
       final SharedPreferences preferences =
           await SharedPreferences.getInstance();
       await preferences.clear();
+      await DriverRegisterController.releaseVerificationController();
 
       if (Get.currentRoute != Routes.USER_TYPE) {
         await Get.offAllNamed(Routes.USER_TYPE);

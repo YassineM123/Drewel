@@ -301,8 +301,13 @@ isRestricted: {
     },
     email: {
       type: String,
+      trim: true,
+      lowercase: true,
       default: "",
-      match: /^[^\s@]+@[^\s@]+\.[^\s@]+$/,
+      validate: {
+        validator: (val) => !val || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(val),
+        message: "Invalid email format",
+      },
     },
     driverLogs: {
       type: mongoose.Schema.Types.ObjectId,

@@ -51,7 +51,15 @@ export const resolvePrincipal = async (userId) => {
 
 export const isRideContactAllowed = (ride, role, now = new Date()) => {
   if (ride.communicationBlockedAt) return false;
-  return true;
+  const participantRole = String(role || "").trim().toLowerCase();
+  const status = String(ride.status || "").trim().toLowerCase();
+  if (CONTACT_RIDE_STATUSES.includes(status)) return true;
+  if (status === "completed") {
+    if (participantRole === "driver") return true;
+    const contactEndsAt = ride.contactEndsAt ? new Date(ride.contactEndsAt) : null;
+    return Boolean(contactEndsAt && contactEndsAt.getTime() > now.getTime());
+  }
+  return false;
 };
 
 export const assertRideParticipant = async (principal, rideOrId, { requireContact = false } = {}) => {

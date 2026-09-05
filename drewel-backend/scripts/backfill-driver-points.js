@@ -5,7 +5,7 @@ import connectDB from "../src/connection.js";
 import { loadEnv } from "../src/utils/loadEnv.js";
 
 export const WELCOME_BONUS_IDEMPOTENCY_PREFIX = "welcome:";
-export const DEFAULT_WELCOME_DRIVER_POINTS = 100;
+export const DEFAULT_WELCOME_DRIVER_POINTS = 50;
 
 const asPositiveInteger = (value, fallback) => {
   const parsed = Number(value);

@@ -17,7 +17,7 @@ const positiveNumberFromEnv = (name, fallback) => {
 
 export const DEFAULT_WELCOME_DRIVER_POINTS = positiveSafeIntegerFromEnv(
   "WELCOME_DRIVER_POINTS",
-  1000,
+  50,
   { allowZero: true }
 );
 export const DEFAULT_RIDE_OFFER_POINTS_COST = positiveSafeIntegerFromEnv(

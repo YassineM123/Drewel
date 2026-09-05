@@ -7,10 +7,14 @@ import 'package:get/get.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../../common/image_pick_and_crop.dart';
+import '../../../../common/local_data.dart';
+import '../../../../common/text_styles.dart';
 import '../../../data/apis/api_constants/api_key_constants.dart';
 import '../../../data/apis/api_methods/api_methods.dart';
 import '../../../data/apis/api_models/get_add_driver_details_model.dart';
+import '../../../data/constants/string_constants.dart';
 import '../../../routes/app_pages.dart';
+import 'package:responsive_sizer/responsive_sizer.dart';
 
 class DriverRegisterController extends GetxController {
   final TextEditingController firstNameController = TextEditingController();
@@ -70,6 +74,12 @@ class DriverRegisterController extends GetxController {
   bool get isProfileSubmitted => profileRequestStatus.value != 'not_submitted';
   bool get isProfileLocked =>
       !isApproved || isProfilePending || isProfileApproved;
+
+  static Future<void> releaseVerificationController() async {
+    if (Get.isRegistered<DriverRegisterController>()) {
+      await Get.delete<DriverRegisterController>(force: true);
+    }
+  }
 
   @override
   void onInit() {
@@ -270,6 +280,10 @@ class DriverRegisterController extends GetxController {
         if (currentStatus == Routes.DRIVER_REGISTER ||
             currentStatus == Routes.DRIVER_COMPLETE_PROFILE) {
           Get.offNamed(Routes.DRIVER_HOME);
+          Future<void>.delayed(
+            Duration.zero,
+            releaseVerificationController,
+          );
         }
       });
       return;
@@ -325,7 +339,8 @@ class DriverRegisterController extends GetxController {
   Future<void> submitBasicRequest() async {
     if (!consentAccepted.value) {
       CommonWidgets.snackBarView(
-          title: 'Please accept the Terms of Service and Privacy Policy to continue.');
+          title:
+              'Please accept the Terms of Service and Privacy Policy to continue.');
       return;
     }
     final String firstName = firstNameController.text.trim();
@@ -402,20 +417,18 @@ class DriverRegisterController extends GetxController {
       return;
     }
 
-    if (address.isEmpty || contractNumber.isEmpty || licenseCompany.isEmpty) {
+    if (vehicleType.isEmpty) {
       CommonWidgets.snackBarView(
-        title: 'Address, contract number and license company are required',
+        title: 'Vehicle type is required',
       );
       return;
     }
 
-    for (int i = 0; i < documentConfig.length; i++) {
-      if (selectedFiles[i] == null && existingFileUrls[i].trim().isEmpty) {
-        CommonWidgets.snackBarView(
-          title: '${documentConfig[i]['label']} is required',
-        );
-        return;
-      }
+    if (city.isEmpty) {
+      CommonWidgets.snackBarView(
+        title: 'City is required',
+      );
+      return;
     }
 
     try {
@@ -526,6 +539,171 @@ class DriverRegisterController extends GetxController {
       return 'Your request is approved. Please complete your profile.';
     }
     return '';
+  }
+
+  void openVehicleTypeBottomSheet(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16.0)),
+      ),
+      backgroundColor: Colors.white,
+      builder: (BuildContext context) {
+        return Padding(
+          padding: EdgeInsets.symmetric(horizontal: 15.px, vertical: 12.px),
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: <Widget>[
+                Container(
+                  width: 40.px,
+                  height: 4.px,
+                  margin: EdgeInsets.only(bottom: 12.px),
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade300,
+                    borderRadius: BorderRadius.circular(2.px),
+                  ),
+                ),
+                Center(
+                  child: Text(
+                    StringConstants.selectvehicleType.tr,
+                    style: MyTextStyle.titleStyle18bb,
+                  ),
+                ),
+                SizedBox(height: 10.px),
+                ListView.builder(
+                  shrinkWrap: true,
+                  itemCount: LocalData().transportList.length,
+                  physics: const NeverScrollableScrollPhysics(),
+                  itemBuilder: (BuildContext context, int index) {
+                    final String name = (LocalData().transportList[index]['name'] ?? '').trim();
+                    final String image = LocalData().transportList[index]['image'] ?? '';
+                    return GestureDetector(
+                      onTap: () {
+                        typeController.text = name;
+                        Get.back();
+                        refreshTick.value++;
+                      },
+                      child: Container(
+                        margin: EdgeInsets.symmetric(vertical: 5.px),
+                        padding: EdgeInsets.symmetric(
+                            horizontal: 15.px, vertical: 10.px),
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(10.px),
+                          border: Border.all(
+                              color: Colors.black.withValues(alpha: 0.15)),
+                        ),
+                        child: Row(
+                          children: <Widget>[
+                            if (image.isNotEmpty)
+                              CommonWidgets.appIcons(
+                                assetName: image,
+                                height: 32.px,
+                                width: 32.px,
+                                color: Colors.black87,
+                              ),
+                            SizedBox(width: 12.px),
+                            Expanded(
+                              child: Text(
+                                name.tr,
+                                style: MyTextStyle.titleStyle16bb,
+                              ),
+                            ),
+                            if (typeController.text.trim() == name)
+                              Icon(Icons.check_circle,
+                                  color: Theme.of(context).primaryColor,
+                                  size: 20.px),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                ),
+                SizedBox(height: 10.px),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  void openCityBottomSheet(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16.0)),
+      ),
+      backgroundColor: Colors.white,
+      builder: (BuildContext context) {
+        return Padding(
+          padding: EdgeInsets.symmetric(horizontal: 15.px, vertical: 12.px),
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: <Widget>[
+                Container(
+                  width: 40.px,
+                  height: 4.px,
+                  margin: EdgeInsets.only(bottom: 12.px),
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade300,
+                    borderRadius: BorderRadius.circular(2.px),
+                  ),
+                ),
+                Center(
+                  child: Text(
+                    'city'.tr,
+                    style: MyTextStyle.titleStyle18bb,
+                  ),
+                ),
+                SizedBox(height: 10.px),
+                ListView.builder(
+                  shrinkWrap: true,
+                  itemCount: LocalData().cityList.length,
+                  physics: const NeverScrollableScrollPhysics(),
+                  itemBuilder: (BuildContext context, int index) {
+                    final String cityName = LocalData().cityList[index].replaceAll('\n', '').trim();
+                    return GestureDetector(
+                      onTap: () {
+                        cityController.text = cityName;
+                        Get.back();
+                        refreshTick.value++;
+                      },
+                      child: Container(
+                        margin: EdgeInsets.symmetric(vertical: 5.px),
+                        padding: EdgeInsets.symmetric(
+                            horizontal: 15.px, vertical: 12.px),
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(10.px),
+                          border: Border.all(
+                              color: Colors.black.withValues(alpha: 0.15)),
+                        ),
+                        child: Row(
+                          children: <Widget>[
+                            Expanded(
+                              child: Text(
+                                cityName,
+                                style: MyTextStyle.titleStyle16bb,
+                              ),
+                            ),
+                            if (cityController.text.trim() == cityName)
+                              Icon(Icons.check_circle,
+                                  color: Theme.of(context).primaryColor,
+                                  size: 20.px),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                ),
+                SizedBox(height: 10.px),
+              ],
+            ),
+          ),
+        );
+      },
+    );
   }
 
   @override

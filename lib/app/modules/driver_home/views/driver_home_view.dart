@@ -1,7 +1,5 @@
-import 'package:drewel/app/data/constants/icons_constant.dart';
-import 'package:drewel/app/data/constants/image_constants.dart';
-import 'package:drewel/app/data/constants/string_constants.dart';
 import 'package:drewel/app/data/apis/api_constants/api_key_constants.dart';
+import 'package:drewel/app/data/constants/image_constants.dart';
 import 'package:drewel/common/common_drawer.dart';
 import 'package:drewel/common/common_methods.dart';
 import 'package:drewel/common/drewel_app_bar.dart';
@@ -24,6 +22,7 @@ import '../../notification/widgets/notification_app_bar_button.dart';
 import '../../points/widgets/driver_points_indicator.dart';
 import '../../active_ride/widgets/active_ride_card.dart';
 import '../widgets/driver_home_bottom_bar.dart';
+import '../widgets/driver_location_search_bar.dart';
 
 class DriverHomeView extends GetView<DriverHomeController> {
   const DriverHomeView({super.key});
@@ -33,6 +32,15 @@ class DriverHomeView extends GetView<DriverHomeController> {
       controller.count.value;
       return PopScope<Object?>(
         canPop: false,
+        onPopInvokedWithResult: (bool didPop, Object? result) {
+          if (didPop) return;
+          if (controller.locationFocusNode.hasFocus ||
+              controller.placeSuggestions.isNotEmpty) {
+            controller.locationFocusNode.unfocus();
+            controller.clearPlaceSuggestions();
+            CommonMethods.unFocsKeyBoard();
+          }
+        },
         child: Scaffold(
             key: controller.scaffoldKey,
             appBar: DrewelAppBar(
@@ -91,6 +99,11 @@ class DriverHomeView extends GetView<DriverHomeController> {
                             child: DrewelWebMapFallback(
                               openStreetMap: DrewelOsmMap(
                                 center: controller.mapPosition,
+                                onTap: (_) {
+                                  controller.locationFocusNode.unfocus();
+                                  controller.clearPlaceSuggestions();
+                                  CommonMethods.unFocsKeyBoard();
+                                },
                                 markers: <DrewelOsmMarker>[
                                   DrewelOsmMarker(
                                     id: 'driver_location',
@@ -111,6 +124,11 @@ class DriverHomeView extends GetView<DriverHomeController> {
                                 zoomGesturesEnabled: true,
                                 tiltGesturesEnabled: true,
                                 myLocationButtonEnabled: false,
+                                onTap: (_) {
+                                  controller.locationFocusNode.unfocus();
+                                  controller.clearPlaceSuggestions();
+                                  CommonMethods.unFocsKeyBoard();
+                                },
                                 markers: {
                                   Marker(
                                       markerId:
@@ -144,10 +162,13 @@ class DriverHomeView extends GetView<DriverHomeController> {
                         ),
                         // My Location Button
                         Positioned(
-                          top: 80.px,
+                          top: 84.px,
                           right: 20.px,
                           child: GestureDetector(
                             onTap: () {
+                              controller.locationFocusNode.unfocus();
+                              controller.clearPlaceSuggestions();
+                              CommonMethods.unFocsKeyBoard();
                               controller.getCurrentLocation();
                             },
                             child: Container(
@@ -173,7 +194,7 @@ class DriverHomeView extends GetView<DriverHomeController> {
                           ),
                         ),
                         Positioned(
-                          top: 80.px,
+                          top: 84.px,
                           left: 20.px,
                           child: ConstrainedBox(
                             constraints: BoxConstraints(
@@ -183,136 +204,13 @@ class DriverHomeView extends GetView<DriverHomeController> {
                             child: const DriverPointsIndicator(),
                           ),
                         ),
-                        Padding(
-                          padding: EdgeInsets.symmetric(
-                              horizontal: 20.px, vertical: 20.px),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Column(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Container(
-                                    padding:
-                                        EdgeInsets.symmetric(horizontal: 10.px),
-                                    decoration: BoxDecoration(
-                                        color: primary3Color,
-                                        borderRadius:
-                                            BorderRadius.circular(12.px),
-                                        border: Border.all(
-                                            color:
-                                                Colors.black.withOpacity(0.1))),
-                                    child: Row(
-                                      children: [
-                                        CommonWidgets.appIcons(
-                                            assetName:
-                                                IconConstants.icStarLocation,
-                                            height: 20.px,
-                                            width: 20.px),
-                                        Expanded(
-                                          child: TextField(
-                                            controller:
-                                                controller.locationController,
-                                            focusNode:
-                                                controller.locationFocusNode,
-                                            style: MyTextStyle.titleStyle14b,
-                                            decoration: InputDecoration(
-                                              hintText: StringConstants
-                                                  .searchLocation,
-                                              border: InputBorder.none,
-                                              disabledBorder: InputBorder.none,
-                                              focusedBorder: InputBorder.none,
-                                              enabledBorder: InputBorder.none,
-                                              hintStyle:
-                                                  MyTextStyle.titleStyle14b,
-                                              contentPadding: EdgeInsets.zero,
-                                            ),
-                                            onChanged: controller
-                                                .onLocationTextChanged,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                  // Custom suggestions list
-                                  Obx(() {
-                                    if (controller.placeSuggestions.isEmpty) {
-                                      return const SizedBox.shrink();
-                                    }
-                                    return Container(
-                                      margin: EdgeInsets.only(top: 4.px),
-                                      decoration: BoxDecoration(
-                                        color: Colors.white,
-                                        borderRadius:
-                                            BorderRadius.circular(10.px),
-                                        boxShadow: [
-                                          BoxShadow(
-                                            color:
-                                                Colors.black.withOpacity(0.08),
-                                            blurRadius: 6,
-                                            offset: const Offset(0, 2),
-                                          ),
-                                        ],
-                                      ),
-                                      constraints: BoxConstraints(
-                                        maxHeight: 300
-                                            .px, // make suggestions list a bit taller
-                                      ),
-                                      child: ListView.separated(
-                                        shrinkWrap: true,
-                                        padding: EdgeInsets.zero,
-                                        itemCount:
-                                            controller.placeSuggestions.length,
-                                        separatorBuilder: (_, __) =>
-                                            const Divider(height: 1),
-                                        itemBuilder: (context, index) {
-                                          final prediction = controller
-                                              .placeSuggestions[index];
-                                          return InkWell(
-                                            onTap: () async {
-                                              await controller
-                                                  .clickOnLocation(prediction);
-                                              controller
-                                                  .clearPlaceSuggestions();
-                                              controller.locationFocusNode
-                                                  .unfocus();
-                                              CommonMethods.unFocsKeyBoard();
-                                            },
-                                            child: Padding(
-                                              padding: EdgeInsets.symmetric(
-                                                  horizontal: 12.px,
-                                                  vertical: 10.px),
-                                              child: Row(
-                                                children: [
-                                                  Icon(
-                                                      Icons.location_on_rounded,
-                                                      color: Colors.blueAccent,
-                                                      size: 20.px),
-                                                  SizedBox(width: 10.px),
-                                                  Expanded(
-                                                    child: Text(
-                                                      prediction.description ??
-                                                          '',
-                                                      style: TextStyle(
-                                                        fontSize: 14.px,
-                                                        fontWeight:
-                                                            FontWeight.w500,
-                                                        color: Colors.black87,
-                                                      ),
-                                                    ),
-                                                  ),
-                                                ],
-                                              ),
-                                            ),
-                                          );
-                                        },
-                                      ),
-                                    );
-                                  }),
-                                ],
-                              ),
-                            ],
+                        // Top Search Bar
+                        Positioned(
+                          top: 20.px,
+                          left: 20.px,
+                          right: 20.px,
+                          child: DriverLocationSearchBar(
+                            controller: controller,
                           ),
                         ),
                       ],

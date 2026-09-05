@@ -43,9 +43,9 @@ const createDryRunDependencies = ({ drivers, wallets = {}, transactions = {} }) 
 test("welcome points default safely and only accept positive integers", () => {
   assert.equal(resolveWelcomePoints({}), DEFAULT_WELCOME_DRIVER_POINTS);
   assert.equal(resolveWelcomePoints({ WELCOME_DRIVER_POINTS: "125" }), 125);
-  assert.equal(resolveWelcomePoints({ WELCOME_DRIVER_POINTS: "0" }), 100);
-  assert.equal(resolveWelcomePoints({ WELCOME_DRIVER_POINTS: "12.5" }), 100);
-  assert.equal(resolveWelcomePoints({ WELCOME_DRIVER_POINTS: "invalid" }), 100);
+  assert.equal(resolveWelcomePoints({ WELCOME_DRIVER_POINTS: "0" }), 50);
+  assert.equal(resolveWelcomePoints({ WELCOME_DRIVER_POINTS: "12.5" }), 50);
+  assert.equal(resolveWelcomePoints({ WELCOME_DRIVER_POINTS: "invalid" }), 50);
 });
 
 test("backfill eligibility includes every non-deleted driver account", () => {
@@ -209,8 +209,8 @@ test("applied backfill creates one wallet and one bonus across repeated runs", a
       },
       findOneAndUpdate: async () => {
         if (wallet.welcomeBonusGranted) return null;
-        wallet.availableBonusPoints += 100;
-        wallet.totalEarnedBonus += 100;
+        wallet.availableBonusPoints += 50;
+        wallet.totalEarnedBonus += 50;
         wallet.version += 1;
         wallet.welcomeBonusGranted = true;
         wallet.welcomeBonusGrantedAt = new Date("2026-07-29T00:00:00.000Z");
@@ -240,7 +240,7 @@ test("applied backfill creates one wallet and one bonus across repeated runs", a
   assert.equal(second.alreadyGranted, 1);
   assert.equal(walletCreates, 1);
   assert.equal(ledgerCreates, 1);
-  assert.equal(wallet.availableBonusPoints, 100);
+  assert.equal(wallet.availableBonusPoints, 50);
   assert.equal(transaction.idempotencyKey, "welcome:driver-1");
-  assert.equal(transaction.newAvailableBalance, 100);
+  assert.equal(transaction.newAvailableBalance, 50);
 });
