@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { getUserDetail } from "../utils/api";
+import { deleteUser } from "../api/domains/users";
 
 const formatDate = (value) => value ? new Intl.DateTimeFormat(undefined, {
   dateStyle: "medium",
@@ -50,6 +51,20 @@ const UserDetail = () => {
       .join(", ");
   }, [user]);
 
+  const handleDelete = async () => {
+    if (!window.confirm("Are you sure you want to completely delete this passenger account? All associated data will be removed.")) {
+      return;
+    }
+    try {
+      setLoading(true);
+      await deleteUser(id);
+      navigate("/users", { replace: true });
+    } catch (err) {
+      setError(err?.response?.data?.message || err?.message || "Failed to delete user.");
+      setLoading(false);
+    }
+  };
+
   if (loading) {
     return <main className="app-content requests-page"><div className="tile requests-detail-state" aria-live="polite"><div className="loader"/><span>Loading user profile...</span></div></main>;
   }
@@ -73,7 +88,10 @@ const UserDetail = () => {
           </span>
         </div>
       </div>
-      <button type="button" className="btn btn-outline-primary" disabled={loading} onClick={loadDetail}>Refresh</button>
+      <div className="flex items-center gap-2">
+        <button type="button" className="btn btn-outline-danger" disabled={loading} onClick={handleDelete}>Delete Account</button>
+        <button type="button" className="btn btn-outline-primary" disabled={loading} onClick={loadDetail}>Refresh</button>
+      </div>
     </header>
 
     <div className="request-detail-layout">

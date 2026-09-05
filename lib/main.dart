@@ -18,8 +18,13 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   final NotificationSoundService soundService = NotificationSoundService();
   final PushNotificationService pushService = PushNotificationService();
-  final SharedPreferences prefs = await SharedPreferences.getInstance();
-  final String savedLanguage = prefs.getString('app_language') ?? '';
+  String savedLanguage = '';
+  try {
+    final SharedPreferences prefs = await SharedPreferences.getInstance();
+    savedLanguage = prefs.getString('app_language') ?? '';
+  } catch (e) {
+    debugPrint('SharedPreferences init error in main: $e');
+  }
   WidgetsBinding.instance.addPostFrameCallback((_) {
     _startOptionalService(
       'Notification sounds',

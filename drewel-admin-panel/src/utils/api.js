@@ -263,3 +263,20 @@ export const addDriver = async (formData) => {
         throw error;
     }
 };
+
+export const deleteUser = async (userId) => {
+    if (!userId) {
+        throw new Error("User id is required.");
+    }
+    const response = await apiClient.delete(`${API_URL}/users/${encodeURIComponent(userId)}`);
+    return response.data;
+};
+
+export const deleteDriver = async (driverId) => {
+    if (!driverId) {
+        throw new Error("Driver id is required.");
+    }
+    const response = await apiClient.delete(`${API_URL}/driver/${encodeURIComponent(driverId)}`);
+    return response.data;
+};
+

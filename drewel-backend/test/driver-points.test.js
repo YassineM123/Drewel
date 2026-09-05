@@ -1423,3 +1423,21 @@ test("points routes and ledger expose no mutation/delete API", async () => {
   assert.doesNotMatch(driverRoutes + adminRoutes, /transactions\/:.*(?:delete|patch|put)/i);
   assert.match(transactionSource, /Point transaction records are append-only/);
 });
+
+test("wallet reads return existing server balance before attempting welcome grant", async () => {
+  const source = await import("node:fs/promises").then((fs) =>
+    fs.readFile(
+      new URL("../src/controllers/driverPointsController.js", import.meta.url),
+      "utf8"
+    )
+  );
+  const existingWalletIndex = source.indexOf("const existingWallet");
+  const grantIndex = source.indexOf("await grantWelcomeBonus");
+  const fallbackIndex = source.indexOf("POINTS_TRANSACTION_UNAVAILABLE");
+
+  assert.match(source, /DriverPointsWallet\.findOne\(\{\s*driverId: principal\.id/);
+  assert.ok(existingWalletIndex >= 0);
+  assert.ok(grantIndex > existingWalletIndex);
+  assert.ok(fallbackIndex > grantIndex);
+  assert.match(source, /wallet \?\?= await ensureWallet\(principal\.id\)/);
+});

@@ -2,10 +2,10 @@ import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Search, Shield, ShieldOff, AlertTriangle, Eye, EyeOff,
-  MessageSquare, Clock, ExternalLink, FileText, Download,
+  MessageSquare, Clock, ExternalLink, FileText, Download, Trash2,
 } from "lucide-react";
 import { getUserList } from "../utils/api";
-import { toggleUserRestriction } from "../api/domains/users";
+import { toggleUserRestriction, deleteUser } from "../api/domains/users";
 
 function maskEmail(e) { if (!e) return "N/A"; const [u, d] = e.split("@"); return (u?.slice(0, 2) || "") + "***@" + (d || ""); }
 function fmtRelative(iso) {
@@ -71,9 +71,10 @@ function EmptyState({ title, description }) {
   );
 }
 
-function ActionModal({ title, consequence, variant, onConfirm, onClose }) {
+function ActionModal({ title, consequence, variant, requiresReason = true, confirmLabel = "Confirm", onConfirm, onClose }) {
   const [reason, setReason] = useState("");
   const [loading, setLoading] = useState(false);
+  const canSubmit = !requiresReason || reason.trim().length > 0;
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
@@ -83,24 +84,26 @@ function ActionModal({ title, consequence, variant, onConfirm, onClose }) {
           <div className={`rounded-[10px] p-3.5 text-sm border ${variant === "danger" ? "bg-red-50 text-red-800 border-red-200" : "bg-sky-50 text-sky-800 border-blue-200"}`}>
             {consequence}
           </div>
-          <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-medium text-slate-700">Reason <span className="text-red-500">*</span></label>
-            <textarea value={reason} onChange={(e) => setReason(e.target.value)} rows={3}
-              placeholder="Provide a reason for this action…"
-              className="w-full bg-white border border-slate-200 rounded-[10px] p-3 text-sm text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-red-700/20 focus:border-red-400 resize-none" />
-          </div>
+          {requiresReason && (
+            <div className="flex flex-col gap-1.5">
+              <label className="text-sm font-medium text-slate-700">Reason <span className="text-red-500">*</span></label>
+              <textarea value={reason} onChange={(e) => setReason(e.target.value)} rows={3}
+                placeholder="Provide a reason for this action…"
+                className="w-full bg-white border border-slate-200 rounded-[10px] p-3 text-sm text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-red-700/20 focus:border-red-400 resize-none" />
+            </div>
+          )}
         </div>
         <div className="px-6 pb-6 flex justify-end gap-3">
           <button type="button" onClick={onClose}
             className="h-9 inline-flex items-center gap-2 px-3.5 rounded-[10px] border border-slate-200 bg-white text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-all">
             Cancel
           </button>
-          <button type="button" disabled={!reason.trim() || loading}
+          <button type="button" disabled={!canSubmit || loading}
             onClick={() => { setLoading(true); setTimeout(() => { setLoading(false); onConfirm(reason); }, 900); }}
             className={`h-9 inline-flex items-center gap-2 px-3.5 rounded-[10px] text-xs font-semibold text-white transition-all disabled:opacity-50
               ${variant === "danger" ? "bg-red-600 hover:bg-red-700" : "bg-[#BE1B2C] hover:bg-[#A31725]"}`}>
             {loading ? <span className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : null}
-            Confirm
+            {confirmLabel}
           </button>
         </div>
       </div>
@@ -152,6 +155,16 @@ function UserDetailDrawer({ user, onToast }) {
         : `${userName(user)}'s account has been restored.`);
     } catch (err) {
       onToast(err?.message || "Failed to update user status.");
+    }
+  };
+
+  const handleDelete = async () => {
+    setModal(null);
+    try {
+      await deleteUser(user._id);
+      onToast(`${userName(user)}'s account was completely deleted.`);
+    } catch (err) {
+      onToast(err?.message || "Failed to delete user account.");
     }
   };
 
@@ -264,6 +277,10 @@ function UserDetailDrawer({ user, onToast }) {
                   className="h-9 inline-flex items-center gap-2 px-3.5 rounded-[10px] border border-slate-200 bg-white text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-all">
                   <MessageSquare size={13} /> Contact User
                 </button>
+                <button type="button" onClick={() => setModal("delete")}
+                  className="col-span-2 h-9 inline-flex items-center justify-center gap-2 px-3.5 rounded-[10px] border border-red-200 bg-red-50 text-xs font-semibold text-red-700 hover:bg-red-100 transition-all">
+                  <Trash2 size={13} /> Delete Account Completely
+                </button>
               </div>
             </div>
           </>
@@ -286,6 +303,17 @@ function UserDetailDrawer({ user, onToast }) {
       )}
       {modal === "restore" && (
         <ActionModal title="Restore User Account" consequence="User's ability to book rides will be restored. They will be notified. This action is logged." variant="primary" onConfirm={(reason) => handleAction("restore", reason)} onClose={() => setModal(null)} />
+      )}
+      {modal === "delete" && (
+        <ActionModal
+          title="Delete User Account Completely"
+          consequence="Warning: This passenger account and all associated data will be completely deleted. The user will be able to register again as a brand new account from scratch."
+          variant="danger"
+          requiresReason={false}
+          confirmLabel="Delete Account Permanently"
+          onConfirm={handleDelete}
+          onClose={() => setModal(null)}
+        />
       )}
     </div>
   );

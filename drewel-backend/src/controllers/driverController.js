@@ -4,6 +4,7 @@ import Driver from "../models/Driver.js";
 import Ride from "../models/Ride.js";
 import DriverLogs from "../models/Driverlogs.js";
 import Admin from "../models/Admin.js";
+import DeviceToken from "../models/DeviceToken.js";
 import { sendResponse } from "../helpers/responseHelper.js";
 import { buildPublicAssetUrl } from "../utils/publicAssets.js";
 import { transitionDriverRequest } from "../services/driverRequestTransitionService.js";
@@ -112,7 +113,11 @@ export const buildProfileProposalSnapshot = (
 const isAdminUser = async (userId) => {
   if (!userId) return false;
   const admin = await Admin.findById(userId);
-  return !!admin && admin.role === "admin";
+  return (
+    !!admin &&
+    ["owner", "finance_admin", "admin"].includes(admin.role) &&
+    admin.isActive !== false
+  );
 };
 
 const canAccessDriver = async (req, driverId) => {
@@ -1393,12 +1398,16 @@ export const deleteDriver = async (req, res) => {
       reason: "DRIVER_DELETED",
     });
 
+    await Promise.allSettled([
+      DeviceToken.deleteMany({ userId: driverId }),
+    ]);
+
     return res.status(200).json({
       success: true,
       message: "Driver account deactivated successfully; request history was preserved",
       driver: offlineDriver || driver,
     });
   } catch (error) {
-    return res.status(500).json({ message: "Server error" });
+    return res.status(500).json({ success: false, message: "Server error", error: error.message });
   }
 };

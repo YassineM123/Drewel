@@ -4,10 +4,11 @@ import Swal from "sweetalert2";
 import PropTypes from "prop-types";
 import {
   ArrowLeft, CheckCircle2, XCircle, RotateCw, AlertTriangle,
-  FileText, Eye, Download, X, Clock, MapPin,
+  FileText, Eye, Download, X, Clock, MapPin, Trash2,
 } from "lucide-react";
 import SafeImage from "../components/SafeImage";
 import { updateDriverReviewStatus } from "../utils/api";
+import { deleteDriver } from "../api/domains/drivers";
 import { isTrustedApiAssetUrl, normalizeAssetUrl } from "../utils/media";
 import {
   approveProfileRequest,
@@ -258,6 +259,28 @@ const DriverDetail = () => {
       setLoading(false);
     }
   }, [id]);
+
+  const handleDeleteDriver = async () => {
+    const result = await Swal.fire({
+      title: "Delete Driver Account Completely?",
+      text: "Warning: This driver account and all associated documents will be permanently erased. If they sign up again, they will start from scratch.",
+      icon: "warning",
+      showCancelButton: true,
+      confirmButtonColor: "#d33",
+      cancelButtonColor: "#3085d6",
+      confirmButtonText: "Yes, delete permanently!",
+    });
+    if (!result.isConfirmed) return;
+    try {
+      setBusyAction("delete-driver");
+      await deleteDriver(id);
+      navigate("/drivers", { replace: true });
+    } catch (err) {
+      setToast({ message: err?.response?.data?.message || err?.message || "Failed to delete driver.", type: "error" });
+    } finally {
+      setBusyAction(null);
+    }
+  };
 
   useEffect(() => {
     if (id) loadDetail();
@@ -572,6 +595,11 @@ const DriverDetail = () => {
             <StatRow label="Status" value={<Badge variant={status} />} />
             <StatRow label="Approved by" value={request.approvedBy?.fullName || request.approvedByName || "—"} />
             <StatRow label="Completed" value={formatDate(request.completedAt)} />
+            <div className="mt-4 pt-3 border-t border-slate-100">
+              <Button variant="danger" size="sm" className="w-full" disabled={Boolean(busyAction)} loading={busyAction === "delete-driver"} icon={<Trash2 size={13} />} onClick={handleDeleteDriver}>
+                Delete Driver Completely
+              </Button>
+            </div>
           </Card>
 
           <Card className="p-5">

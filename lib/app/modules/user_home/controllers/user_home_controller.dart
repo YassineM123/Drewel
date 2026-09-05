@@ -2074,6 +2074,7 @@ class UserHomeController extends GetxController
           ApiKeyConstants.countryCode: loginModel.user?.countryCode ?? '',
           ApiKeyConstants.profileImage: loginModel.user?.profileImageUrl ?? '',
           ApiKeyConstants.fullName: loginModel.user?.fullName ?? '',
+          ApiKeyConstants.type: ApiKeyConstants.user,
         };
         print('User details loaded successfully');
       } else if (responseStatus == 401) {

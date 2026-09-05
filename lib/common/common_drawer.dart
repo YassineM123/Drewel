@@ -13,6 +13,7 @@ import 'package:responsive_sizer/responsive_sizer.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../app/modules/communication/controllers/call_state_controller.dart';
+import '../app/modules/driver_register/controllers/driver_register_controller.dart';
 import 'driver_online_service.dart';
 
 class CustomDrawer extends StatelessWidget {
@@ -134,10 +135,13 @@ class CustomDrawer extends StatelessWidget {
 
       SharedPreferences prefs = await SharedPreferences.getInstance();
       String? userId = prefs.getString(ApiKeyConstants.userId);
-      String? userType = userData[ApiKeyConstants.type];
+      String? userType = userData[ApiKeyConstants.type] ??
+          prefs.getString(ApiKeyConstants.type);
 
       if (userId == null || userId.isEmpty) {
-        Get.back(); // Close loading
+        if (Get.isDialogOpen ?? false) {
+          Get.back(); // Close loading
+        }
         CommonWidgets.snackBarView(title: 'user_id_not_found'.tr);
         return;
       }
@@ -155,20 +159,25 @@ class CustomDrawer extends StatelessWidget {
         success = response?.success ?? false;
       }
 
-      Get.back(); // Close loading
+      if (Get.isDialogOpen ?? false) {
+        Get.back(); // Close loading
+      }
 
       if (success) {
         // Clear preferences and navigate to user type screen
         await _clearRuntimeSession();
         await prefs.clear();
+        await DriverRegisterController.releaseVerificationController();
         CommonWidgets.snackBarView(
             title: 'account_deleted_success'.tr, success: true);
-        Get.offNamedUntil(Routes.USER_TYPE, (routes) => false);
+        Get.offAllNamed(Routes.USER_TYPE);
       } else {
         CommonWidgets.snackBarView(title: 'account_delete_failed'.tr);
       }
     } catch (e) {
-      Get.back(); // Close loading if open
+      if (Get.isDialogOpen ?? false) {
+        Get.back(); // Close loading if open
+      }
       CommonWidgets.snackBarView(title: 'something_went_wrong'.tr);
       print('Delete account error: $e');
     }

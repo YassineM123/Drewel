@@ -63,56 +63,68 @@ class SplashController extends GetxController with GetTickerProviderStateMixin {
   }
 
   void manageSession() async {
-    await Future.delayed(const Duration(seconds: 2));
-    SharedPreferences prefs = await SharedPreferences.getInstance();
+    try {
+      await Future.delayed(const Duration(seconds: 2));
+      final SharedPreferences prefs = await SharedPreferences.getInstance();
+      final String userId =
+          prefs.getString(ApiKeyConstants.userId)?.trim() ?? '';
 
-    if (prefs.getString(ApiKeyConstants.userId) != null) {
-      if (!await AuthSessionManager.hasStoredSession()) {
-        await AuthSessionManager.clearExpiredSession(showMessage: false);
-        return;
-      }
-      if (prefs.getString(ApiKeyConstants.type) == ApiKeyConstants.user) {
-        int? responseStatus;
-        await ApiMethods.getCurrentUserApi(
-          checkResponse: (int status) => responseStatus = status,
-        );
-        if (responseStatus == 401) {
+      if (userId.isNotEmpty) {
+        if (!await AuthSessionManager.hasStoredSession()) {
           await AuthSessionManager.clearExpiredSession(showMessage: false);
           return;
         }
-        Get.offNamed(Routes.USER_REGISTER);
-      } else {
-        final String driverId = prefs.getString(ApiKeyConstants.userId) ?? '';
-        AddDriverDetailModel? driverModel;
-        int? responseStatus;
-        if (driverId.isNotEmpty) {
-          driverModel = await ApiMethods.getDriverDetailsApi(
-            driverId: driverId,
-            checkResponse: (int status) => responseStatus = status,
-          );
-        }
-        if (responseStatus == 401) {
-          await AuthSessionManager.clearExpiredSession(showMessage: false);
-          return;
-        }
-
-        final String status = _resolveDriverStatus(
-          driverModel?.driver,
-          prefs.getString(ApiKeyConstants.driverStatus),
-        );
-        if (status.isNotEmpty) {
-          prefs.setString(ApiKeyConstants.driverStatus, status);
-        }
-
-        if (status == ApiKeyConstants.completed) {
-          Get.offNamed(Routes.DRIVER_HOME);
-        } else if (status == ApiKeyConstants.approvedStatus) {
-          Get.offNamed(Routes.DRIVER_COMPLETE_PROFILE);
+        if (prefs.getString(ApiKeyConstants.type) == ApiKeyConstants.user) {
+          int? responseStatus;
+          try {
+            await ApiMethods.getCurrentUserApi(
+              checkResponse: (int status) => responseStatus = status,
+            );
+          } catch (e) {
+            debugPrint('Splash current user check error: $e');
+          }
+          if (responseStatus == 401) {
+            await AuthSessionManager.clearExpiredSession(showMessage: false);
+            return;
+          }
+          Get.offNamed(Routes.USER_REGISTER);
         } else {
-          Get.offNamed(Routes.DRIVER_REGISTER);
+          AddDriverDetailModel? driverModel;
+          int? responseStatus;
+          try {
+            driverModel = await ApiMethods.getDriverDetailsApi(
+              driverId: userId,
+              checkResponse: (int status) => responseStatus = status,
+            );
+          } catch (e) {
+            debugPrint('Splash driver details check error: $e');
+          }
+          if (responseStatus == 401) {
+            await AuthSessionManager.clearExpiredSession(showMessage: false);
+            return;
+          }
+
+          final String status = _resolveDriverStatus(
+            driverModel?.driver,
+            prefs.getString(ApiKeyConstants.driverStatus),
+          );
+          if (status.isNotEmpty) {
+            prefs.setString(ApiKeyConstants.driverStatus, status);
+          }
+
+          if (status == ApiKeyConstants.completed) {
+            Get.offNamed(Routes.DRIVER_HOME);
+          } else if (status == ApiKeyConstants.approvedStatus) {
+            Get.offNamed(Routes.DRIVER_COMPLETE_PROFILE);
+          } else {
+            Get.offNamed(Routes.DRIVER_REGISTER);
+          }
         }
+      } else {
+        Get.offAndToNamed(Routes.USER_TYPE);
       }
-    } else {
+    } catch (e) {
+      debugPrint('Splash manageSession error: $e');
       Get.offAndToNamed(Routes.USER_TYPE);
     }
   }

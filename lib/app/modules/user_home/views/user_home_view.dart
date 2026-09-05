@@ -1,5 +1,6 @@
 import 'package:drewel/app/data/apis/api_models/get_all_driver_model.dart';
 import 'package:drewel/app/data/apis/api_models/active_ride_model.dart';
+import 'package:drewel/app/data/apis/api_constants/api_key_constants.dart';
 import 'package:flutter/material.dart';
 
 import 'package:get/get.dart';
@@ -166,7 +167,10 @@ class _UserHomeViewState extends State<UserHomeView> {
           ),
           endDrawer: Obx(
             () => CustomDrawer(
-              userData: Map<String, String>.from(controller.userData),
+              userData: <String, String>{
+                ...controller.userData,
+                ApiKeyConstants.type: ApiKeyConstants.user,
+              },
             ),
           ),
           resizeToAvoidBottomInset: false,

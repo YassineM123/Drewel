@@ -3,10 +3,10 @@ import { useNavigate } from "react-router-dom";
 import {
   Search, Star, Eye, EyeOff, CheckCircle, XCircle,
   ShieldOff, Shield, MessageSquare, Plus, AlertTriangle,
-  Navigation, ExternalLink, FileText, Clock,
+  Navigation, ExternalLink, FileText, Clock, Trash2,
 } from "lucide-react";
 import { getDriverList, updateDriverReviewStatus } from "../utils/api";
-import { addDriver, getDriverDetail, updateDriverRestriction } from "../api/domains/drivers";
+import { addDriver, getDriverDetail, updateDriverRestriction, deleteDriver } from "../api/domains/drivers";
 import { getPointsAccess } from "../utils/pointsPermissions";
 
 function maskEmail(e) { if (!e) return "N/A"; const [u, d] = e.split("@"); return (u?.slice(0, 2) || "") + "***@" + (d || ""); }
@@ -286,6 +286,9 @@ function DriverDetailDrawer({ driver, onToast, onChanged }) {
       } else if (action === "restore") {
         await updateDriverRestriction(d._id, "restore", { reason: reason || "" });
         onToast("Driver account restored. They can now accept rides again.");
+      } else if (action === "delete") {
+        await deleteDriver(d._id);
+        onToast("Driver account completely deleted.");
       }
       onChanged?.();
     } catch (error) {
@@ -455,6 +458,10 @@ function DriverDetailDrawer({ driver, onToast, onChanged }) {
                   className="h-9 inline-flex items-center gap-2 px-3.5 rounded-[10px] border border-slate-200 bg-white text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-all">
                   <ExternalLink size={13} /> Full Detail Page
                 </button>
+                <button type="button" onClick={() => setModal("delete")}
+                  className="col-span-2 h-9 inline-flex items-center justify-center gap-2 px-3.5 rounded-[10px] border border-red-200 bg-red-50 text-xs font-semibold text-red-700 hover:bg-red-100 transition-all">
+                  <Trash2 size={13} /> Delete Driver Completely
+                </button>
               </div>
             </div>
           </>
@@ -538,6 +545,17 @@ function DriverDetailDrawer({ driver, onToast, onChanged }) {
       )}
       {modal === "restore" && (
         <ActionModal title="Restore Driver Account" consequence="Driver's account will be reinstated. They can accept rides again. This action is logged." variant="primary" requiresReason confirmLabel="Restore Account" onConfirm={(r) => handleAction("restore", r)} onClose={() => setModal(null)} />
+      )}
+      {modal === "delete" && (
+        <ActionModal
+          title="Delete Driver Account Completely"
+          consequence="Warning: This driver account and all associated documents will be permanently deleted. The driver will be able to register again from scratch as a brand new account."
+          variant="danger"
+          requiresReason={false}
+          confirmLabel="Delete Driver Permanently"
+          onConfirm={(r) => handleAction("delete", r)}
+          onClose={() => setModal(null)}
+        />
       )}
     </div>
   );

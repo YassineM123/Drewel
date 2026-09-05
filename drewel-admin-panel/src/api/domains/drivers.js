@@ -68,6 +68,12 @@ export const addDriver = async (formData, signal) => {
   return data.driver || data;
 };
 
+/** Delete driver — DELETE /api/driver/:id */
+export const deleteDriver = async (driverId, signal) => {
+  const data = await apiClient.delete(`/driver/${encodeURIComponent(driverId)}`, { signal });
+  return data;
+};
+
 export const driversErrorMessage = (error, fallback = "Unable to load drivers.") =>
   error?.response?.data?.message || error?.message || fallback;
 

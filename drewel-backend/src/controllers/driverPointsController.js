@@ -1,4 +1,5 @@
 import Driver from "../models/Driver.js";
+import DriverPointsWallet from "../models/DriverPointsWallet.js";
 import PointTransaction, {
   POINT_TRANSACTION_TYPES,
 } from "../models/PointTransaction.js";
@@ -44,11 +45,25 @@ export const getMyPointsWallet = async (req, res) => {
   try {
     const principal = await requireDriver(req);
     const driver = await Driver.findById(principal.id);
-    await grantWelcomeBonus(driver, { source: "wallet_access" });
-    const [wallet, settings] = await Promise.all([
-      ensureWallet(principal.id),
-      PointsSettings.getEffective(),
-    ]);
+    const existingWallet = await DriverPointsWallet.findOne({
+      driverId: principal.id,
+    });
+    let wallet = existingWallet;
+    if (!wallet?.welcomeBonusGranted) {
+      try {
+        const bonus = await grantWelcomeBonus(driver, { source: "wallet_access" });
+        wallet = bonus.wallet;
+      } catch (error) {
+        if (error?.code !== "POINTS_TRANSACTION_UNAVAILABLE" || !wallet) {
+          throw error;
+        }
+        console.warn(
+          `Serving existing driver wallet without welcome grant because transactions are unavailable for driver ${principal.id}`
+        );
+      }
+    }
+    const settings = await PointsSettings.getEffective();
+    wallet ??= await ensureWallet(principal.id);
     res.set("Cache-Control", "no-store");
     return res.json({
       success: true,

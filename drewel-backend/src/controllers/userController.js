@@ -18,6 +18,7 @@ import PointsSettings from "../models/PointsSettings.js";
 import SavedPlace from "../models/SavedPlace.js";
 import SupportReport from "../models/SupportReport.js";
 import UserPreference from "../models/UserPreference.js";
+import DeviceToken from "../models/DeviceToken.js";
 import generateOtp from "../helpers/generateOtp.js";
 import { sendOtpUsingTwilio } from "../utils/sendOtp.js";
 import { serveUploadedFile } from "../utils/fileServing.js";
@@ -70,7 +71,11 @@ const getPhoneCandidates = (value = "", countryCode = "") => {
 const isAdminUser = async (userId) => {
   if (!userId) return false;
   const admin = await Admin.findById(userId);
-  return !!admin && admin.role === "admin";
+  return (
+    !!admin &&
+    ["owner", "finance_admin", "admin"].includes(admin.role) &&
+    admin.isActive !== false
+  );
 };
 
 const PRIVATE_DRIVER_DOCUMENT_FIELDS = [
@@ -473,6 +478,13 @@ export const deleteUser = async (req, res) => {
     if (!deletedUser) {
       return sendResponse(res, 404, false, "User not found");
     }
+
+    await Promise.allSettled([
+      DeviceToken.deleteMany({ userId: id }),
+      SavedPlace.deleteMany({ userId: id }),
+      UserPreference.deleteMany({ userId: id }),
+    ]);
+
     sendResponse(res, 200, true, "User deleted successfully");
   } catch (error) {
     sendResponse(res, 500, false, "Failed to delete user", error.message);

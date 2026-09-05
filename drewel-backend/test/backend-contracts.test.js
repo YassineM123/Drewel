@@ -518,3 +518,36 @@ test("driverlogs schema permits international phone numbers and empty email", ()
   const err = driverLogs.validateSync(["phone", "email"]);
   assert.equal(err, undefined);
 });
+
+test("user delete endpoint requires authentication and supports admin roles and token cleanup", () => {
+  const layer = routeLayer(userRoutes, "/:id", "delete");
+  assert.ok(layer);
+  assert.deepEqual(layer.route.stack.map((handler) => handler.handle.name), [
+    "requireSignIn",
+    "deleteUser",
+  ]);
+
+  const userController = readFileSync(
+    new URL("../src/controllers/userController.js", import.meta.url),
+    "utf8"
+  );
+  assert.match(userController, /\["owner",\s*"finance_admin",\s*"admin"\]/);
+  assert.match(userController, /DeviceToken\.deleteMany/);
+});
+
+test("driver delete endpoint requires authentication and supports admin roles and token cleanup", () => {
+  const layer = routeLayer(driverRoutes, "/:driverId", "delete");
+  assert.ok(layer);
+  assert.deepEqual(layer.route.stack.map((handler) => handler.handle.name), [
+    "requireSignIn",
+    "deleteDriver",
+  ]);
+
+  const driverController = readFileSync(
+    new URL("../src/controllers/driverController.js", import.meta.url),
+    "utf8"
+  );
+  assert.match(driverController, /\["owner",\s*"finance_admin",\s*"admin"\]/);
+  assert.match(driverController, /DeviceToken\.deleteMany/);
+});
+
