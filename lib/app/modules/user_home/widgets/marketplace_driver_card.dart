@@ -320,7 +320,7 @@ class _ViewProfileButton extends StatelessWidget {
                 ),
                 const SizedBox(width: 4),
                 Text(
-                  'Profile',
+                  'profile'.tr,
                   style: MyTextStyle.titleStyle11b.copyWith(
                     color: enabled ? primaryColor : Colors.grey,
                     fontWeight: FontWeight.w600,

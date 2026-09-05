@@ -38,33 +38,48 @@ class DriverPointsWallet {
   final double? pointsPerAED;
   final double? equivalentAED;
 
-  factory DriverPointsWallet.fromJson(Map<String, dynamic> json) =>
-      DriverPointsWallet(
-        availablePoints: _integer(json['availablePoints']),
-        reservedPoints: _integer(json['reservedPoints']),
-        purchasedPoints: _integer(json['availablePurchasedPoints']),
-        bonusPoints: _integer(json['availableBonusPoints']),
-        equivalentAvailableRides: _integer(json['equivalentAvailableRides']),
-        offerPointsCost: _integer(json['offerPointsCost']),
-        availablePointsAfterOfferReservation:
-            json['availablePointsAfterOfferReservation'] == null
-                ? null
-                : _integer(json['availablePointsAfterOfferReservation']),
-        canSendOffer: json['canSendOffer'] == true,
-        balanceState: (json['balanceState'] ?? 'normal').toString(),
-        version: _integer(json['version']),
-        welcomeBonusGranted: json['welcomeBonusGranted'] == true,
-        welcomeBonusGrantedAt: _date(json['welcomeBonusGrantedAt']),
-        commissionRate: json['commissionRate'] is num
-            ? (json['commissionRate'] as num).toDouble()
-            : null,
-        pointsPerAED: json['pointsPerAED'] is num
-            ? (json['pointsPerAED'] as num).toDouble()
-            : null,
-        equivalentAED: json['equivalentAED'] is num
-            ? (json['equivalentAED'] as num).toDouble()
-            : null,
-      );
+  factory DriverPointsWallet.fromJson(Map<String, dynamic> json) {
+    final int available = _integer(json['availablePoints']);
+    final int reserved = _integer(json['reservedPoints']);
+    final int purchased = _integer(json['availablePurchasedPoints']);
+    final int bonus = _integer(json['availableBonusPoints']);
+    final int offerCost = json['offerPointsCost'] != null
+        ? _integer(json['offerPointsCost'])
+        : 20;
+    final int? afterRes = json['availablePointsAfterOfferReservation'] != null
+        ? _integer(json['availablePointsAfterOfferReservation'])
+        : (available >= offerCost ? available - offerCost : null);
+    final bool canSend = json['canSendOffer'] != null
+        ? json['canSendOffer'] == true
+        : (available >= offerCost);
+    final int rides = json['equivalentAvailableRides'] != null
+        ? _integer(json['equivalentAvailableRides'])
+        : (offerCost > 0 ? (available ~/ offerCost) : 0);
+
+    return DriverPointsWallet(
+      availablePoints: available,
+      reservedPoints: reserved,
+      purchasedPoints: purchased,
+      bonusPoints: bonus,
+      equivalentAvailableRides: rides,
+      offerPointsCost: offerCost,
+      availablePointsAfterOfferReservation: afterRes,
+      canSendOffer: canSend,
+      balanceState: (json['balanceState'] ?? (available == 0 ? 'zero' : 'normal')).toString(),
+      version: _integer(json['version']),
+      welcomeBonusGranted: json['welcomeBonusGranted'] == true,
+      welcomeBonusGrantedAt: _date(json['welcomeBonusGrantedAt']),
+      commissionRate: json['commissionRate'] is num
+          ? (json['commissionRate'] as num).toDouble()
+          : null,
+      pointsPerAED: json['pointsPerAED'] is num
+          ? (json['pointsPerAED'] as num).toDouble()
+          : null,
+      equivalentAED: json['equivalentAED'] is num
+          ? (json['equivalentAED'] as num).toDouble()
+          : null,
+    );
+  }
 }
 
 class PointTransaction {

@@ -546,7 +546,7 @@ class _RideActionSheet extends StatelessWidget {
                           borderRadius: BorderRadius.circular(10),
                         ),
                         child: Text(
-                          'Pickup PIN: ${ride.pickupPin}',
+                          '${'pickup_pin'.tr}: ${ride.pickupPin}',
                           textAlign: TextAlign.center,
                           style:
                               Theme.of(context).textTheme.titleLarge?.copyWith(
@@ -587,8 +587,8 @@ class _RideActionSheet extends StatelessWidget {
                 ] else if (ride.rideStatus ==
                     RideStatus.driverArrived) ...<Widget>[
                   const SizedBox(height: 10),
-                  const Text(
-                    'The driver is waiting for pickup confirmation.',
+                  Text(
+                    'driver_waiting_for_pickup'.tr,
                     textAlign: TextAlign.center,
                   ),
                 ],
@@ -703,7 +703,7 @@ class _RideReviewSheetState extends State<_RideReviewSheet> {
                 children: <Widget>[
                   Expanded(
                     child: Text(
-                      'Review $name',
+                      'review_user'.trParams({'name': name}),
                       style: Theme.of(context)
                           .textTheme
                           .titleLarge
@@ -711,7 +711,7 @@ class _RideReviewSheetState extends State<_RideReviewSheet> {
                     ),
                   ),
                   IconButton(
-                    tooltip: 'Close',
+                    tooltip: 'close'.tr,
                     onPressed: () => Navigator.of(context).pop(false),
                     icon: const Icon(Icons.close_rounded),
                   ),

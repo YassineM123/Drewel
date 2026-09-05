@@ -547,8 +547,6 @@ const initialDriverForm = {
   firstName: "",
   lastName: "",
   phone: "",
-  email: "",
-  password: "",
   countryCode: "+971",
   vehicleType: "",
   vehicleModel: "",
@@ -573,7 +571,6 @@ function AddDriverDrawer({ onClose, onCreated, onToast }) {
     !form.firstName.trim() ||
     !form.lastName.trim() ||
     form.phone.replace(/\D/g, "").length < 6 ||
-    !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim()) ||
     !form.vehicleType.trim() ||
     !form.city.trim();
 
@@ -614,8 +611,6 @@ function AddDriverDrawer({ onClose, onCreated, onToast }) {
           <Field label="Last name" value={form.lastName} onChange={set("lastName")} required />
           <Field label="Country code" value={form.countryCode} onChange={set("countryCode")} required />
           <Field label="Phone" value={form.phone} onChange={set("phone")} required inputMode="tel" />
-          <Field label="Email" value={form.email} onChange={set("email")} required type="email" />
-          <Field label="Password" value={form.password} onChange={set("password")} type="password" />
           <Field label="Vehicle type" value={form.vehicleType} onChange={set("vehicleType")} required />
           <Field label="Vehicle model" value={form.vehicleModel} onChange={set("vehicleModel")} />
           <Field label="Plate number" value={form.registration} onChange={set("registration")} />

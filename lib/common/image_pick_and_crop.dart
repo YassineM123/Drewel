@@ -72,11 +72,10 @@ class ImagePickerAndCropper {
               },
             ),
           ],
-          title: Text(StringConstants.selectImage,
+          title: Text(StringConstants.selectImage.tr,
               style: MyTextStyle.titleStyle18bb),
           content: Text(
-            'Document image size should be below 5 MB',
-            //StringConstants.chooseImageFromTheOptionsBelow,
+            'document_image_size_limit'.tr,
             style: MyTextStyle.titleStyle14bb,
           ),
         );
@@ -92,7 +91,7 @@ class ImagePickerAndCropper {
           final double sizeInMb = bytes / (1024 * 1024);
           if (sizeInMb > 5.0) {
             CommonWidgets.snackBarView(
-                title: "Image size should be less than 5 MB");
+                title: 'image_size_less_than_5mb'.tr);
             return null;
           }
           return pickedFile;

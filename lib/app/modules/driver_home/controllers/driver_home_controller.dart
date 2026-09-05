@@ -552,10 +552,6 @@ class DriverHomeController extends GetxController with WidgetsBindingObserver {
     });
   }
 
-  static const Duration _placesHttpTimeout = Duration(seconds: 10);
-
-  /// Shared GET helper for Places/Geocoding HTTP calls: a timeout keeps a
-  /// slow/unreachable Google endpoint from hanging search indefinitely.
   /// Fetch autocomplete suggestions (Google Places + OSM fallback)
   Future<void> _fetchPlaceSuggestions(String input) async {
     final List<Prediction> results =

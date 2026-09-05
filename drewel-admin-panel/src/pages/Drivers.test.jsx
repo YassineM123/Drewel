@@ -85,7 +85,6 @@ describe("Drivers admin", () => {
     await userEvent.type(screen.getByLabelText(/first name/i), "Sami");
     await userEvent.type(screen.getByLabelText(/last name/i), "Driver");
     await userEvent.type(screen.getByLabelText(/^phone/i), "501234567");
-    await userEvent.type(screen.getByLabelText(/email/i), "sami@example.com");
     await userEvent.type(screen.getByLabelText(/vehicle type/i), "Pickup");
     await userEvent.type(screen.getByLabelText(/^city/i), "Dubai");
     await userEvent.click(screen.getByRole("button", { name: /create driver/i }));

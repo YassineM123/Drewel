@@ -1,6 +1,7 @@
 import 'package:drewel/app/data/apis/api_models/passenger_account_models.dart';
 import 'package:drewel/common/colors.dart';
 import 'package:flutter/material.dart';
+import 'package:get/get.dart';
 
 class LegalDocumentBody extends StatelessWidget {
   const LegalDocumentBody({super.key, required this.legal});
@@ -103,6 +104,9 @@ class _LegalHeader extends StatelessWidget {
   final String? lastUpdated;
   final int? sectionCount;
 
+  static const String _reviewPromptFallback =
+      'Please review this document carefully before using Drewel services.';
+
   @override
   Widget build(BuildContext context) => Container(
         padding: const EdgeInsets.all(18),
@@ -141,9 +145,9 @@ class _LegalHeader extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 10),
-            const Text(
-              'Please review this document carefully before using Drewel services.',
-              style: TextStyle(
+            Text(
+              _translatedReviewPrompt,
+              style: const TextStyle(
                 color: text2Color,
                 fontSize: 14,
                 height: 1.45,
@@ -173,6 +177,12 @@ class _LegalHeader extends StatelessWidget {
           ],
         ),
       );
+
+  String get _translatedReviewPrompt {
+    const String key = 'please_review_document_carefully';
+    final String translated = key.tr;
+    return translated == key ? _reviewPromptFallback : translated;
+  }
 }
 
 class _MetaPill extends StatelessWidget {

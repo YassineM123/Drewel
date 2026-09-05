@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:drewel/app/data/apis/api_models/driver_points_models.dart';
+import 'package:drewel/app/data/constants/app_translations.dart';
 import 'package:drewel/app/modules/points/controllers/driver_points_controller.dart';
 import 'package:drewel/app/modules/points/points_translations.dart';
 import 'package:drewel/app/modules/points/widgets/trip_offer_points.dart';
@@ -11,6 +12,23 @@ import 'package:get/get.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'points_test_fakes.dart';
+
+class _TestTranslations extends Translations {
+  final PointsTranslations _points = PointsTranslations();
+  final AppTranslations _app = AppTranslations();
+
+  @override
+  Map<String, Map<String, String>> get keys {
+    final Map<String, Map<String, String>> result = <String, Map<String, String>>{};
+    for (final String loc in <String>['en', 'ar']) {
+      result[loc] = <String, String>{
+        ...(_points.keys[loc] ?? <String, String>{}),
+        ...(_app.keys[loc] ?? <String, String>{}),
+      };
+    }
+    return result;
+  }
+}
 
 const TripOfferDraft _draft = TripOfferDraft(
   contactRideId: 'ride-contact-1',
@@ -207,7 +225,7 @@ void main() {
   testWidgets('offer states show release, expiration and ride charge messages',
       (tester) async {
     await tester.pumpWidget(GetMaterialApp(
-      translations: PointsTranslations(),
+      translations: _TestTranslations(),
       locale: const Locale('en'),
       home: const Scaffold(
         body: Column(

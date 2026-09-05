@@ -31,6 +31,7 @@ export const dispatchNextPointsOutboxEvent = async () => {
   if (!event) return false;
 
   try {
+    const { notification } = event.payload || {};
     let storedNotification = null;
     if (notification?.message) {
       storedNotification = await Notification.findOneAndUpdate(

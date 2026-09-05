@@ -121,7 +121,7 @@ class SupportChatView extends GetView<SupportChatController> {
           textInputAction: TextInputAction.send,
           onFieldSubmitted: (_) => _submitMessage(),
           decoration: InputDecoration(
-            hintText: 'Type a message',
+            hintText: 'type_a_message'.tr,
             hintStyle: MyTextStyle.titleStyle16b.copyWith(
               color: Colors.grey.shade600,
             ),
@@ -188,7 +188,7 @@ class SupportChatView extends GetView<SupportChatController> {
             ),
             SizedBox(height: 16.px),
             Text(
-              'Loading messages...',
+              'loading_messages'.tr,
               style: MyTextStyle.titleStyle14b,
             ),
           ],
@@ -209,12 +209,12 @@ class SupportChatView extends GetView<SupportChatController> {
             ),
             SizedBox(height: 16.px),
             Text(
-              'No messages yet',
+              'no_messages_yet'.tr,
               style: MyTextStyle.titleStyle16b,
             ),
             SizedBox(height: 8.px),
             Text(
-              'Start a conversation with support',
+              'start_conversation_with_support'.tr,
               style: MyTextStyle.titleStyle14b.copyWith(color: Colors.grey),
             ),
           ],

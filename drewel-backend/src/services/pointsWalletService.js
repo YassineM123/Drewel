@@ -24,7 +24,22 @@ export const toWalletDto = (wallet, settings = null) => {
   const reservedPoints = totalReserved(wallet);
   const pointsPerAED = settings?.pointsPerAED ?? 1;
   const commissionRate = settings?.commissionRate ?? 0.10;
+  const offerPointsCost = settings?.rideOfferPointsCost ?? 20;
+  const lowBalanceThreshold = settings?.lowBalanceThreshold ?? 20;
   const equivalentAED = availablePoints / pointsPerAED;
+  const canSendOffer = availablePoints >= offerPointsCost;
+  const availablePointsAfterOfferReservation = canSendOffer
+    ? availablePoints - offerPointsCost
+    : null;
+  const equivalentAvailableRides = Math.floor(
+    availablePoints / (offerPointsCost || 1)
+  );
+  const balanceState =
+    availablePoints === 0
+      ? "zero"
+      : availablePoints < lowBalanceThreshold
+      ? "low"
+      : "normal";
   return {
     driverId: String(wallet.driverId),
     availableBonusPoints: wallet.availableBonusPoints,
@@ -45,6 +60,11 @@ export const toWalletDto = (wallet, settings = null) => {
     pointsPerAED,
     commissionRate,
     equivalentAED: Math.round(equivalentAED * 100) / 100,
+    offerPointsCost,
+    canSendOffer,
+    availablePointsAfterOfferReservation,
+    equivalentAvailableRides,
+    balanceState,
   };
 };
 

@@ -428,18 +428,18 @@ class _EmptyNotifications extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const Center(
+    return Center(
       child: Padding(
-        padding: EdgeInsets.all(32),
+        padding: const EdgeInsets.all(32),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: <Widget>[
-            Icon(
+            const Icon(
               Icons.notifications_none_rounded,
               size: 56,
               color: Color(0xFFC9C9C9),
             ),
-            SizedBox(height: 16),
+            const SizedBox(height: 16),
             Text(
               'no_notifications'.tr,
               style: const TextStyle(

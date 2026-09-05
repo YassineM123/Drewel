@@ -8,12 +8,22 @@ class AppTranslations extends Translations {
     final Map<String, Map<String, String>> translations =
         <String, Map<String, String>>{
       'en': <String, String>{
+        'driver_waiting_for_pickup':
+            'The driver is waiting for pickup confirmation.',
+        'The driver is waiting for pickup confirmation.':
+            'The driver is waiting for pickup confirmation.',
+        'review_user': 'Review @name',
+        'Review @name': 'Review @name',
+        'trip_request': 'Trip request',
+        'Trip request': 'Trip request',
+        'no_active_ride_to_report':
+            'No active ride to report. Please use Help & Support instead.',
+        'No active ride to report. Please use Help & Support instead.':
+            'No active ride to report. Please use Help & Support instead.',
         'contacting_driver': 'Contacting driver',
         'Contacting driver': 'Contacting driver',
         'offer_pending': 'Offer pending',
         'Offer pending': 'Offer pending',
-        'ride_confirmed': 'Ride confirmed',
-        'Ride confirmed': 'Ride confirmed',
         'driver_on_the_way': 'Driver on the way',
         'Driver on the way': 'Driver on the way',
         'driver_arrived': 'Driver arrived',
@@ -38,22 +48,31 @@ class AppTranslations extends Translations {
         'Your active ride': 'Your active ride',
         'ride': 'Ride',
         'Ride': 'Ride',
-        'assigned_driver_active_ride': 'Your assigned driver is on this ride. Nearby drivers are hidden until it ends.',
-        'Your assigned driver is on this ride. Nearby drivers are hidden until it ends.': 'Your assigned driver is on this ride. Nearby drivers are hidden until it ends.',
-        'assigned_driver_active_ride_with_name': '@name is your assigned driver. Nearby drivers are hidden until this ride ends.',
-        '@name is your assigned driver. Nearby drivers are hidden until this ride ends.': '@name is your assigned driver. Nearby drivers are hidden until this ride ends.',
-        'track_active_ride': 'Track active ride',
-        'Track active ride': 'Track active ride',
+        'assigned_driver_active_ride':
+            'Your assigned driver is on this ride. Nearby drivers are hidden until it ends.',
+        'Your assigned driver is on this ride. Nearby drivers are hidden until it ends.':
+            'Your assigned driver is on this ride. Nearby drivers are hidden until it ends.',
+        'assigned_driver_active_ride_with_name':
+            '@name is your assigned driver. Nearby drivers are hidden until this ride ends.',
+        '@name is your assigned driver. Nearby drivers are hidden until this ride ends.':
+            '@name is your assigned driver. Nearby drivers are hidden until this ride ends.',
         'tell_support_what_happened': 'Tell Drewel support what happened',
-        'Tell Drewel support what happened': 'Tell Drewel support what happened',
+        'Tell Drewel support what happened':
+            'Tell Drewel support what happened',
         'submitted_to_drewel': '@label submitted to Drewel.',
         '@label submitted to Drewel.': '@label submitted to Drewel.',
-        'unable_to_submit_retry': 'Unable to submit. Please retry or contact support.',
-        'Unable to submit. Please retry or contact support.': 'Unable to submit. Please retry or contact support.',
-        'no_active_ride_safety': 'No active ride is available. Drewel support can still help.',
-        'No active ride is available. Drewel support can still help.': 'No active ride is available. Drewel support can still help.',
-        'safety_dialog_description': 'Report a safety concern, block your assigned ride participant, or contact Drewel support.',
-        'Report a safety concern, block your assigned ride participant, or contact Drewel support.': 'Report a safety concern, block your assigned ride participant, or contact Drewel support.',
+        'unable_to_submit_retry':
+            'Unable to submit. Please retry or contact support.',
+        'Unable to submit. Please retry or contact support.':
+            'Unable to submit. Please retry or contact support.',
+        'no_active_ride_safety':
+            'No active ride is available. Drewel support can still help.',
+        'No active ride is available. Drewel support can still help.':
+            'No active ride is available. Drewel support can still help.',
+        'safety_dialog_description':
+            'Report a safety concern, block your assigned ride participant, or contact Drewel support.',
+        'Report a safety concern, block your assigned ride participant, or contact Drewel support.':
+            'Report a safety concern, block your assigned ride participant, or contact Drewel support.',
         'report_this_ride_question': 'Report this ride?',
         'Report this ride?': 'Report this ride?',
         'block_this_participant_question': 'Block this participant?',
@@ -64,22 +83,28 @@ class AppTranslations extends Translations {
         'Voice message failed to send': 'Voice message failed to send',
         'required_star': 'Required *',
         'Required *': 'Required *',
-        'verified_identity_notice': 'Verified identity and document changes are submitted for admin review when required by Drewel.',
-        'Verified identity and document changes are submitted for admin review when required by Drewel.': 'Verified identity and document changes are submitted for admin review when required by Drewel.',
-        'phone_changes_notice': 'Phone changes are validated by the server. OTP verification must be reused when the backend requires it.',
-        'Phone changes are validated by the server. OTP verification must be reused when the backend requires it.': 'Phone changes are validated by the server. OTP verification must be reused when the backend requires it.',
+        'verified_identity_notice':
+            'Verified identity and document changes are submitted for admin review when required by Drewel.',
+        'Verified identity and document changes are submitted for admin review when required by Drewel.':
+            'Verified identity and document changes are submitted for admin review when required by Drewel.',
+        'phone_changes_notice':
+            'Phone changes are validated by the server. OTP verification must be reused when the backend requires it.',
+        'Phone changes are validated by the server. OTP verification must be reused when the backend requires it.':
+            'Phone changes are validated by the server. OTP verification must be reused when the backend requires it.',
         'request_2_waiting_approval': 'Request 2 is waiting for approval',
-        'Request 2 is waiting for approval': 'Request 2 is waiting for approval',
+        'Request 2 is waiting for approval':
+            'Request 2 is waiting for approval',
         'waiting_request_1_approval': 'Waiting for Request 1 approval',
         'Waiting for Request 1 approval': 'Waiting for Request 1 approval',
-        'view_status': 'View Status',
-        'View Status': 'View Status',
         'no_conversations_yet': 'No conversations yet',
         'No conversations yet': 'No conversations yet',
-        'messages_with_participants_appear_here': 'Messages with your ride participants appear here.',
-        'Messages with your ride participants appear here.': 'Messages with your ride participants appear here.',
+        'messages_with_participants_appear_here':
+            'Messages with your ride participants appear here.',
+        'Messages with your ride participants appear here.':
+            'Messages with your ride participants appear here.',
         'search_messages_hint': 'Search by rider, vehicle or reference',
-        'Search by rider, vehicle or reference': 'Search by rider, vehicle or reference',
+        'Search by rider, vehicle or reference':
+            'Search by rider, vehicle or reference',
         'all_activity': 'All activity',
         'All activity': 'All activity',
         'all_caught_up': 'You are all caught up',
@@ -87,28 +112,34 @@ class AppTranslations extends Translations {
         'unread': 'unread',
         'no_notifications': 'No notifications',
         'No notifications': 'No notifications',
-        'updates_about_rides_appear_here': 'Updates about your rides and messages appear here.',
-        'Updates about your rides and messages appear here.': 'Updates about your rides and messages appear here.',
-        'account_in_verification': 'Your account is in verification process',
-        'Your account is in verification process': 'Your account is in verification process',
-        'thanks_login_docs_pending': 'Thanks for login with Drewel! Your documents have been sent to the admin for approval.',
-        'Thanks for login with Drewel! Your documents have been sent to the admin for approval.': 'Thanks for login with Drewel! Your documents have been sent to the admin for approval.',
-        'registration_submitted': 'Registration Submitted',
+        'updates_about_rides_appear_here':
+            'Updates about your rides and messages appear here.',
+        'Updates about your rides and messages appear here.':
+            'Updates about your rides and messages appear here.',
+        'Your account is in verification process':
+            'Your account is in verification process',
+        'thanks_login_docs_pending':
+            'Thanks for login with Drewel! Your documents have been sent to the admin for approval.',
+        'Thanks for login with Drewel! Your documents have been sent to the admin for approval.':
+            'Thanks for login with Drewel! Your documents have been sent to the admin for approval.',
         'Registration Submitted': 'Registration Submitted',
-        'thanks_register_docs_pending': 'Thanks for registering with Drewel! Your documents have been sent to the admin for approval.',
-        'Thanks for registering with Drewel! Your documents have been sent to the admin for approval.': 'Thanks for registering with Drewel! Your documents have been sent to the admin for approval.',
-        'trip_offer': 'Trip Offer',
+        'thanks_register_docs_pending':
+            'Thanks for registering with Drewel! Your documents have been sent to the admin for approval.',
+        'Thanks for registering with Drewel! Your documents have been sent to the admin for approval.':
+            'Thanks for registering with Drewel! Your documents have been sent to the admin for approval.',
         'Trip Offer': 'Trip Offer',
-        'accepted': 'ACCEPTED',
         'ACCEPTED': 'ACCEPTED',
         'no_support_conversations_yet': 'No support conversations yet',
         'No support conversations yet': 'No support conversations yet',
-        'start_new_chat_support_help': 'Start a new chat when you need help from Drewel Support.',
-        'Start a new chat when you need help from Drewel Support.': 'Start a new chat when you need help from Drewel Support.',
+        'start_new_chat_support_help':
+            'Start a new chat when you need help from Drewel Support.',
+        'Start a new chat when you need help from Drewel Support.':
+            'Start a new chat when you need help from Drewel Support.',
         'loading_messages': 'Loading messages...',
         'Loading messages...': 'Loading messages...',
         'start_conversation_with_support': 'Start a conversation with support',
-        'Start a conversation with support': 'Start a conversation with support',
+        'Start a conversation with support':
+            'Start a conversation with support',
         'type_a_message': 'Type a message',
         'Type a message': 'Type a message',
         'distance': 'Distance',
@@ -117,36 +148,35 @@ class AppTranslations extends Translations {
         'Request a trip': 'Request a trip',
         'active': 'Active',
         'Active': 'Active',
-        'camera': 'Camera',
-        'Camera': 'Camera',
-        'gallery': 'Gallery',
-        'Gallery': 'Gallery',
         'choose_image_from_options': 'Choose image from the options below',
-        'Choose image from the options below': 'Choose image from the options below',
         'document_image_size_limit': 'Document image size should be below 5 MB',
-        'Document image size should be below 5 MB': 'Document image size should be below 5 MB',
+        'Document image size should be below 5 MB':
+            'Document image size should be below 5 MB',
         'image_size_less_than_5mb': 'Image size should be less than 5 MB',
-        'Image size should be less than 5 MB': 'Image size should be less than 5 MB',
-        'please_review_document_carefully': 'Please review this document carefully before using Drewel services.',
-        'Please review this document carefully before using Drewel services.': 'Please review this document carefully before using Drewel services.',
-        'no_messages_yet_say_hello': 'No messages yet. Say hello to your ride participant.',
-        'No messages yet. Say hello to your ride participant.': 'No messages yet. Say hello to your ride participant.',
-        'discard': 'Discard',
+        'Image size should be less than 5 MB':
+            'Image size should be less than 5 MB',
+        'please_review_document_carefully':
+            'Please review this document carefully before using Drewel services.',
+        'Please review this document carefully before using Drewel services.':
+            'Please review this document carefully before using Drewel services.',
+        'no_messages_yet_say_hello':
+            'No messages yet. Say hello to your ride participant.',
+        'No messages yet. Say hello to your ride participant.':
+            'No messages yet. Say hello to your ride participant.',
         'Discard': 'Discard',
         'trip_update': 'Trip Update',
         'Trip Update': 'Trip Update',
         'trip_proposal': 'Trip proposal',
         'Trip proposal': 'Trip proposal',
-        'messaging_closed_for_ride': 'This conversation is saved securely. Messaging is closed for this ride.',
-        'This conversation is saved securely. Messaging is closed for this ride.': 'This conversation is saved securely. Messaging is closed for this ride.',
-        'in_rankings': 'in rankings',
+        'messaging_closed_for_ride':
+            'This conversation is saved securely. Messaging is closed for this ride.',
+        'This conversation is saved securely. Messaging is closed for this ride.':
+            'This conversation is saved securely. Messaging is closed for this ride.',
         'in rankings': 'in rankings',
-        'trips': 'trips',
         'note_for_driver_optional': 'Note for the driver (optional)',
         'Note for the driver (optional)': 'Note for the driver (optional)',
         'currency': 'Currency',
         'Currency': 'Currency',
-
         'menu': 'Menu',
         'back': 'Back',
         'Back': 'Back',
@@ -161,10 +191,12 @@ class AppTranslations extends Translations {
         'server_down': 'Server Down',
         'session_expired': 'Your session expired. Please sign in again.',
         'discard_changes': 'Discard changes?',
-        'unsaved_changes': 'You have unsaved changes. Are you sure you want to leave?',
+        'unsaved_changes':
+            'You have unsaved changes. Are you sure you want to leave?',
         'delete_account': 'Delete Account',
         'Delete Account': 'Delete Account',
-        'delete_account_confirm': 'Are you sure you want to delete your account? This action cannot be undone.',
+        'delete_account_confirm':
+            'Are you sure you want to delete your account? This action cannot be undone.',
         'delete': 'Delete',
         'Delete': 'Delete',
         'account_deleted_success': 'Account deleted successfully',
@@ -201,7 +233,8 @@ class AppTranslations extends Translations {
         'whats_your_phone': 'What\'s your phone number?',
         'What\'s your phone number?': 'What\'s your phone number?',
         'we_send_code': 'We\'ll send you a code to verify it',
-        'We\'ll send you a code to verify it': 'We\'ll send you a code to verify it',
+        'We\'ll send you a code to verify it':
+            'We\'ll send you a code to verify it',
         'email_address': 'Email Address',
         'Email Address': 'Email Address',
         'Email Address ': 'Email Address ',
@@ -248,8 +281,10 @@ class AppTranslations extends Translations {
         'OTP must be 4 digits': 'OTP must be 4 digits',
         'otp_6_digits': 'OTP must be 6 digits',
         'OTP must be 6 digits': 'OTP must be 6 digits',
-        'whatsapp_full_number': 'WhatsApp OTP uses full number with country code',
-        'WhatsApp OTP uses full number with country code': 'WhatsApp OTP uses full number with country code',
+        'whatsapp_full_number':
+            'WhatsApp OTP uses full number with country code',
+        'WhatsApp OTP uses full number with country code':
+            'WhatsApp OTP uses full number with country code',
         'enter_otp': 'Enter your OTP code here',
         'enter_your_otp': 'Enter your OTP code here',
         'Enter your OTP code here': 'Enter your OTP code here',
@@ -264,7 +299,6 @@ class AppTranslations extends Translations {
         'Find Now': 'Find Now',
         'find_transport': 'Find Your Transport',
         'Find Your Transport': 'Find Your Transport',
-        'city': 'City',
         'City': 'City',
         'confirm_information': 'Confirm your information',
         'Confirm your information': 'Confirm your information',
@@ -290,8 +324,10 @@ class AppTranslations extends Translations {
         'Close': 'Close',
         'enable_location': 'Enable Location',
         'Enable Location': 'Enable Location',
-        'enable_location_desc': 'To use this services we need permission to access',
-        'To use this services we need permission to access': 'To use this services we need permission to access',
+        'enable_location_desc':
+            'To use this services we need permission to access',
+        'To use this services we need permission to access':
+            'To use this services we need permission to access',
         'search_location': 'Search location ...',
         'Search location ...': 'Search location ...',
         'search_location_placeholder': 'Where do you want to go?',
@@ -317,7 +353,8 @@ class AppTranslations extends Translations {
         'Update': 'Update',
         'would_you_like_logout': 'Would you like to logout?',
         'Would you like to logout?': 'Would you like to logout?',
-        'Are you sure you want to log out?': 'Are you sure you want to log out?',
+        'Are you sure you want to log out?':
+            'Are you sure you want to log out?',
         'profile': 'Profile',
         'Profile': 'Profile',
         'driver_profile': 'Driver Profile',
@@ -350,18 +387,23 @@ class AppTranslations extends Translations {
         'select_image': 'Select Image',
         'Select Image': 'Select Image',
         'choose_image_options': 'Choose image from the options below',
-        'Choose image from the options below': 'Choose image from the options below',
+        'Choose image from the options below':
+            'Choose image from the options below',
         'i_agree_to': 'I agree to the ',
         'I agree to the ': 'I agree to the ',
         'terms_of_service': 'Terms of Service',
         'Terms of Service': 'Terms of Service',
         'privacy_policy': 'Privacy Policy',
         'Privacy Policy': 'Privacy Policy',
-        'age_consent_prefix': 'I am 18 years of age or older and I agree to the ',
-        'I am 18 years of age or older and I agree to the ': 'I am 18 years of age or older and I agree to the ',
+        'age_consent_prefix':
+            'I am 18 years of age or older and I agree to the ',
+        'I am 18 years of age or older and I agree to the ':
+            'I am 18 years of age or older and I agree to the ',
         'age_consent_suffix': '.',
-        'consent_required': 'Please accept the Terms of Service and Privacy Policy to continue.',
-        'Please accept the Terms of Service and Privacy Policy to continue.': 'Please accept the Terms of Service and Privacy Policy to continue.',
+        'consent_required':
+            'Please accept the Terms of Service and Privacy Policy to continue.',
+        'Please accept the Terms of Service and Privacy Policy to continue.':
+            'Please accept the Terms of Service and Privacy Policy to continue.',
         'forgot_password': 'Forgot your password?',
         'Forgot your password?': 'Forgot your password?',
         'no_account': 'Don\'t have an account? ',
@@ -444,7 +486,8 @@ class AppTranslations extends Translations {
         'notifications_sub2': 'Ride, message and account updates',
         'preferences': 'Preferences',
         'notif_preferences': 'Notification Preferences',
-        'notif_preferences_sub': 'Messages, account updates, sound and vibration',
+        'notif_preferences_sub':
+            'Messages, account updates, sound and vibration',
         'help_support': 'Help & Support',
         'help_support_sub': 'Get help from Drewel support',
         'report_problem_sub2': 'Ride, driver, app or account issue',
@@ -464,44 +507,65 @@ class AppTranslations extends Translations {
         'saved_place_updated': 'Saved place updated',
         'saved_place_not_found': 'Saved place not found.',
         'saved_place_deleted': 'Saved place deleted',
-        'outside_service': 'Your current GPS location is outside the available service area.',
-        'location_pending': 'A fresh precise GPS location is required before going online.',
-        'gps_accuracy_low': 'Your GPS accuracy is too low. Enable precise location and try again.',
-        'profile_not_approved': 'Your driver profile must be approved before going online.',
-        'unable_update_online': 'Unable to update online status. Please try again.',
-        'bg_service_failed': 'Background online service could not start. Keep Drewel open and check battery restrictions.',
+        'outside_service':
+            'Your current GPS location is outside the available service area.',
+        'location_pending':
+            'A fresh precise GPS location is required before going online.',
+        'gps_accuracy_low':
+            'Your GPS accuracy is too low. Enable precise location and try again.',
+        'profile_not_approved':
+            'Your driver profile must be approved before going online.',
+        'unable_update_online':
+            'Unable to update online status. Please try again.',
+        'bg_service_failed':
+            'Background online service could not start. Keep Drewel open and check battery restrictions.',
         'driver_data_loading': 'Driver data is loading please wait ....',
-        'allow_precise_browser': 'Allow precise location for this site in your browser, then try again.',
-        'without_location_permission': 'Without location permission you can not use app...',
+        'allow_precise_browser':
+            'Allow precise location for this site in your browser, then try again.',
+        'without_location_permission':
+            'Without location permission you can not use app...',
         'current_location_failed': 'Current location Failed ...',
         'turn_on_precise': 'Turn on precise location before going online.',
-        'location_permission_required': 'Location permission is required to go online.',
-        'server_no_presence': 'The server did not start an online presence session.',
-        'browser_location_fail': 'Drewel could not read your browser location. Allow precise location for this site, then try again.',
-        'unable_gps_location': 'Unable to get a fresh GPS location. Please try again.',
+        'location_permission_required':
+            'Location permission is required to go online.',
+        'server_no_presence':
+            'The server did not start an online presence session.',
+        'browser_location_fail':
+            'Drewel could not read your browser location. Allow precise location for this site, then try again.',
+        'unable_gps_location':
+            'Unable to get a fresh GPS location. Please try again.',
         'get_driver_data_failed': 'Get driver data Failed ...',
         'you_online_visible': 'You are online and visible to riders',
         'you_offline_hidden': 'You are offline and hidden from riders',
-        'unable_get_location': 'Unable to get your location. Check GPS and try again.',
+        'unable_get_location':
+            'Unable to get your location. Check GPS and try again.',
         'location_selected': 'Location selected',
-        'search_timed_out': 'Search timed out. Check your connection and try again.',
-        'no_internet': 'No internet connection. Check your network and try again.',
+        'search_timed_out':
+            'Search timed out. Check your connection and try again.',
+        'no_internet':
+            'No internet connection. Check your network and try again.',
         'unable_find_locations': 'Unable to find locations. Try again.',
-        'location_search_unavailable': 'Location search is temporarily unavailable.',
+        'location_search_unavailable':
+            'Location search is temporarily unavailable.',
         'your_selected_location': 'Your Selected Location',
         'drag_to_move': 'Drag to move',
         'your_gps_location': 'Your GPS Location',
         'current_position': 'Current Position',
         'current_location': 'Current location in Tunisia',
-        'gps_fix_stale': 'Your GPS fix is stale. Refresh your precise location and retry.',
-        'live_gps_stopped': 'Live GPS updates stopped. Refresh your precise location and retry.',
+        'gps_fix_stale':
+            'Your GPS fix is stale. Refresh your precise location and retry.',
+        'live_gps_stopped':
+            'Live GPS updates stopped. Refresh your precise location and retry.',
         'user_data_loading': 'User data is loading please wait ....',
         'unable_open_location': 'Unable to open this location. Try again.',
         'get_user_data_failed': 'Get user data Failed ...',
         'find_now_available_only': 'Find Now is available only inside @region.',
-        'unable_start_tracking': 'Unable to start live driver tracking. Check location and retry.',
-        'turn_on_precise_nearby': 'Turn on precise location to find nearby drivers in @region.',
-        'driver_service_unavailable': 'Driver service is temporarily unavailable.',
+        'unable_start_tracking':
+            'Unable to start live driver tracking. Check location and retry.',
+        'turn_on_precise_nearby':
+            'Turn on precise location to find nearby drivers in @region.',
+        'driver_service_unavailable':
+            'Driver service is temporarily unavailable.',
         'unable_load_drivers': 'Unable to load drivers. Please retry.',
         'searching_locations': 'Searching locations...',
         'no_locations_found': 'No locations found',
@@ -584,8 +648,10 @@ class AppTranslations extends Translations {
         'Decline this offer': 'Decline this offer',
         'ride_confirmed': 'Ride confirmed',
         'Ride confirmed': 'Ride confirmed',
-        'recording_start_failed': 'Recording could not start. Please try again.',
-        'Recording could not start. Please try again.': 'Recording could not start. Please try again.',
+        'recording_start_failed':
+            'Recording could not start. Please try again.',
+        'Recording could not start. Please try again.':
+            'Recording could not start. Please try again.',
         'upload_documents': 'Upload Documents',
         'Upload Documents': 'Upload Documents',
         'replace': 'Replace',
@@ -605,36 +671,49 @@ class AppTranslations extends Translations {
         'required': 'Required',
         'Required': 'Required',
         'optional': 'Optional',
-        'profile_waiting_approval': 'Your profile and documents are waiting for admin approval.',
-        'request1_rejected': 'Request 1 was rejected. Ask an administrator to reopen it before editing your documents.',
-        'request1_approved_before': 'Request 1 must be approved by an administrator before you can submit profile documents.',
-        'image_cannot_read': 'The selected image could not be read. Please choose another.',
+        'profile_waiting_approval':
+            'Your profile and documents are waiting for admin approval.',
+        'request1_rejected':
+            'Request 1 was rejected. Ask an administrator to reopen it before editing your documents.',
+        'request1_approved_before':
+            'Request 1 must be approved by an administrator before you can submit profile documents.',
+        'image_cannot_read':
+            'The selected image could not be read. Please choose another.',
         'unable_load_driver_profile': 'Unable to load your driver profile.',
-        'check_internet_retry_page': 'Check your internet connection, then try again loading the page again.',
+        'check_internet_retry_page':
+            'Check your internet connection, then try again loading the page again.',
         'vehicle_type': 'Vehicle type',
         'license_company_doc': 'License company document',
         'car_license': 'Car license',
         'driving_license': 'Driving license',
         'passport': 'Passport copy',
-        'latest_changes_waiting': 'Your latest changes are waiting for admin approval...',
+        'latest_changes_waiting':
+            'Your latest changes are waiting for admin approval...',
         'no_changes_update': 'There are no changes to update.',
         'please_upload': 'Please upload: @docs',
-        'documents_updated_sent': 'Your pending documents were updated and sent to the admin.',
-        'documents_sent_admin': 'Your updated documents have been sent to the admin for approval.',
+        'documents_updated_sent':
+            'Your pending documents were updated and sent to the admin.',
+        'documents_sent_admin':
+            'Your updated documents have been sent to the admin for approval.',
         'driver_details_failed': 'Driver Details Failed ...',
-        'update_could_not_complete': 'The update could not be completed. Please try again.',
+        'update_could_not_complete':
+            'The update could not be completed. Please try again.',
         'select_city_vehicle': 'Select a city and vehicle type.',
         'license_car': 'License Car',
         'license_driver': 'License Driver',
         'unable_load_driver_status': 'Unable to load driver status',
-        'first_last_whatsapp_required': 'First name, last name and WhatsApp number are required',
+        'first_last_whatsapp_required':
+            'First name, last name and WhatsApp number are required',
         'failed_send_request': 'Failed to send request',
-        'request2_waiting_admin': 'Request 2 is already waiting for admin approval',
+        'request2_waiting_admin':
+            'Request 2 is already waiting for admin approval',
         'profile_locked': 'Profile is locked until Request 1 is approved',
         'first_last_name_required': 'First name and last name are required',
-        'address_contract_license_required': 'Address, contract number and license company are required',
+        'address_contract_license_required':
+            'Address, contract number and license company are required',
         'session_expired_login': 'Session expired. Please login again',
-        'failed_submit_documents': 'Failed to submit documents. Please check internet/CORS and try again.',
+        'failed_submit_documents':
+            'Failed to submit documents. Please check internet/CORS and try again.',
         'failed_submit_documents2': 'Failed to submit documents: @error',
         'request2_submitted': 'Request 2 Submitted',
         'request2_needs_changes': 'Request 2 Needs Changes',
@@ -643,8 +722,10 @@ class AppTranslations extends Translations {
         'profile_completed': 'Profile Completed',
         'approved': 'Approved',
         'driver_verification': 'Driver Verification',
-        'thanks_login_drewel': 'Thanks for login with Drewel! Your documents have been sent to the admin for approval.',
-        'thanks_register_drewel': 'Thanks for registering with Drewel! Your documents have been sent to the admin for approval.',
+        'thanks_login_drewel':
+            'Thanks for login with Drewel! Your documents have been sent to the admin for approval.',
+        'thanks_register_drewel':
+            'Thanks for registering with Drewel! Your documents have been sent to the admin for approval.',
         'step_1_basic_request': 'Step 1 - Basic Request',
         'Step 1 - Basic Request': 'Step 1 - Basic Request',
         'step_3_complete_profile': 'Step 3 - Complete Profile',
@@ -663,7 +744,6 @@ class AppTranslations extends Translations {
         'Submit Documents': 'Submit Documents',
         'view_status': 'View Status',
         'View Status': 'View Status',
-        'send_request': 'Send Request',
         'Send Request': 'Send Request',
         'current_status': 'Current Status:',
         'Current Status:': 'Current Status:',
@@ -671,7 +751,8 @@ class AppTranslations extends Translations {
         'Pending Approval': 'Pending Approval',
         'send_otp_failed': 'Send Otp Failed ...',
         'phone_required': 'Phone number is required...',
-        'whatsapp_unavailable': 'WhatsApp login is temporarily unavailable. Please contact support.',
+        'whatsapp_unavailable':
+            'WhatsApp login is temporarily unavailable. Please contact support.',
         'send_whatsapp_otp_failed': 'Send WhatsApp Otp Failed ...',
         'new_otp_sent': 'A new OTP has been sent.',
         'unable_resend_otp': 'Unable to resend OTP.',
@@ -756,12 +837,21 @@ class AppTranslations extends Translations {
         'destination_dest': 'Destination',
       },
       'ar': <String, String>{
+        'driver_waiting_for_pickup': 'السائق في انتظار تأكيد الركوب.',
+        'The driver is waiting for pickup confirmation.':
+            'السائق في انتظار تأكيد الركوب.',
+        'review_user': 'تقييم @name',
+        'Review @name': 'تقييم @name',
+        'trip_request': 'طلب الرحلة',
+        'Trip request': 'طلب الرحلة',
+        'no_active_ride_to_report':
+            'لا توجد رحلة نشطة للإبلاغ عنها. يرجى استخدام المساعدة والدعم بدلاً من ذلك.',
+        'No active ride to report. Please use Help & Support instead.':
+            'لا توجد رحلة نشطة للإبلاغ عنها. يرجى استخدام المساعدة والدعم بدلاً من ذلك.',
         'contacting_driver': 'جاري الاتصال بالسائق',
         'Contacting driver': 'جاري الاتصال بالسائق',
         'offer_pending': 'العرض قيد الانتظار',
         'Offer pending': 'العرض قيد الانتظار',
-        'ride_confirmed': 'تم تأكيد الرحلة',
-        'Ride confirmed': 'تم تأكيد الرحلة',
         'driver_on_the_way': 'السائق في الطريق',
         'Driver on the way': 'السائق في الطريق',
         'driver_arrived': 'وصل السائق',
@@ -786,22 +876,30 @@ class AppTranslations extends Translations {
         'Your active ride': 'رحلتك الحالية',
         'ride': 'الرحلة',
         'Ride': 'الرحلة',
-        'assigned_driver_active_ride': 'سائقك المعين في هذه الرحلة. يتم إخفاء السائقين القريبين حتى تنتهي.',
-        'Your assigned driver is on this ride. Nearby drivers are hidden until it ends.': 'سائقك المعين في هذه الرحلة. يتم إخفاء السائقين القريبين حتى تنتهي.',
-        'assigned_driver_active_ride_with_name': '@name هو سائقك المعين. يتم إخفاء السائقين القريبين حتى تنتهي الرحلة.',
-        '@name is your assigned driver. Nearby drivers are hidden until this ride ends.': '@name هو سائقك المعين. يتم إخفاء السائقين القريبين حتى تنتهي الرحلة.',
-        'track_active_ride': 'تتبع الرحلة الحالية',
-        'Track active ride': 'تتبع الرحلة الحالية',
+        'assigned_driver_active_ride':
+            'سائقك المعين في هذه الرحلة. يتم إخفاء السائقين القريبين حتى تنتهي.',
+        'Your assigned driver is on this ride. Nearby drivers are hidden until it ends.':
+            'سائقك المعين في هذه الرحلة. يتم إخفاء السائقين القريبين حتى تنتهي.',
+        'assigned_driver_active_ride_with_name':
+            '@name هو سائقك المعين. يتم إخفاء السائقين القريبين حتى تنتهي الرحلة.',
+        '@name is your assigned driver. Nearby drivers are hidden until this ride ends.':
+            '@name هو سائقك المعين. يتم إخفاء السائقين القريبين حتى تنتهي الرحلة.',
         'tell_support_what_happened': 'أخبر دعم دريول بما حدث',
         'Tell Drewel support what happened': 'أخبر دعم دريول بما حدث',
         'submitted_to_drewel': 'تم إرسال @label إلى دريول.',
         '@label submitted to Drewel.': 'تم إرسال @label إلى دريول.',
-        'unable_to_submit_retry': 'تعذر الإرسال. يرجى إعادة المحاولة أو التواصل مع الدعم.',
-        'Unable to submit. Please retry or contact support.': 'تعذر الإرسال. يرجى إعادة المحاولة أو التواصل مع الدعم.',
-        'no_active_ride_safety': 'لا توجد رحلة نشطة حالياً. لا يزال بإمكان فريق دعم دريول مساعدتك.',
-        'No active ride is available. Drewel support can still help.': 'لا توجد رحلة نشطة حالياً. لا يزال بإمكان فريق دعم دريول مساعدتك.',
-        'safety_dialog_description': 'الإبلاغ عن مشكلة تتعلق بالسلامة، أو حظر مرافق الرحلة، أو التواصل مع دعم دريول.',
-        'Report a safety concern, block your assigned ride participant, or contact Drewel support.': 'الإبلاغ عن مشكلة تتعلق بالسلامة، أو حظر مرافق الرحلة، أو التواصل مع دعم دريول.',
+        'unable_to_submit_retry':
+            'تعذر الإرسال. يرجى إعادة المحاولة أو التواصل مع الدعم.',
+        'Unable to submit. Please retry or contact support.':
+            'تعذر الإرسال. يرجى إعادة المحاولة أو التواصل مع الدعم.',
+        'no_active_ride_safety':
+            'لا توجد رحلة نشطة حالياً. لا يزال بإمكان فريق دعم دريول مساعدتك.',
+        'No active ride is available. Drewel support can still help.':
+            'لا توجد رحلة نشطة حالياً. لا يزال بإمكان فريق دعم دريول مساعدتك.',
+        'safety_dialog_description':
+            'الإبلاغ عن مشكلة تتعلق بالسلامة، أو حظر مرافق الرحلة، أو التواصل مع دعم دريول.',
+        'Report a safety concern, block your assigned ride participant, or contact Drewel support.':
+            'الإبلاغ عن مشكلة تتعلق بالسلامة، أو حظر مرافق الرحلة، أو التواصل مع دعم دريول.',
         'report_this_ride_question': 'هل تريد الإبلاغ عن هذه الرحلة؟',
         'Report this ride?': 'هل تريد الإبلاغ عن هذه الرحلة؟',
         'block_this_participant_question': 'هل تريد حظر هذا المرافق؟',
@@ -812,22 +910,27 @@ class AppTranslations extends Translations {
         'Voice message failed to send': 'فشل إرسال الرسالة الصوتية',
         'required_star': 'مطلوب *',
         'Required *': 'مطلوب *',
-        'verified_identity_notice': 'تخضع تغييرات الهوية والمستندات المؤكدة لمراجعة الإدارة عند طلب دريول.',
-        'Verified identity and document changes are submitted for admin review when required by Drewel.': 'تخضع تغييرات الهوية والمستندات المؤكدة لمراجعة الإدارة عند طلب دريول.',
-        'phone_changes_notice': 'يتم التحقق من تغييرات الهاتف من الخادم. يجب إعادة التحقق برمز OTP عند طلب الخادم.',
-        'Phone changes are validated by the server. OTP verification must be reused when the backend requires it.': 'يتم التحقق من تغييرات الهاتف من الخادم. يجب إعادة التحقق برمز OTP عند طلب الخادم.',
+        'verified_identity_notice':
+            'تخضع تغييرات الهوية والمستندات المؤكدة لمراجعة الإدارة عند طلب دريول.',
+        'Verified identity and document changes are submitted for admin review when required by Drewel.':
+            'تخضع تغييرات الهوية والمستندات المؤكدة لمراجعة الإدارة عند طلب دريول.',
+        'phone_changes_notice':
+            'يتم التحقق من تغييرات الهاتف من الخادم. يجب إعادة التحقق برمز OTP عند طلب الخادم.',
+        'Phone changes are validated by the server. OTP verification must be reused when the backend requires it.':
+            'يتم التحقق من تغييرات الهاتف من الخادم. يجب إعادة التحقق برمز OTP عند طلب الخادم.',
         'request_2_waiting_approval': 'الطلب 2 في انتظار الموافقة',
         'Request 2 is waiting for approval': 'الطلب 2 في انتظار الموافقة',
         'waiting_request_1_approval': 'في انتظار الموافقة على الطلب 1',
         'Waiting for Request 1 approval': 'في انتظار الموافقة على الطلب 1',
-        'view_status': 'عرض الحالة',
-        'View Status': 'عرض الحالة',
         'no_conversations_yet': 'لا توجد محادثات بعد',
         'No conversations yet': 'لا توجد محادثات بعد',
-        'messages_with_participants_appear_here': 'تظهر هنا الرسائل المتبادلة مع مرافقي رحلاتك.',
-        'Messages with your ride participants appear here.': 'تظهر هنا الرسائل المتبادلة مع مرافقي رحلاتك.',
+        'messages_with_participants_appear_here':
+            'تظهر هنا الرسائل المتبادلة مع مرافقي رحلاتك.',
+        'Messages with your ride participants appear here.':
+            'تظهر هنا الرسائل المتبادلة مع مرافقي رحلاتك.',
         'search_messages_hint': 'البحث حسب الراكب أو المركبة أو المرجع',
-        'Search by rider, vehicle or reference': 'البحث حسب الراكب أو المركبة أو المرجع',
+        'Search by rider, vehicle or reference':
+            'البحث حسب الراكب أو المركبة أو المرجع',
         'all_activity': 'كل النشاطات',
         'All activity': 'كل النشاطات',
         'all_caught_up': 'لقد قرأت كل الإشعارات',
@@ -835,24 +938,28 @@ class AppTranslations extends Translations {
         'unread': 'غير مقروءة',
         'no_notifications': 'لا توجد إشعارات',
         'No notifications': 'لا توجد إشعارات',
-        'updates_about_rides_appear_here': 'تظهر هنا التحديثات المتعلقة برحلاتك ورسائلك.',
-        'Updates about your rides and messages appear here.': 'تظهر هنا التحديثات المتعلقة برحلاتك ورسائلك.',
-        'account_in_verification': 'حسابك قيد التحقق',
+        'updates_about_rides_appear_here':
+            'تظهر هنا التحديثات المتعلقة برحلاتك ورسائلك.',
+        'Updates about your rides and messages appear here.':
+            'تظهر هنا التحديثات المتعلقة برحلاتك ورسائلك.',
         'Your account is in verification process': 'حسابك قيد التحقق',
-        'thanks_login_docs_pending': 'شكراً لتسجيل دخولك إلى دريول! تم إرسال مستنداتك للإدارة للموافقة عليها.',
-        'Thanks for login with Drewel! Your documents have been sent to the admin for approval.': 'شكراً لتسجيل دخولك إلى دريول! تم إرسال مستنداتك للإدارة للموافقة عليها.',
-        'registration_submitted': 'تم تقديم التسجيل',
+        'thanks_login_docs_pending':
+            'شكراً لتسجيل دخولك إلى دريول! تم إرسال مستنداتك للإدارة للموافقة عليها.',
+        'Thanks for login with Drewel! Your documents have been sent to the admin for approval.':
+            'شكراً لتسجيل دخولك إلى دريول! تم إرسال مستنداتك للإدارة للموافقة عليها.',
         'Registration Submitted': 'تم تقديم التسجيل',
-        'thanks_register_docs_pending': 'شكراً لتسجيلك في دريول! تم إرسال مستنداتك إلى الإدارة للموافقة عليها.',
-        'Thanks for registering with Drewel! Your documents have been sent to the admin for approval.': 'شكراً لتسجيلك في دريول! تم إرسال مستنداتك إلى الإدارة للموافقة عليها.',
-        'trip_offer': 'عرض الرحلة',
+        'thanks_register_docs_pending':
+            'شكراً لتسجيلك في دريول! تم إرسال مستنداتك إلى الإدارة للموافقة عليها.',
+        'Thanks for registering with Drewel! Your documents have been sent to the admin for approval.':
+            'شكراً لتسجيلك في دريول! تم إرسال مستنداتك إلى الإدارة للموافقة عليها.',
         'Trip Offer': 'عرض الرحلة',
-        'accepted': 'تم القبول',
         'ACCEPTED': 'تم القبول',
         'no_support_conversations_yet': 'لا توجد محادثات دعم بعد',
         'No support conversations yet': 'لا توجد محادثات دعم بعد',
-        'start_new_chat_support_help': 'ابدأ محادثة جديدة عند حاجتك للمساعدة من دعم دريول.',
-        'Start a new chat when you need help from Drewel Support.': 'ابدأ محادثة جديدة عند حاجتك للمساعدة من دعم دريول.',
+        'start_new_chat_support_help':
+            'ابدأ محادثة جديدة عند حاجتك للمساعدة من دعم دريول.',
+        'Start a new chat when you need help from Drewel Support.':
+            'ابدأ محادثة جديدة عند حاجتك للمساعدة من دعم دريول.',
         'loading_messages': 'جاري تحميل الرسائل...',
         'Loading messages...': 'جاري تحميل الرسائل...',
         'start_conversation_with_support': 'ابدأ محادثة مع فريق الدعم',
@@ -865,36 +972,36 @@ class AppTranslations extends Translations {
         'Request a trip': 'طلب رحلة',
         'active': 'نشط',
         'Active': 'نشط',
-        'camera': 'الكاميرا',
-        'Camera': 'الكاميرا',
-        'gallery': 'المعرض',
-        'Gallery': 'المعرض',
         'choose_image_from_options': 'اختر صورة من الخيارات أدناه',
-        'Choose image from the options below': 'اختر صورة من الخيارات أدناه',
-        'document_image_size_limit': 'يجب أن يكون حجم صورة المستند أقل من 5 ميغابايت',
-        'Document image size should be below 5 MB': 'يجب أن يكون حجم صورة المستند أقل من 5 ميغابايت',
+        'document_image_size_limit':
+            'يجب أن يكون حجم صورة المستند أقل من 5 ميغابايت',
+        'Document image size should be below 5 MB':
+            'يجب أن يكون حجم صورة المستند أقل من 5 ميغابايت',
         'image_size_less_than_5mb': 'يجب أن يكون حجم الصورة أقل من 5 ميغابايت',
-        'Image size should be less than 5 MB': 'يجب أن يكون حجم الصورة أقل من 5 ميغابايت',
-        'please_review_document_carefully': 'يرجى مراجعة هذه الوثيقة بعناية قبل استخدام خدمات دريول.',
-        'Please review this document carefully before using Drewel services.': 'يرجى مراجعة هذه الوثيقة بعناية قبل استخدام خدمات دريول.',
-        'no_messages_yet_say_hello': 'لا توجد رسائل بعد. ابدأ بالتحية مع مرافق رحلتك.',
-        'No messages yet. Say hello to your ride participant.': 'لا توجد رسائل بعد. ابدأ بالتحية مع مرافق رحلتك.',
-        'discard': 'تجاهل',
+        'Image size should be less than 5 MB':
+            'يجب أن يكون حجم الصورة أقل من 5 ميغابايت',
+        'please_review_document_carefully':
+            'يرجى مراجعة هذه الوثيقة بعناية قبل استخدام خدمات دريول.',
+        'Please review this document carefully before using Drewel services.':
+            'يرجى مراجعة هذه الوثيقة بعناية قبل استخدام خدمات دريول.',
+        'no_messages_yet_say_hello':
+            'لا توجد رسائل بعد. ابدأ بالتحية مع مرافق رحلتك.',
+        'No messages yet. Say hello to your ride participant.':
+            'لا توجد رسائل بعد. ابدأ بالتحية مع مرافق رحلتك.',
         'Discard': 'تجاهل',
         'trip_update': 'تحديث الرحلة',
         'Trip Update': 'تحديث الرحلة',
         'trip_proposal': 'اقتراح رحلة',
         'Trip proposal': 'اقتراح رحلة',
-        'messaging_closed_for_ride': 'تم حفظ هذه المحادثة بأمان. المراسلة مغلقة لهذه الرحلة.',
-        'This conversation is saved securely. Messaging is closed for this ride.': 'تم حفظ هذه المحادثة بأمان. المراسلة مغلقة لهذه الرحلة.',
-        'in_rankings': 'في الترتيب',
+        'messaging_closed_for_ride':
+            'تم حفظ هذه المحادثة بأمان. المراسلة مغلقة لهذه الرحلة.',
+        'This conversation is saved securely. Messaging is closed for this ride.':
+            'تم حفظ هذه المحادثة بأمان. المراسلة مغلقة لهذه الرحلة.',
         'in rankings': 'في الترتيب',
-        'trips': 'رحلات',
         'note_for_driver_optional': 'ملاحظة للسائق (اختياري)',
         'Note for the driver (optional)': 'ملاحظة للسائق (اختياري)',
         'currency': 'العملة',
         'Currency': 'العملة',
-
         'menu': 'القائمة',
         'back': 'رجوع',
         'Back': 'الخلفي',
@@ -909,10 +1016,12 @@ class AppTranslations extends Translations {
         'server_down': 'الخادم غير متاح',
         'session_expired': 'انتهت صلاحية الجلسة. يرجى تسجيل الدخول مرة أخرى.',
         'discard_changes': 'هل تريد تجاهل التغييرات؟',
-        'unsaved_changes': 'لديك تغييرات غير محفوظة. هل أنت متأكد من رغبتك في المغادرة؟',
+        'unsaved_changes':
+            'لديك تغييرات غير محفوظة. هل أنت متأكد من رغبتك في المغادرة؟',
         'delete_account': 'حذف الحساب',
         'Delete Account': 'حذف الحساب',
-        'delete_account_confirm': 'هل أنت متأكد من رغبتك في حذف حسابك؟ لا يمكن التراجع عن هذا الإجراء.',
+        'delete_account_confirm':
+            'هل أنت متأكد من رغبتك في حذف حسابك؟ لا يمكن التراجع عن هذا الإجراء.',
         'delete': 'حذف',
         'Delete': 'حذف',
         'account_deleted_success': 'تم حذف الحساب بنجاح',
@@ -997,7 +1106,8 @@ class AppTranslations extends Translations {
         'otp_6_digits': 'يجب أن يتكون رمز التحقق من 6 أرقام',
         'OTP must be 6 digits': 'يجب أن يتكون رمز التحقق من 6 أرقام',
         'whatsapp_full_number': 'رمز واتساب يستخدم الرقم كاملاً مع رمز الدولة',
-        'WhatsApp OTP uses full number with country code': 'رمز واتساب يستخدم الرقم كاملاً مع رمز الدولة',
+        'WhatsApp OTP uses full number with country code':
+            'رمز واتساب يستخدم الرقم كاملاً مع رمز الدولة',
         'enter_otp': 'أدخل رمز التحقق هنا',
         'enter_your_otp': 'أدخل رمز التحقق هنا',
         'Enter your OTP code here': 'أدخل رمز التحقق هنا',
@@ -1012,7 +1122,6 @@ class AppTranslations extends Translations {
         'Find Now': 'ابحث الآن',
         'find_transport': 'ابحث عن وسيلة النقل',
         'Find Your Transport': 'ابحث عن وسيلة النقل',
-        'city': 'المدينة',
         'City': 'المدينة',
         'confirm_information': 'تأكيد معلوماتك',
         'Confirm your information': 'تأكيد معلوماتك',
@@ -1038,8 +1147,10 @@ class AppTranslations extends Translations {
         'Close': 'إغلاق',
         'enable_location': 'تفعيل الموقع',
         'Enable Location': 'تفعيل الموقع',
-        'enable_location_desc': 'لاستخدام هذه الخدمات نحتاج إلى إذن الوصول إلى الموقع',
-        'To use this services we need permission to access': 'لاستخدام هذه الخدمات نحتاج إلى إذن الوصول إلى الموقع',
+        'enable_location_desc':
+            'لاستخدام هذه الخدمات نحتاج إلى إذن الوصول إلى الموقع',
+        'To use this services we need permission to access':
+            'لاستخدام هذه الخدمات نحتاج إلى إذن الوصول إلى الموقع',
         'search_location': 'ابحث عن الموقع ...',
         'Search location ...': 'ابحث عن الموقع ...',
         'search_location_placeholder': 'إلى أين تريد الذهاب؟',
@@ -1065,7 +1176,8 @@ class AppTranslations extends Translations {
         'Update': 'تحديث',
         'would_you_like_logout': 'هل ترغب في تسجيل الخروج؟',
         'Would you like to logout?': 'هل ترغب في تسجيل الخروج؟',
-        'Are you sure you want to log out?': 'هل أنت متأكد من رغبتك في تسجيل الخروج؟',
+        'Are you sure you want to log out?':
+            'هل أنت متأكد من رغبتك في تسجيل الخروج؟',
         'profile': 'الملف الشخصي',
         'Profile': 'الملف الشخصي',
         'driver_profile': 'ملف السائق',
@@ -1106,10 +1218,12 @@ class AppTranslations extends Translations {
         'privacy_policy': 'سياسة الخصوصية',
         'Privacy Policy': 'سياسة الخصوصية',
         'age_consent_prefix': 'أقر بأن عمري 18 عاماً أو أكثر وأوافق على ',
-        'I am 18 years of age or older and I agree to the ': 'أقر بأن عمري 18 عاماً أو أكثر وأوافق على ',
+        'I am 18 years of age or older and I agree to the ':
+            'أقر بأن عمري 18 عاماً أو أكثر وأوافق على ',
         'age_consent_suffix': '.',
         'consent_required': 'يرجى قبول شروط الخدمة وسياسة الخصوصية للمتابعة.',
-        'Please accept the Terms of Service and Privacy Policy to continue.': 'يرجى قبول شروط الخدمة وسياسة الخصوصية للمتابعة.',
+        'Please accept the Terms of Service and Privacy Policy to continue.':
+            'يرجى قبول شروط الخدمة وسياسة الخصوصية للمتابعة.',
         'forgot_password': 'نسيت كلمة المرور؟',
         'Forgot your password?': 'نسيت كلمة المرور؟',
         'no_account': 'ليس لديك حساب؟ ',
@@ -1149,7 +1263,8 @@ class AppTranslations extends Translations {
         'notifications_sub': 'تحديثات الرحلات والرسائل والرصيد والنظام',
         'support_sub': 'الحصول على المساعدة من فريق دعم درويل',
         'report_problem_title': 'الإبلاغ عن مشكلة',
-        'report_problem_sub': 'مشكلة بخصوص مسافر أو رحلة أو رصيد أو مستند أو التطبيق',
+        'report_problem_sub':
+            'مشكلة بخصوص مسافر أو رحلة أو رصيد أو مستند أو التطبيق',
         'settings': 'الإعدادات',
         'settings_sub': 'اللغة والخصوصية والأمان ومعلومات التطبيق',
         'language': 'اللغة',
@@ -1214,23 +1329,31 @@ class AppTranslations extends Translations {
         'saved_place_deleted': 'تم حذف المكان المحفوظ',
         'outside_service': 'موقع GPS الحالي خارج منطقة الخدمة المتاحة.',
         'location_pending': 'مطلوب موقع GPS دقيق وحديث قبل الذهاب أونلاين.',
-        'gps_accuracy_low': 'دقة GPS منخفضة جداً. فعّل الموقع الدقيق وحاول مرة أخرى.',
-        'profile_not_approved': 'يجب الموافقة على ملف السائق قبل الذهاب أونلاين.',
+        'gps_accuracy_low':
+            'دقة GPS منخفضة جداً. فعّل الموقع الدقيق وحاول مرة أخرى.',
+        'profile_not_approved':
+            'يجب الموافقة على ملف السائق قبل الذهاب أونلاين.',
         'unable_update_online': 'تعذر تحديث حالة الاتصال. يرجى إعادة المحاولة.',
-        'bg_service_failed': 'تعذر بدء خدمة الأونلاين في الخلفية. ابقَ درويل مفتوحاً وتحقق من قيود البطارية.',
+        'bg_service_failed':
+            'تعذر بدء خدمة الأونلاين في الخلفية. ابقَ درويل مفتوحاً وتحقق من قيود البطارية.',
         'driver_data_loading': 'جارٍ تحميل بيانات السائق يرجى الانتظار ....',
-        'allow_precise_browser': 'اسمح بالموقع الدقيق لهذا الموقع في متصفحك، ثم حاول مرة أخرى.',
-        'without_location_permission': 'بدون إذن الموقع لا يمكنك استخدام التطبيق...',
+        'allow_precise_browser':
+            'اسمح بالموقع الدقيق لهذا الموقع في متصفحك، ثم حاول مرة أخرى.',
+        'without_location_permission':
+            'بدون إذن الموقع لا يمكنك استخدام التطبيق...',
         'current_location_failed': 'فشل في تحديد الموقع الحالي ...',
         'turn_on_precise': 'فعّل الموقع الدقيق قبل الذهاب أونلاين.',
         'location_permission_required': 'إذن الموقع مطلوب للذهاب أونلاين.',
         'server_no_presence': 'لم يبدأ الخادم جلسة حضور أونلاين.',
-        'browser_location_fail': 'تعذر على درويل قراءة موقع متصفحك. اسمح بالموقع الدقيق، ثم حاول مرة أخرى.',
-        'unable_gps_location': 'تعذر الحصول على موقع GPS حديث. يرجى إعادة المحاولة.',
+        'browser_location_fail':
+            'تعذر على درويل قراءة موقع متصفحك. اسمح بالموقع الدقيق، ثم حاول مرة أخرى.',
+        'unable_gps_location':
+            'تعذر الحصول على موقع GPS حديث. يرجى إعادة المحاولة.',
         'get_driver_data_failed': 'فشل في جلب بيانات السائق ...',
         'you_online_visible': 'أنت متصل (أونلاين) ومرئي للمسافرين',
         'you_offline_hidden': 'أنت غير متصل (أوفلاين) ومخفي عن المسافرين',
-        'unable_get_location': 'تعذر الحصول على موقعك. تحقق من GPS وحاول مرة أخرى.',
+        'unable_get_location':
+            'تعذر الحصول على موقعك. تحقق من GPS وحاول مرة أخرى.',
         'location_selected': 'تم اختيار الموقع',
         'search_timed_out': 'انتهت مهلة البحث. تحقق من اتصالك وحاول مرة أخرى.',
         'no_internet': 'لا يوجد اتصال بالإنترنت. تحقق من شبكتك وحاول مرة أخرى.',
@@ -1242,13 +1365,16 @@ class AppTranslations extends Translations {
         'current_position': 'الموقع الحالي',
         'current_location': 'الموقع الحالي في تونس',
         'gps_fix_stale': 'إشارة GPS قديمة. حدث موقعك الدقيق وأعد المحاولة.',
-        'live_gps_stopped': 'توقفت تحديثات GPS المباشرة. حدث موقعك الدقيق وأعد المحاولة.',
+        'live_gps_stopped':
+            'توقفت تحديثات GPS المباشرة. حدث موقعك الدقيق وأعد المحاولة.',
         'user_data_loading': 'جارٍ تحميل بيانات المستخدم يرجى الانتظار ....',
         'unable_open_location': 'تعذر فتح هذا الموقع. حاول مرة أخرى.',
         'get_user_data_failed': 'فشل في جلب بيانات المستخدم ...',
         'find_now_available_only': 'البحث متاح فقط داخل @region.',
-        'unable_start_tracking': 'تعذر بدء تتبع السائق المباشر. تحقق من الموقع وأعد المحاولة.',
-        'turn_on_precise_nearby': 'فعّل الموقع الدقيق للبحث عن السائقين القريبين في @region.',
+        'unable_start_tracking':
+            'تعذر بدء تتبع السائق المباشر. تحقق من الموقع وأعد المحاولة.',
+        'turn_on_precise_nearby':
+            'فعّل الموقع الدقيق للبحث عن السائقين القريبين في @region.',
         'driver_service_unavailable': 'خدمة السائقين غير متاحة مؤقتاً.',
         'unable_load_drivers': 'تعذر تحميل السائقين. يرجى إعادة المحاولة.',
         'searching_locations': 'جارٍ البحث عن المواقع...',
@@ -1332,8 +1458,10 @@ class AppTranslations extends Translations {
         'Decline this offer': 'رفض هذا العرض',
         'ride_confirmed': 'تم تأكيد الرحلة',
         'Ride confirmed': 'تم تأكيد الرحلة',
-        'recording_start_failed': 'تعذر بدء التسجيل الصوتي. يرجى المحاولة مرة أخرى.',
-        'Recording could not start. Please try again.': 'تعذر بدء التسجيل الصوتي. يرجى المحاولة مرة أخرى.',
+        'recording_start_failed':
+            'تعذر بدء التسجيل الصوتي. يرجى المحاولة مرة أخرى.',
+        'Recording could not start. Please try again.':
+            'تعذر بدء التسجيل الصوتي. يرجى المحاولة مرة أخرى.',
         'upload_documents': 'رفع المستندات',
         'Upload Documents': 'رفع المستندات',
         'replace': 'استبدال',
@@ -1353,18 +1481,24 @@ class AppTranslations extends Translations {
         'required': 'مطلوب',
         'Required': 'مطلوب',
         'optional': 'اختياري',
-        'profile_waiting_approval': 'ملفك الشخصي ومستنداتك في انتظار موافقة الإدارة.',
-        'request1_rejected': 'تم رفض الطلب الأول. يرجى التواصل مع الإدارة لإعادة فتحه قبل تعديل مستنداتك.',
-        'request1_approved_before': 'يجب أن تتم الموافقة على الطلب الأول من قبل الإدارة قبل تقديم المستندات.',
-        'image_cannot_read': 'تعذر قراءة الصورة المختارة. يرجى اختيار صورة أخرى.',
+        'profile_waiting_approval':
+            'ملفك الشخصي ومستنداتك في انتظار موافقة الإدارة.',
+        'request1_rejected':
+            'تم رفض الطلب الأول. يرجى التواصل مع الإدارة لإعادة فتحه قبل تعديل مستنداتك.',
+        'request1_approved_before':
+            'يجب أن تتم الموافقة على الطلب الأول من قبل الإدارة قبل تقديم المستندات.',
+        'image_cannot_read':
+            'تعذر قراءة الصورة المختارة. يرجى اختيار صورة أخرى.',
         'unable_load_driver_profile': 'تعذر تحميل ملف السائق الشخصي.',
-        'check_internet_retry_page': 'تحقق من اتصال الإنترنت، ثم أعد تحميل الصفحة مرة أخرى.',
+        'check_internet_retry_page':
+            'تحقق من اتصال الإنترنت، ثم أعد تحميل الصفحة مرة أخرى.',
         'vehicle_type': 'نوع المركبة',
         'license_company_doc': 'مستند شركة الترخيص',
         'car_license': 'رخصة المركبة',
         'driving_license': 'رخصة القيادة',
         'passport': 'نسخة جواز السفر',
-        'latest_changes_waiting': 'آخر تعديلاتك قيد المراجعة والموافقة من الإدارة...',
+        'latest_changes_waiting':
+            'آخر تعديلاتك قيد المراجعة والموافقة من الإدارة...',
         'no_changes_update': 'لا توجد تعديلات للتحديث.',
         'please_upload': 'يرجى رفع: @docs',
         'documents_updated_sent': 'تم تحديث مستنداتك المعلقة وإرسالها للإدارة.',
@@ -1377,12 +1511,15 @@ class AppTranslations extends Translations {
         'unable_load_driver_status': 'تعذر تحميل حالة السائق',
         'first_last_whatsapp_required': 'الاسم واللقب ورقم واتساب مطلوبة',
         'failed_send_request': 'فشل في إرسال الطلب',
-        'request2_waiting_admin': 'الطلب الثاني في انتظار موافقة الإدارة بالفعل',
+        'request2_waiting_admin':
+            'الطلب الثاني في انتظار موافقة الإدارة بالفعل',
         'profile_locked': 'الملف الشخصي مقفل حتى تتم الموافقة على الطلب الأول',
         'first_last_name_required': 'الاسم واللقب مطلوبان',
-        'address_contract_license_required': 'العنوان ورقم العقد وشركة الترخيص مطلوبة',
+        'address_contract_license_required':
+            'العنوان ورقم العقد وشركة الترخيص مطلوبة',
         'session_expired_login': 'انتهت الجلسة. يرجى تسجيل الدخول مرة أخرى',
-        'failed_submit_documents': 'فشل في تقديم المستندات. يرجى التحقق من الإنترنت وحاول مرة أخرى.',
+        'failed_submit_documents':
+            'فشل في تقديم المستندات. يرجى التحقق من الإنترنت وحاول مرة أخرى.',
         'failed_submit_documents2': 'فشل في تقديم المستندات: @error',
         'request2_submitted': 'تم تقديم الطلب الثاني بنجاح',
         'request2_needs_changes': 'الطلب الثاني يحتاج إلى تعديلات',
@@ -1391,8 +1528,10 @@ class AppTranslations extends Translations {
         'profile_completed': 'تم إكمال الملف الشخصي',
         'approved': 'تمت الموافقة',
         'driver_verification': 'التحقق من السائق',
-        'thanks_login_drewel': 'شكراً لتسجيل الدخول عبر درويل! تم إرسال مستنداتك للإدارة للموافقة.',
-        'thanks_register_drewel': 'شكراً للتسجيل في درويل! تم إرسال مستنداتك للإدارة للموافقة.',
+        'thanks_login_drewel':
+            'شكراً لتسجيل الدخول عبر درويل! تم إرسال مستنداتك للإدارة للموافقة.',
+        'thanks_register_drewel':
+            'شكراً للتسجيل في درويل! تم إرسال مستنداتك للإدارة للموافقة.',
         'step_1_basic_request': 'الخطوة 1 - الطلب الأساسي',
         'Step 1 - Basic Request': 'الخطوة 1 - الطلب الأساسي',
         'step_3_complete_profile': 'الخطوة 3 - إكمال الملف الشخصي',
@@ -1411,7 +1550,6 @@ class AppTranslations extends Translations {
         'Submit Documents': 'تقديم المستندات',
         'view_status': 'عرض الحالة',
         'View Status': 'عرض الحالة',
-        'send_request': 'إرسال الطلب',
         'Send Request': 'إرسال الطلب',
         'current_status': 'الحالة الحالية:',
         'Current Status:': 'الحالة الحالية:',
@@ -1419,7 +1557,8 @@ class AppTranslations extends Translations {
         'Pending Approval': 'قيد الموافقة',
         'send_otp_failed': 'فشل في إرسال رمز التحقق ...',
         'phone_required': 'رقم الهاتف مطلوب...',
-        'whatsapp_unavailable': 'تسجيل الدخول عبر واتساب غير متاح مؤقتاً. يرجى التواصل مع الدعم.',
+        'whatsapp_unavailable':
+            'تسجيل الدخول عبر واتساب غير متاح مؤقتاً. يرجى التواصل مع الدعم.',
         'send_whatsapp_otp_failed': 'فشل في إرسال رمز واتساب ...',
         'new_otp_sent': 'تم إرسال رمز تحقق جديد.',
         'unable_resend_otp': 'تعذر إعادة إرسال رمز التحقق.',

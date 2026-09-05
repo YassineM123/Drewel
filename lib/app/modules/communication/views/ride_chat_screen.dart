@@ -901,7 +901,7 @@ class _RideChatScreenState extends State<RideChatScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
               Text(
-                'Trip request',
+                'trip_request'.tr,
                 style: Theme.of(sheetContext).textTheme.titleLarge?.copyWith(
                       fontWeight: FontWeight.w800,
                     ),
@@ -1079,9 +1079,9 @@ class _RideChatScreenState extends State<RideChatScreen> {
     final String? rideId = _rideId;
     if (rideId == null || rideId.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
+        SnackBar(
           content: Text(
-            'No active ride to report. Please use Help & Support instead.',
+            'no_active_ride_to_report'.tr,
           ),
         ),
       );
@@ -2177,6 +2177,16 @@ class _TripRequestCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final Map<String, dynamic>? pickup = _point('pickup');
     final Map<String, dynamic>? destination = _point('destination');
+    final Object? rawPrice = message.metadata?['proposedPrice'];
+    final String priceStr =
+        rawPrice != null && rawPrice.toString().trim().isNotEmpty
+            ? rawPrice.toString().trim()
+            : '';
+    final String currency = (message.metadata?['currency'] ?? 'AED')
+        .toString()
+        .trim()
+        .toUpperCase();
+    final String? note = (message.metadata?['note'] ?? '').toString().trim();
     final Widget card = Container(
       constraints: BoxConstraints(
         maxWidth: (MediaQuery.sizeOf(context).width * 0.78)
@@ -2215,6 +2225,7 @@ class _TripRequestCard extends StatelessWidget {
           Padding(
             padding: const EdgeInsets.fromLTRB(20, 18, 20, 18),
             child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[
                 _TripRequestLocationLine(
                   icon: Icons.my_location_rounded,
@@ -2227,6 +2238,52 @@ class _TripRequestCard extends StatelessWidget {
                   title: 'Destination',
                   address: _address(destination, 'Destination'),
                 ),
+                if (priceStr.isNotEmpty) ...<Widget>[
+                  const SizedBox(height: 16),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 10,
+                    ),
+                    decoration: BoxDecoration(
+                      color: primaryColor.withValues(alpha: 0.08),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: <Widget>[
+                        Text(
+                          'proposed_fare'.tr,
+                          style: const TextStyle(
+                            color: Color(0xFF5E3D40),
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        Text(
+                          '$priceStr $currency'.trim(),
+                          style: const TextStyle(
+                            color: primaryColor,
+                            fontSize: 17,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+                if (note != null && note.isNotEmpty) ...<Widget>[
+                  const SizedBox(height: 10),
+                  Text(
+                    note,
+                    style: const TextStyle(
+                      color: text2Color,
+                      fontSize: 13,
+                      fontStyle: FontStyle.italic,
+                    ),
+                  ),
+                ],
               ],
             ),
           ),

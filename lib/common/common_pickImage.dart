@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:get/get.dart';
 import 'package:image_picker_android/image_picker_android.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:image_picker_platform_interface/image_picker_platform_interface.dart';
@@ -20,7 +21,7 @@ Future<File?> getImagePicker(BuildContext context) {
             CupertinoDialogAction(
               isDefaultAction: true,
               child: Text(
-                'Camera',
+                'camera'.tr,
                 style: Theme.of(context).textTheme.titleSmall?.copyWith(
                       fontSize: 10,
                       color: Theme.of(context).primaryColor,
@@ -35,7 +36,7 @@ Future<File?> getImagePicker(BuildContext context) {
             CupertinoDialogAction(
               isDefaultAction: true,
               child: Text(
-                'Gallery',
+                'gallery'.tr,
                 style: Theme.of(context).textTheme.titleSmall?.copyWith(
                       fontSize: 10,
                       color: Theme.of(context).primaryColor,
@@ -49,14 +50,14 @@ Future<File?> getImagePicker(BuildContext context) {
             ),
           ],
           title: Text(
-            'Select Image',
+            'select_image'.tr,
             style: Theme.of(context)
                 .textTheme
                 .displayMedium
                 ?.copyWith(fontSize: 18),
           ),
           content: Text(
-            'Choose image from the options below',
+            'choose_image_from_options'.tr,
             style:
                 Theme.of(context).textTheme.titleSmall?.copyWith(fontSize: 14),
           ),

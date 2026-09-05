@@ -5,6 +5,7 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_map/flutter_map.dart' show MapController;
+import 'package:get/get.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:google_places_flutter/model/prediction.dart';
 import 'package:latlong2/latlong.dart' as latlong;
@@ -134,9 +135,9 @@ class _TripRequestMapSheetState extends State<_TripRequestMapSheet> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: <Widget>[
-                      const Text(
-                        'Request a trip',
-                        style: TextStyle(
+                      Text(
+                        'request_a_trip'.tr,
+                        style: const TextStyle(
                           fontSize: 21,
                           fontWeight: FontWeight.w800,
                         ),
@@ -993,7 +994,7 @@ class _RouteLine extends StatelessWidget {
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Text(
-                    'Active',
+                    'active'.tr,
                     style: TextStyle(
                       color: iconColor,
                       fontSize: 9,
