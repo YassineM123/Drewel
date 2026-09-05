@@ -298,14 +298,15 @@ test("mobile available-driver endpoint requires authentication", () => {
   ]);
 });
 
-test("driver deletion preserves requests and profile staging joins the audit transaction", () => {
+test("driver deletion permanently removes driver and cascades related records", () => {
   const source = readFileSync(
     new URL("../src/controllers/driverController.js", import.meta.url),
     "utf8"
   );
 
-  assert.doesNotMatch(source, /Driver\.findByIdAndDelete/);
-  assert.match(source, /isDeleted:\s*true/);
+  assert.match(source, /Driver\.findByIdAndDelete/);
+  assert.match(source, /DriverLogs\.deleteMany/);
+  assert.match(source, /DriverPointsWallet\.deleteMany/);
   assert.match(source, /DriverLogs\.findOneAndUpdate\([\s\S]*?session\s*}/);
 });
 

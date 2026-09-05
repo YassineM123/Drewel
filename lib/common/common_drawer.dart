@@ -134,7 +134,16 @@ class CustomDrawer extends StatelessWidget {
       );
 
       SharedPreferences prefs = await SharedPreferences.getInstance();
-      String? userId = prefs.getString(ApiKeyConstants.userId);
+      String? userId = prefs.getString(ApiKeyConstants.userId)?.trim();
+      if (userId == null || userId.isEmpty) {
+        userId = prefs.getString(ApiKeyConstants.id)?.trim();
+      }
+      if (userId == null || userId.isEmpty) {
+        userId = userData[ApiKeyConstants.userId] ??
+            userData[ApiKeyConstants.id] ??
+            userData['_id'] ??
+            userData['driverId'];
+      }
       String? userType = userData[ApiKeyConstants.type] ??
           prefs.getString(ApiKeyConstants.type);
 

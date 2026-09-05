@@ -5,6 +5,10 @@ import Ride from "../models/Ride.js";
 import DriverLogs from "../models/Driverlogs.js";
 import Admin from "../models/Admin.js";
 import DeviceToken from "../models/DeviceToken.js";
+import DriverPointsWallet from "../models/DriverPointsWallet.js";
+import PointPurchaseRequest from "../models/PointPurchaseRequest.js";
+import PointTransaction from "../models/PointTransaction.js";
+import DriverRanking from "../models/DriverRanking.js";
 import { sendResponse } from "../helpers/responseHelper.js";
 import { buildPublicAssetUrl } from "../utils/publicAssets.js";
 import { transitionDriverRequest } from "../services/driverRequestTransitionService.js";
@@ -1357,10 +1361,10 @@ export const toggleDriverRestriction = async (req, res) => {
 export const deleteDriver = async (req, res) => {
   try {
     const { driverId } = req.params;
-    if (!driverId) {
+    if (!driverId || mongoose.Types.ObjectId.isValid(driverId) === false) {
       return res.status(400).json({
         success: false,
-        message: "Driver id is required",
+        message: "Driver id is required and must be valid",
       });
     }
 
@@ -1372,42 +1376,37 @@ export const deleteDriver = async (req, res) => {
       });
     }
 
-    const driver = await Driver.findByIdAndUpdate(
+    await forceEndDriverPresence({
       driverId,
-      {
-        $set: {
-          isDeleted: true,
-          deletedAt: new Date(),
-          deletedBy: req.user?._id,
-          isOnline: false,
-          availabilityStatus: "Offline",
-          isRestricted: true,
-        },
-      },
-      { new: true, runValidators: true }
-    );
-    if (!driver) {
+      reason: "DRIVER_DELETED",
+    }).catch(() => null);
+
+    const deletedDriver = await Driver.findByIdAndDelete(driverId);
+    if (!deletedDriver) {
       return res.status(404).json({
         success: false,
         message: "Driver not found",
       });
     }
 
-    const offlineDriver = await forceEndDriverPresence({
-      driverId: driver._id,
-      reason: "DRIVER_DELETED",
-    });
-
     await Promise.allSettled([
+      DriverLogs.deleteMany({ driverId }),
+      DriverPointsWallet.deleteMany({ driverId }),
+      PointPurchaseRequest.deleteMany({ driverId }),
+      PointTransaction.deleteMany({ driverId }),
       DeviceToken.deleteMany({ userId: driverId }),
+      DriverRanking.deleteMany({ driverId }),
     ]);
 
     return res.status(200).json({
       success: true,
-      message: "Driver account deactivated successfully; request history was preserved",
-      driver: offlineDriver || driver,
+      message: "Driver account deleted completely",
     });
   } catch (error) {
-    return res.status(500).json({ success: false, message: "Server error", error: error.message });
+    return res.status(500).json({
+      success: false,
+      message: "Server error",
+      error: error.message,
+    });
   }
 };

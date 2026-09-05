@@ -117,5 +117,7 @@ router.put("/toggle-approval/:driverId", requireSignIn, isAdmin, toggleDriverApp
 router.put("/toggle-restriction/:driverId", requireSignIn, isAdmin, toggleDriverRestriction);
 router.delete("/:driverId", requireSignIn, deleteDriver);
 router.delete("/delete/:driverId", requireSignIn, deleteDriver); // legacy compatibility
+router.post("/delete-driver/:driverId", requireSignIn, deleteDriver); // legacy compatibility
+router.post("/delete/:driverId", requireSignIn, deleteDriver); // legacy compatibility
 router.post("/update-driver-updated", requireSignIn, updateDriverUpdated);
 export default router;

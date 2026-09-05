@@ -228,7 +228,12 @@ export const grantWelcomeBonusInSession = async (
 export const grantWelcomeBonus = (driver, options = {}) =>
   runPointsTransaction((session) =>
     grantWelcomeBonusInSession(driver, session, options)
-  );
+  ).catch((error) => {
+    if (error?.code === "POINTS_TRANSACTION_UNAVAILABLE") {
+      return grantWelcomeBonusInSession(driver, null, options);
+    }
+    throw error;
+  });
 
 const updateWalletWithVersion = async (wallet, update, session) => {
   const updated = await DriverPointsWallet.findOneAndUpdate(

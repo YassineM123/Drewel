@@ -54,11 +54,11 @@ export const getMyPointsWallet = async (req, res) => {
         const bonus = await grantWelcomeBonus(driver, { source: "wallet_access" });
         wallet = bonus.wallet;
       } catch (error) {
-        if (error?.code !== "POINTS_TRANSACTION_UNAVAILABLE" || !wallet) {
+        if (error?.code !== "POINTS_TRANSACTION_UNAVAILABLE") {
           throw error;
         }
         console.warn(
-          `Serving existing driver wallet without welcome grant because transactions are unavailable for driver ${principal.id}`
+          `Serving driver wallet without welcome grant because transactions are unavailable for driver ${principal.id}`
         );
       }
     }
